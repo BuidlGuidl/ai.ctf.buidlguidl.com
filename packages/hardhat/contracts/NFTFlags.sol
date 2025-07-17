@@ -74,7 +74,7 @@ contract NFTFlags is ERC721, IERC721Receiver, Ownable {
                         " flag (tokenId = ",
                         tokenId.toString(),
                         ")",
-                        '", "description": "A NFT flag for the BuidlGuidl CTF at Devcon SEA 2024", "image": "data:image/svg+xml;base64,',
+                        '", "description": "A NFT flag for the BuidlGuidl CTF at Devconnect Argetina 2025", "image": "data:image/svg+xml;base64,',
                         Base64.encode(bytes(svg)),
                         '"}'
                     )

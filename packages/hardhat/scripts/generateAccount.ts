@@ -3,10 +3,10 @@ import { parse, stringify } from "envfile";
 import * as fs from "fs";
 import * as path from "path";
 
-const envFilePaths = ["./.env", "../scripts/.env"];
+const envFilePaths = ["./.env"];
 
 /**
- * Generate a new random private key and write it to packages/hardhat and packages/scripts .env files
+ * Generate a new random private key and write it to packages/hardhat
  */
 const setNewEnvConfig = (envFilePath: string, existingEnvConfig = {}, randomWallet: ethers.HDNodeWallet) => {
   const newEnvConfig = {

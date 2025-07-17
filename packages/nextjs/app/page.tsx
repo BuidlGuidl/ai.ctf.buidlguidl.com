@@ -32,7 +32,7 @@ const rules = [
 
 export const metadata = getMetadata({
   title: "BuidlGuidl CTF",
-  description: "Devcon SEA 2024 - Wednesday, November 13 in Breakout 3",
+  description: "BuidlGuidl CTF Game @ Devconnect Argentina 2025",
 });
 
 const Home: NextPage = () => {
@@ -42,7 +42,7 @@ const Home: NextPage = () => {
         <div className="mx-auto max-w-7xl px-6 lg:flex lg:items-center lg:gap-x-10 lg:px-8">
           <div className="mx-auto max-w-2xl lg:mx-0 lg:flex-auto">
             <h1 className="font-dotGothic tracking-wide">
-              <span className="block text-xl mb-2 md:text-2xl md:mb-4">- Devcon SEA 2024 -</span>
+              <span className="block text-xl mb-2 md:text-2xl md:mb-4">- Devconnect Argentina 2025 -</span>
               <span className="block text-3xl md:text-4xl">BuidlGuidl Capture The Flag</span>
             </h1>
             <p className="mt-6 leading-relaxed md:leading-8 text-gray-50">
@@ -78,7 +78,11 @@ const Home: NextPage = () => {
             <h2 className="text-3xl font-dotGothic tracking-wide text-white md:text-4xl">Choose Your Own Adventure</h2>
             <p className="mt-6 leading-relaxed text-gray-100 md:leading-8 md:text-lg">
               Challenges will become more difficult as you progress. Beginners are encouraged to use this{" "}
-              <a className="link" href="https://github.com/buidlguidl/ctf-devcon/" target="_blank">
+              <a
+                className="link"
+                href="https://github.com/buidlguidl/ctf-argentina.buidlguidl.com/tree/extension"
+                target="_blank"
+              >
                 Scaffold-ETH 2 repository
               </a>{" "}
               to solve the challenges. Advanced players may use any means necessary to progress.

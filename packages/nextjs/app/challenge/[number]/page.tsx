@@ -18,7 +18,7 @@ interface ChallengePageProps {
 export async function generateMetadata({ params }: ChallengePageProps) {
   return getMetadata({
     title: `Challenge #${params.number}`,
-    description: "Devcon SEA 2024",
+    description: "Devconnect Argentina 2025",
   });
 }
 
