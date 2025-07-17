@@ -11,10 +11,10 @@ export type ScaffoldConfig = {
 
 const scaffoldConfig = {
   // The networks on which your DApp is live
-  targetNetworks: [chains.optimism],
+  targetNetworks: [chains.hardhat],
 
   // startBlock for indexer
-  startBlock: 127916624,
+  startBlock: 0,
 
   // The interval at which your front-end polls the RPC servers for new data
   // it has no effect if you only target the local network (default is 4000)
