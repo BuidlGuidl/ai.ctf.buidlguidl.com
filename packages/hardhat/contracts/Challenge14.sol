@@ -12,7 +12,7 @@ contract Challenge14 {
 
     function mintFlag(bytes32 yourKey) external {
         bytes32 key = keccak256(abi.encodePacked(blockhash(block.number - 1), msg.sender, address(this)));
-        require(yourKey == key, "bad proof");
+        require(yourKey == key, "bad key :(");
 
         INFTFlags(nftContract).mint(tx.origin, 14);
     }
