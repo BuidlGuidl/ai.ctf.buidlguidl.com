@@ -184,16 +184,6 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
 
   console.log("🚩 Challenge #13 deployed");
 
-  // :: Challenge 14 ::
-  await deploy("Challenge14", {
-    from: deployer,
-    args: [await nftFlags.getAddress()],
-    log: true,
-    autoMine: true,
-  });
-
-  console.log("🚩 Challenge #14 deployed");
-
   // :: Challenge 15 ::
   await deploy("Challenge15", {
     from: deployer,
@@ -219,7 +209,6 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
     await (await hre.ethers.getContract<Contract>("Challenge11", deployer)).getAddress(),
     await (await hre.ethers.getContract<Contract>("Challenge12", deployer)).getAddress(),
     await (await hre.ethers.getContract<Contract>("Challenge13", deployer)).getAddress(),
-    await (await hre.ethers.getContract<Contract>("Challenge14", deployer)).getAddress(),
     await (await hre.ethers.getContract<Contract>("Challenge15", deployer)).getAddress(),
   ];
 
