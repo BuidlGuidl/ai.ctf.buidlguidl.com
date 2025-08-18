@@ -10,8 +10,10 @@ contract Challenge2 {
         nftContract = _nftContract;
     }
 
-    function justCallMe() public {
-        require(msg.sender != tx.origin, "Not allowed");
-        INFTFlags(nftContract).mint(tx.origin, 2);
+    function mintFlag(bytes32 yourKey) external {
+        bytes32 key = keccak256(abi.encodePacked(msg.sender, address(this)));
+        require(yourKey == key, "bad key :(");
+
+        INFTFlags(nftContract).mint(tx.origin, 14);
     }
 }
