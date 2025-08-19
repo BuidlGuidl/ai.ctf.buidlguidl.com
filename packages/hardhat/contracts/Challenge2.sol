@@ -14,6 +14,6 @@ contract Challenge2 {
         bytes32 key = keccak256(abi.encodePacked(msg.sender, address(this)));
         require(yourKey == key, "bad key :(");
 
-        INFTFlags(nftContract).mint(tx.origin, 14);
+        INFTFlags(nftContract).mint(tx.origin, 2);
     }
 }
