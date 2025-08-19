@@ -13,11 +13,33 @@ contract Challenge9 {
         password = _password;
     }
 
-    function mintFlag(bytes32 _password) public {
+    modifier lock1(bytes32 _password) {
         bytes32 mask = ~(bytes32(uint256(0xFF) << ((31 - (count % 32)) * 8)));
         bytes32 newPassword = password & mask;
         require(newPassword == _password, "Wrong password");
-        count += 1;
-        INFTFlags(nftContract).mint(msg.sender, 9);
+        _;
     }
+
+    modifier lock2() {
+        require(msg.sender.balance >= 2, "Insufficient balance");
+        _;
+    }
+
+    modifier lock3() {
+        require(payable(msg.sender).send(1) == false, "It should fail to send ether");
+        _;
+    }
+
+    modifier lock4() {
+        require(payable(msg.sender).send(2) == true, "Failed to send ether");
+        _;
+    }
+
+    function mintFlag(bytes32 _password) public payable lock1(_password) lock2 lock3 lock4 {
+        require(msg.value == 2, "Invalid ether amount");
+        count += 1;
+        INFTFlags(nftContract).mint(tx.origin, 9);
+    }
+
+    receive() external payable {}
 }
