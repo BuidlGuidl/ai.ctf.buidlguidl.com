@@ -10,6 +10,7 @@ contract Challenge12 {
 
     address public nftContract;
     mapping(address => uint256) public blockNumber;
+    mapping(address => uint256) public counts;
     mapping(uint256 => bool) public blocks;
 
     uint256 public constant futureBlocks = 2;
@@ -22,6 +23,7 @@ contract Challenge12 {
         require(blocks[block.number] == false, "Block already used");
         blocks[block.number] = true;
         blockNumber[msg.sender] = block.number;
+        counts[msg.sender] += 1;
     }
 
     function mintFlag(bytes memory rlpBytes) public {
@@ -36,6 +38,12 @@ contract Challenge12 {
         require(blockNumberFromHeader == blockNumber[msg.sender] + futureBlocks, "Wrong block");
 
         require(blockhash(blockNumberFromHeader) == keccak256(rlpBytes), "Wrong block header");
+
+        bytes memory mixHash = ls[13].toBytes();
+
+        uint256 random = uint256(keccak256(abi.encodePacked(mixHash, address(this), msg.sender))) % 10;
+
+        require(random < counts[msg.sender], "Not enough pre-mints");
 
         INFTFlags(nftContract).mint(msg.sender, 12);
     }
