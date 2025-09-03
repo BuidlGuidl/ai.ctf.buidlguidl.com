@@ -159,6 +159,72 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
 
   console.log("🚩 Challenge #12 deployed");
 
+  // :: Challenge 17 ::
+  await deploy("Challenge17Inventory", {
+    from: deployer,
+    log: true,
+    autoMine: true,
+  });
+
+  await deploy("Challenge17Quest", {
+    from: deployer,
+    log: true,
+    autoMine: true,
+  });
+
+  await deploy("Challenge17Dungeon", {
+    from: deployer,
+    args: [await (await hre.ethers.getContract<Contract>("Challenge17Quest", deployer)).getAddress()],
+    log: true,
+    autoMine: true,
+  });
+
+  await deploy("Challenge17Victory", {
+    from: deployer,
+    args: [await (await hre.ethers.getContract<Contract>("Challenge17Dungeon", deployer)).getAddress()],
+    log: true,
+    autoMine: true,
+  });
+
+  await deploy("Challenge17HeroNFT", {
+    from: deployer,
+    log: true,
+    autoMine: true,
+  });
+
+  await deploy("Challenge17GoldToken", {
+    from: deployer,
+    args: [
+      await (await hre.ethers.getContract<Contract>("Challenge17HeroNFT", deployer)).getAddress(),
+      await (await hre.ethers.getContract<Contract>("Challenge17Dungeon", deployer)).getAddress(),
+    ],
+    log: true,
+    autoMine: true,
+  });
+
+  const challenge17Inventory = await hre.ethers.getContract<Contract>("Challenge17Inventory", deployer);
+
+  await deploy("Challenge17", {
+    from: deployer,
+    args: [
+      await nftFlags.getAddress(),
+      await challenge17Inventory.getAddress(),
+      await (await hre.ethers.getContract<Contract>("Challenge17Quest", deployer)).getAddress(),
+      await (await hre.ethers.getContract<Contract>("Challenge17Dungeon", deployer)).getAddress(),
+      await (await hre.ethers.getContract<Contract>("Challenge17Victory", deployer)).getAddress(),
+      await (await hre.ethers.getContract<Contract>("Challenge17GoldToken", deployer)).getAddress(),
+      await (await hre.ethers.getContract<Contract>("Challenge17HeroNFT", deployer)).getAddress(),
+    ],
+    log: true,
+    autoMine: true,
+  });
+
+  const challenge17Address = await (await hre.ethers.getContract<Contract>("Challenge17", deployer)).getAddress();
+
+  await challenge17Inventory.transferOwnership(challenge17Address);
+
+  console.log("🚩 Challenge #17 deployed");
+
   // Set addAllowedMinterMultiple in NFTFlags
   const challengeAddresses = [
     await (await hre.ethers.getContract<Contract>("Challenge1", deployer)).getAddress(),
@@ -173,6 +239,7 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
     // skip challenge 10
     await (await hre.ethers.getContract<Contract>("Challenge11", deployer)).getAddress(),
     await (await hre.ethers.getContract<Contract>("Challenge12", deployer)).getAddress(),
+    await (await hre.ethers.getContract<Contract>("Challenge17", deployer)).getAddress(),
   ];
 
   const tx = await nftFlags.addAllowedMinterMultiple(challengeAddresses);
