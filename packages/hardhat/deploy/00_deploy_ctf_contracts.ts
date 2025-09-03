@@ -68,14 +68,6 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
 
   console.log("🚩 Challenge #4 deployed");
 
-  // -> Set allowed minter for Challenge 4
-  const challenge4Contract = await hre.ethers.getContract<Contract>("Challenge4", deployer);
-  const hAccounts = hre.config.networks.hardhat.accounts as HardhatNetworkHDAccountsConfig;
-  const derivationPath = "m/44'/60'/0'/0/12";
-  const challenge4Account = HDNodeWallet.fromMnemonic(Mnemonic.fromPhrase(hAccounts.mnemonic), derivationPath);
-
-  await challenge4Contract.addMinter(challenge4Account.address);
-
   // :: Challenge 5 ::
   await deploy("Challenge5", {
     from: deployer,
@@ -97,16 +89,9 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
   console.log("🚩 Challenge #6 deployed");
 
   // :: Challenge 7 ::
-  const challenge7Delegate = await deploy("Challenge7Delegate", {
-    from: deployer,
-    args: [deployer],
-    log: true,
-    autoMine: true,
-  });
-
   await deploy("Challenge7", {
     from: deployer,
-    args: [await nftFlags.getAddress(), challenge7Delegate.address, deployer],
+    args: [await nftFlags.getAddress()],
     log: true,
     autoMine: true,
   });
@@ -174,36 +159,6 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
 
   console.log("🚩 Challenge #12 deployed");
 
-  // :: Challenge 13 ::
-  await deploy("Challenge13", {
-    from: deployer,
-    args: [await nftFlags.getAddress()],
-    log: true,
-    autoMine: true,
-  });
-
-  console.log("🚩 Challenge #13 deployed");
-
-  // :: Challenge 15 ::
-  await deploy("Challenge15", {
-    from: deployer,
-    args: [await nftFlags.getAddress()],
-    log: true,
-    autoMine: true,
-  });
-
-  console.log("🚩 Challenge #15 deployed");
-
-  // :: Challenge 16 ::
-  await deploy("Challenge16", {
-    from: deployer,
-    args: [await nftFlags.getAddress()],
-    log: true,
-    autoMine: true,
-  });
-
-  console.log("🚩 Challenge #16 deployed");
-
   // Set addAllowedMinterMultiple in NFTFlags
   const challengeAddresses = [
     await (await hre.ethers.getContract<Contract>("Challenge1", deployer)).getAddress(),
@@ -218,9 +173,6 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
     // skip challenge 10
     await (await hre.ethers.getContract<Contract>("Challenge11", deployer)).getAddress(),
     await (await hre.ethers.getContract<Contract>("Challenge12", deployer)).getAddress(),
-    await (await hre.ethers.getContract<Contract>("Challenge13", deployer)).getAddress(),
-    await (await hre.ethers.getContract<Contract>("Challenge15", deployer)).getAddress(),
-    await (await hre.ethers.getContract<Contract>("Challenge16", deployer)).getAddress(),
   ];
 
   const tx = await nftFlags.addAllowedMinterMultiple(challengeAddresses);
