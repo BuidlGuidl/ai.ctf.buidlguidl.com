@@ -2,12 +2,11 @@
 pragma solidity >=0.8.0 <0.9.0;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Base64.sol";
 
-contract NFTFlags is ERC721, IERC721Receiver, Ownable {
+contract NFTFlags is ERC721, Ownable {
     using Strings for uint256;
 
     event Enabled(address indexed caller);
@@ -158,27 +157,5 @@ contract NFTFlags is ERC721, IERC721Receiver, Ownable {
         }
 
         return tempUint;
-    }
-
-    function onERC721Received(
-        address,
-        address from,
-        uint256 tokenId,
-        bytes calldata data
-    ) external override returns (bytes4) {
-        uint256 anotherTokenId = _toUint256(data);
-
-        require(msg.sender == address(this), "only this contract can call this function!");
-
-        require(ownerOf(anotherTokenId) == from, "Not owner!");
-
-        require(tokenIdToChallengeId[tokenId] == 1, "Not the right token 1!");
-        require(tokenIdToChallengeId[anotherTokenId] == 9, "Not the right token 9!");
-
-        _mintToken(from, 10);
-
-        safeTransferFrom(address(this), from, tokenId);
-
-        return this.onERC721Received.selector;
     }
 }
