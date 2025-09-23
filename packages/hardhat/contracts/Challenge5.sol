@@ -1,43 +1,28 @@
-//SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT
 pragma solidity >=0.8.0 <0.9.0;
 
-import "./INFTFlags.sol";
+import "./NFTFlags.sol";
 
 contract Challenge5 {
     address public nftContract;
-    mapping(address => uint8) public points;
-    mapping(address => uint8) public levels;
-    uint8 public constant POINTS_TO_UPGRADE = 10;
-    uint8 public constant MIN_POWER_TO_MINT = 30;
-    uint8 public constant KEY_VALUE = 32;
 
     constructor(address _nftContract) {
         nftContract = _nftContract;
     }
 
-    function resetPoints() public {
-        points[tx.origin] = 0;
-    }
+    function mintFlag(uint[] memory data1, uint[] memory data2) public {
+        uint256 tokenIdCounter = NFTFlags(nftContract).tokenIdCounter();
+        uint256 counter1;
+        uint256 counter2;
 
-    function claimPoints() public {
-        require(points[tx.origin] == 0, "Already claimed points");
-        (bool success, ) = msg.sender.call("");
-        require(success, "External call failed");
+        assembly {
+            counter1 := mload(add(data1, 0xD0))
+            counter2 := mload(data2)
+        }
 
-        points[tx.origin] += 1;
-    }
+        require(counter1 == tokenIdCounter, "Wrong counter1");
+        require(counter2 == (tokenIdCounter % 0x80), "Wrong counter2");
 
-    function upgradeLevel() public {
-        require(points[tx.origin] >= POINTS_TO_UPGRADE, "Not enough points");
-        points[tx.origin] -= POINTS_TO_UPGRADE;
-        levels[tx.origin] += 1;
-    }
-
-    function mintFlag() public {
-        require(points[tx.origin] < POINTS_TO_UPGRADE, "Upgrade first");
-        require(points[tx.origin] * levels[tx.origin] >= MIN_POWER_TO_MINT, "Not enough powner to mint");
-        uint8 key = points[tx.origin] << levels[tx.origin];
-        require(key == KEY_VALUE, "Wrong key value");
-        INFTFlags(nftContract).mint(tx.origin, 5);
+        NFTFlags(nftContract).mint(tx.origin, 5);
     }
 }

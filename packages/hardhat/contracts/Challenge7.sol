@@ -5,38 +5,38 @@ import "./INFTFlags.sol";
 
 contract Challenge7 {
     address public nftContract;
-    mapping(address => bytes4) public codes;
+    bytes4 public mintFlagSelector = bytes4(keccak256("mintFlag()"));
+    mapping(address => bool) public minters;
 
     constructor(address _nftContract) {
         nftContract = _nftContract;
     }
 
-    function mintFlag() public {
-        require((bytes4(bytes20(codes[tx.origin]) ^ bytes20(tx.origin)) & 0x0000FFFF) == 0x0000CAFE, "Wrong code");
-        INFTFlags(nftContract).mint(tx.origin, 7);
+    modifier onlyChallenge7() {
+        require(msg.sender == address(this), "Only the Challenge7 contract can call this");
+        _;
     }
 
-    function switch1() public {
-        codes[tx.origin] = codes[tx.origin] | 0x00000001;
-    }
-
-    function switch2() public {
-        codes[tx.origin] = codes[tx.origin] << 4;
-    }
-
-    function switch3() public {
-        codes[tx.origin] = codes[tx.origin] >> 1;
-    }
-
-    function callSwitches(uint8[] memory switchs) public {
-        for (uint8 i = 0; i < switchs.length; i++) {
-            if (switchs[i] == 1) {
-                switch1();
-            } else if (switchs[i] == 2) {
-                switch2();
-            } else if (switchs[i] == 3) {
-                switch3();
-            }
+    modifier onlyMintFlag() {
+        bytes32[1] memory selector;
+        assembly {
+            calldatacopy(selector, 68, 4)
         }
+        require(selector[0] == mintFlagSelector, "Can only call the mintFlag function");
+        _;
+    }
+
+    function mint(bytes memory _data) public onlyMintFlag {
+        (bool success, ) = address(this).call(_data);
+        require(success, "call failed :(");
+    }
+
+    function allowMinter() public onlyChallenge7 {
+        minters[tx.origin] = true;
+    }
+
+    function mintFlag() public onlyChallenge7 {
+        require(minters[tx.origin], "Not allowed to mint");
+        INFTFlags(nftContract).mint(tx.origin, 7);
     }
 }

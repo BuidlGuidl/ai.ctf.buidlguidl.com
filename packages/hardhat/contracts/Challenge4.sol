@@ -1,28 +1,32 @@
-// SPDX-License-Identifier: MIT
+//SPDX-License-Identifier: MIT
 pragma solidity >=0.8.0 <0.9.0;
 
-import "./NFTFlags.sol";
+import "./INFTFlags.sol";
 
 contract Challenge4 {
     address public nftContract;
+
+    uint256 public constant EXPECTED_WEI = 1 gwei;
+    bool private _paid;
 
     constructor(address _nftContract) {
         nftContract = _nftContract;
     }
 
-    function mintFlag(uint[] memory data1, uint[] memory data2) public {
-        uint256 tokenIdCounter = NFTFlags(nftContract).tokenIdCounter();
-        uint256 counter1;
-        uint256 counter2;
+    function mintFlag() external {
+        _paid = false;
 
-        assembly {
-            counter1 := mload(add(data1, 0xD0))
-            counter2 := mload(data2)
-        }
+        (bool ok, ) = msg.sender.call("");
+        require(ok, "callback failed");
+        require(_paid, "not paid");
 
-        require(counter1 == tokenIdCounter, "Wrong counter1");
-        require(counter2 == (tokenIdCounter % 0x80), "Wrong counter2");
+        INFTFlags(nftContract).mint(tx.origin, 4);
 
-        NFTFlags(nftContract).mint(tx.origin, 4);
+        _paid = false;
+    }
+
+    receive() external payable {
+        require(msg.value == EXPECTED_WEI, "bad amount");
+        _paid = true;
     }
 }
