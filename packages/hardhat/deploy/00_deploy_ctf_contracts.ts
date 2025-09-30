@@ -191,6 +191,7 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
     args: [
       await (await hre.ethers.getContract<Contract>("Challenge10HeroNFT", deployer)).getAddress(),
       await (await hre.ethers.getContract<Contract>("Challenge10Dungeon", deployer)).getAddress(),
+      await nftFlags.getAddress(),
     ],
     log: true,
     autoMine: true,
@@ -259,6 +260,15 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
   await tx.wait();
 
   console.log("Added allowed minters to NFTFlags");
+
+  const txSetGold = await nftFlags.setGoldTokenAddress(
+    await (await hre.ethers.getContract<Contract>("Challenge10GoldToken", deployer)).getAddress(),
+  );
+  await txSetGold.wait();
+
+  console.log("Set gold token address in NFTFlags");
+
+  console.log("✅ All CTF contracts deployed");
 };
 
 export default deployCtfContracts;

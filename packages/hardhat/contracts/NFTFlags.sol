@@ -2,11 +2,16 @@
 pragma solidity >=0.8.0 <0.9.0;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Base64.sol";
 
-contract NFTFlags is ERC721, Ownable {
+abstract contract GoldContract {
+    function mint(address to) public virtual;
+}
+
+contract NFTFlags is ERC721, IERC721Receiver, Ownable {
     using Strings for uint256;
 
     event Enabled(address indexed caller);
@@ -18,6 +23,9 @@ contract NFTFlags is ERC721, Ownable {
     mapping(address => mapping(uint256 => bool)) public hasMinted;
     bool public enabled = false;
     uint256 public enabledAt;
+
+    mapping(uint256 => bool) public tokensClaimed;
+    address public goldTokenAddress;
 
     string[30] public flagColors = [
         "#4b5563", // Default Gray
@@ -56,6 +64,10 @@ contract NFTFlags is ERC721, Ownable {
     event FlagMinted(address indexed minter, uint256 indexed tokenId, uint256 indexed challengeId);
 
     constructor(address _initialOwner) Ownable(_initialOwner) ERC721("BG-CTF", "CTF") {}
+
+    function setGoldTokenAddress(address _goldTokenAddress) external onlyOwner {
+        goldTokenAddress = _goldTokenAddress;
+    }
 
     function mint(address _recipient, uint256 _challengeId) external {
         require(allowedMinters[msg.sender], "Not allowed to mint");
@@ -157,5 +169,30 @@ contract NFTFlags is ERC721, Ownable {
         }
 
         return tempUint;
+    }
+
+    function onERC721Received(
+        address,
+        address from,
+        uint256 tokenId,
+        bytes calldata data
+    ) external override returns (bytes4) {
+        uint256 anotherTokenId = _toUint256(data);
+
+        require(msg.sender == address(this), "only this contract can call this function!");
+
+        require(ownerOf(anotherTokenId) == from, "Not owner!");
+
+        require(tokenIdToChallengeId[anotherTokenId] == 1, "Not the right token 1!");
+
+        require(!tokensClaimed[tokenId], "Token already used to claim!");
+
+        safeTransferFrom(address(this), from, tokenId);
+
+        tokensClaimed[tokenId] = true;
+
+        GoldContract(goldTokenAddress).mint(from);
+
+        return this.onERC721Received.selector;
     }
 }

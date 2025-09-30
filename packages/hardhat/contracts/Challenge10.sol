@@ -25,14 +25,22 @@ contract Challenge10HeroNFT is ERC721URIStorage {
 contract Challenge10GoldToken is ERC20 {
     address public challenge10HeroNFT;
     address public challenge10Dungeon;
+    address public nftContract;
 
-    constructor(address _challenge10HeroNFT, address _challenge10Dungeon) ERC20("Challenge10GoldToken", "C10GOLD") {
+    constructor(
+        address _challenge10HeroNFT,
+        address _challenge10Dungeon,
+        address _nftContract
+    ) ERC20("Challenge10GoldToken", "C10GOLD") {
         challenge10HeroNFT = _challenge10HeroNFT;
         challenge10Dungeon = _challenge10Dungeon;
+        nftContract = _nftContract;
     }
 
-    function mint() public {
-        _mint(msg.sender, 1000 * 10 ** decimals());
+    function mint(address _to) public {
+        require(msg.sender == nftContract, "Only NFT contract can mint");
+
+        _mint(_to, 1000 * 10 ** decimals());
     }
 
     function burn(uint256 amount) public {
