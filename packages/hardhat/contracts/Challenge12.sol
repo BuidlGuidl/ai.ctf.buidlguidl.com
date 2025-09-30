@@ -1,50 +1,197 @@
-//SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT
 pragma solidity >=0.8.0 <0.9.0;
 
-import "./RLPReader.sol";
-import "./INFTFlags.sol";
+import "./NFTFlags.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { ERC721URIStorage, ERC721 } from "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 
-contract Challenge12 {
-    using RLPReader for RLPReader.RLPItem;
-    using RLPReader for bytes;
+// Gamified contract names
+contract Challenge12HeroNFT is ERC721URIStorage {
+    uint256 private _nextTokenId;
 
+    constructor() ERC721("Challenge12HeroNFT", "C12HERO") {}
+
+    function mint(string memory tokenURI) public returns (uint256) {
+        uint256 tokenId = _nextTokenId++;
+        _mint(msg.sender, tokenId);
+
+        _setTokenURI(tokenId, tokenURI);
+
+        return tokenId;
+    }
+}
+
+contract Challenge12GoldToken is ERC20 {
+    address public challenge12HeroNFT;
+    address public challenge12Dungeon;
     address public nftContract;
-    mapping(address => uint256) public blockNumber;
-    mapping(address => uint256) public counts;
-    mapping(uint256 => bool) public blocks;
 
-    uint256 public constant futureBlocks = 2;
-
-    constructor(address _nftContract) {
+    constructor(
+        address _challenge12HeroNFT,
+        address _challenge12Dungeon,
+        address _nftContract
+    ) ERC20("Challenge12GoldToken", "C12GOLD") {
+        challenge12HeroNFT = _challenge12HeroNFT;
+        challenge12Dungeon = _challenge12Dungeon;
         nftContract = _nftContract;
     }
 
-    function preMintFlag() public {
-        require(blocks[block.number] == false, "Block already used");
-        blocks[block.number] = true;
-        blockNumber[msg.sender] = block.number;
-        counts[msg.sender] += 1;
+    function mint(address _to) public {
+        require(msg.sender == nftContract, "Only NFT contract can mint");
+
+        _mint(_to, 1000 * 10 ** decimals());
     }
 
-    function mintFlag(bytes memory rlpBytes) public {
-        require(blockNumber[msg.sender] != 0, "PreMintFlag first");
-        require(block.number >= blockNumber[msg.sender] + futureBlocks, "Future block not reached.");
-        require(block.number < blockNumber[msg.sender] + futureBlocks + 256, "You miss the window. PreMintFlag again.");
+    function burn(uint256 amount) public {
+        _burn(msg.sender, amount);
+    }
 
-        RLPReader.RLPItem[] memory ls = rlpBytes.toRlpItem().toList();
+    function transfer(address to, uint256 amount) public override returns (bool) {
+        require(Challenge12HeroNFT(challenge12HeroNFT).balanceOf(msg.sender) > 0, "Insufficient NFT balance");
+        require(
+            Challenge12HeroNFT(challenge12HeroNFT).balanceOf(msg.sender) <
+                uint256(Challenge12Dungeon(challenge12Dungeon).dungeon(tx.origin)),
+            "Wrong NFT balance"
+        );
+        _transfer(msg.sender, to, amount);
+        return true;
+    }
+}
 
-        uint256 blockNumberFromHeader = ls[8].toUint();
+contract Challenge12Inventory is Ownable(msg.sender) {
+    mapping(address => uint256) public inventory;
 
-        require(blockNumberFromHeader == blockNumber[msg.sender] + futureBlocks, "Wrong block");
+    function setValue(uint256 value) public onlyOwner {
+        inventory[tx.origin] = value;
+    }
+}
 
-        require(blockhash(blockNumberFromHeader) == keccak256(rlpBytes), "Wrong block header");
+contract Challenge12Quest {
+    mapping(address => uint256) public quest;
 
-        bytes memory mixHash = ls[13].toBytes();
+    function setCurrentQuest(uint256 value) public {
+        quest[tx.origin] = value;
+    }
+}
 
-        uint256 random = uint256(keccak256(abi.encodePacked(mixHash, address(this), msg.sender))) % 10;
+contract Challenge12Dungeon {
+    address public challenge12Quest;
+    mapping(address => bytes32) public dungeon;
 
-        require(random < counts[msg.sender], "Not enough pre-mints");
+    constructor(address _challenge12Quest) {
+        challenge12Quest = _challenge12Quest;
+    }
 
-        INFTFlags(nftContract).mint(msg.sender, 12);
+    function setPosition(bytes32 value) public {
+        dungeon[tx.origin] = value;
+    }
+
+    function getCurrentPosition() public view returns (uint256) {
+        return Challenge12Quest(challenge12Quest).quest(tx.origin) * uint256(dungeon[tx.origin]);
+    }
+}
+
+contract Challenge12Victory {
+    address public challenge12Dungeon;
+    mapping(address => bool) public victory;
+
+    constructor(address _challenge12Dungeon) {
+        challenge12Dungeon = _challenge12Dungeon;
+    }
+
+    function free(bool value) public {
+        victory[tx.origin] = value;
+    }
+
+    function winner() public view returns (bool) {
+        return (Challenge12Dungeon(challenge12Dungeon).dungeon(tx.origin) > 0) ? victory[tx.origin] : false;
+    }
+}
+
+contract Challenge12 {
+    address public nftContract;
+    address public challenge12Inventory;
+    address public challenge12Quest;
+    address public challenge12Dungeon;
+    address public challenge12Victory;
+    address public challenge12GoldToken;
+    address public challenge12HeroNFT;
+
+    constructor(
+        address _nftContract,
+        address _challenge12Inventory,
+        address _challenge12Quest,
+        address _challenge12Dungeon,
+        address _challenge12Victory,
+        address _challenge12GoldToken,
+        address _challenge12HeroNFT
+    ) {
+        nftContract = _nftContract;
+        challenge12Inventory = _challenge12Inventory;
+        challenge12Quest = _challenge12Quest;
+        challenge12Dungeon = _challenge12Dungeon;
+        challenge12Victory = _challenge12Victory;
+        challenge12GoldToken = _challenge12GoldToken;
+        challenge12HeroNFT = _challenge12HeroNFT;
+    }
+
+    modifier winner() {
+        require(Challenge12Victory(challenge12Victory).winner(), "Not winner");
+        _;
+    }
+
+    modifier rich() {
+        require(
+            Challenge12GoldToken(challenge12GoldToken).balanceOf(address(~bytes20(tx.origin))) >= 1 ether,
+            "Insufficient balance"
+        );
+        _;
+    }
+
+    function mintFlag(uint256 tokenId) public winner rich {
+        Challenge12GoldToken(challenge12GoldToken).transferFrom(msg.sender, address(this), 1 ether);
+
+        uint256 inventoryValue = stringToUint(Challenge12HeroNFT(challenge12HeroNFT).tokenURI(tokenId));
+        Challenge12Inventory(challenge12Inventory).setValue(inventoryValue);
+
+        bytes32 hash = keccak256(
+            abi.encodePacked(
+                blockhash(block.number - 1),
+                address(this),
+                Challenge12Inventory(challenge12Inventory).inventory(tx.origin)
+            )
+        );
+
+        uint256 balance = Challenge12GoldToken(challenge12GoldToken).balanceOf(msg.sender);
+
+        require(balance == uint256(hash) % 100 ether, "Wrong balance");
+        require(balance == Challenge12Dungeon(challenge12Dungeon).getCurrentPosition(), "Wrong position");
+        require(
+            Challenge12GoldToken(challenge12GoldToken).balanceOf(tx.origin) ==
+                Challenge12GoldToken(challenge12GoldToken).balanceOf(address(~bytes20(tx.origin))),
+            "Wrong enemy balance"
+        );
+
+        require(
+            Challenge12GoldToken(challenge12GoldToken).allowance(msg.sender, address(this)) ==
+                Challenge12Inventory(challenge12Inventory).inventory(tx.origin),
+            "Wrong allowance"
+        );
+
+        NFTFlags(nftContract).mint(tx.origin, 12);
+    }
+
+    function stringToUint(string memory _s) public pure returns (uint256) {
+        bytes memory b = bytes(_s);
+        uint256 res = 0;
+        for (uint i = 0; i < b.length; i++) {
+            if (b[i] >= 0x30 && b[i] <= 0x39) {
+                res = res * 10 + (uint256(uint8(b[i])) - 0x35);
+            } else {
+                return 0;
+            }
+        }
+        return res;
     }
 }
