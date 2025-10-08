@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import type { NextPage } from "next";
 import { ClockIcon, FlagIcon, RocketLaunchIcon, UserGroupIcon } from "@heroicons/react/24/outline";
@@ -41,8 +42,16 @@ const Home: NextPage = () => {
       <div className="pt-16 bg-[url(/dot-texture.svg)]">
         <div className="mx-auto max-w-7xl px-6 lg:flex lg:items-center lg:gap-x-10 lg:px-8">
           <div className="mx-auto max-w-2xl lg:mx-0 lg:flex-auto">
+            <div className="mb-6">
+              <Image
+                src="/logo-devconnect.svg"
+                alt="Devconnect Argentina 2025"
+                width={220}
+                height={130}
+                className="h-14 w-auto md:h-20"
+              />
+            </div>
             <h1 className="font-dotGothic tracking-wide">
-              <span className="block text-xl mb-2 md:text-2xl md:mb-4">- Devconnect Argentina 2025 -</span>
               <span className="block text-3xl md:text-4xl">BuidlGuidl Capture The Flag</span>
             </h1>
             <p className="mt-6 leading-relaxed md:leading-8 text-gray-50">
@@ -65,14 +74,14 @@ const Home: NextPage = () => {
           </div>
         </div>
         <div className="mt-20 flex flex-col">
-          <div className="ml-auto bg-green-600 h-8 w-[20%] opacity-20"></div>
-          <div className="ml-auto bg-green-600 h-8 w-[40%] opacity-40"></div>
-          <div className="ml-auto bg-green-600 h-8 w-[60%] opacity-60"></div>
-          <div className="ml-auto bg-green-600 h-8 w-[80%] opacity-80"></div>
-          <div className="bg-green-600 h-8 w-[100%] opacity-90"></div>
+          <div className="ml-auto bg-theme-color h-8 w-[20%] opacity-20"></div>
+          <div className="ml-auto bg-theme-color h-8 w-[40%] opacity-40"></div>
+          <div className="ml-auto bg-theme-color h-8 w-[60%] opacity-60"></div>
+          <div className="ml-auto bg-theme-color h-8 w-[80%] opacity-80"></div>
+          <div className="bg-theme-color-500 h-8 w-[100%]"></div>
         </div>
       </div>
-      <div id="rules" className="bg-green-600 py-24 sm:py-32">
+      <div id="rules" className="bg-theme-color-500 py-24 sm:py-32">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="mx-auto max-w-2xl lg:mx-0">
             <h2 className="text-3xl font-dotGothic tracking-wide text-white md:text-4xl">Choose Your Own Adventure</h2>
@@ -96,7 +105,7 @@ const Home: NextPage = () => {
               {rules.map(rule => (
                 <div key={rule.name} className="flex flex-col">
                   <dt className="text-base font-semibold leading-7 text-white">
-                    <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-lg bg-green-800">
+                    <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-lg bg-theme-color-700">
                       <rule.icon aria-hidden="true" className="h-8 w-8 text-white" />
                     </div>
                     {rule.name}
@@ -111,11 +120,11 @@ const Home: NextPage = () => {
         </div>
       </div>
       <div className="flex flex-col">
-        <div className="bg-green-600 h-8 w-[100%] opacity-90"></div>
-        <div className="bg-green-600 h-8 w-[80%] opacity-80"></div>
-        <div className="bg-green-600 h-8 w-[60%] opacity-60"></div>
-        <div className="bg-green-600 h-8 w-[40%] opacity-40"></div>
-        <div className="bg-green-600 h-8 w-[20%] opacity-20"></div>
+        <div className="bg-theme-color-500 h-8 w-[100%]"></div>
+        <div className="bg-theme-color h-8 w-[80%] opacity-80"></div>
+        <div className="bg-theme-color h-8 w-[60%] opacity-60"></div>
+        <div className="bg-theme-color h-8 w-[40%] opacity-40"></div>
+        <div className="bg-theme-color h-8 w-[20%] opacity-20"></div>
       </div>
       <div id="prizes" className="py-28">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">

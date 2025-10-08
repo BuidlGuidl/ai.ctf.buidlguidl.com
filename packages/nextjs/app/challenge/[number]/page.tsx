@@ -39,8 +39,8 @@ export default async function ChallengePage({ params }: ChallengePageProps) {
 
   return (
     <div className="py-20 px-6 min-h-screen bg-[url(/dot-texture.svg)]">
-      <div className="max-w-3xl mx-auto bg-base-100 border-2 border-t-4 border-l-4 border-green-700 border-t-green-600 border-l-green-500">
-        <div className="flex justify-between px-6 py-2 bg-green-600/30 border-b border-green-600">
+      <div className="max-w-3xl mx-auto bg-base-100 border-2 border-t-4 border-l-4 border-theme-color-700 border-t-theme-color border-l-theme-color-500">
+        <div className="flex justify-between px-6 py-2 bg-theme-color/30 border-b border-theme-color">
           <h1 className="mt-[3px] text-white text-xl leading-none font-bold font-dotGothic tracking-wide">
             &gt; Challenge #{challengeNumber}
           </h1>

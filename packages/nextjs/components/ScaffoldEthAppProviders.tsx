@@ -20,7 +20,7 @@ export const ScaffoldEthAppProviders = ({ children }: { children: React.ReactNod
   return (
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
-        <ProgressBar height="3px" color="#00ff00" />
+        <ProgressBar height="3px" color="#00FBFF" />
         <RainbowKitProvider avatar={BlockieAvatar}>
           {children}
           <Toaster />

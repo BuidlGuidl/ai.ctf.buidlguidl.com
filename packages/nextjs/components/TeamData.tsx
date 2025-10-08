@@ -47,7 +47,7 @@ export const TeamData = ({ address }: { address: string }) => {
 
   if (teamsData?.teams.items.length === 0) {
     return (
-      <div role="alert" className="md:p-6 alert border border-green-600 rounded-none">
+      <div role="alert" className="md:p-6 alert border border-theme-color rounded-none">
         <ExclamationTriangleIcon className="w-6 h-6" />
         <span className="text-lg md:text-xl">No Flags Captured</span>
         <div>
@@ -96,7 +96,7 @@ export const TeamData = ({ address }: { address: string }) => {
               <div className="mx-auto mt-12 grid max-w-2xl grid-cols-1 gap-x-8 gap-y-14 sm:grid-cols-2 lg:mx-0 lg:max-w-none lg:grid-cols-3 xl:grid-cols-4">
                 {teamsData.teams.items[0].challenges?.items.map(challenge => (
                   <div key={challenge.id}>
-                    <div className="h-64 p-8 flex bg-gray-100 border-4 border-green-600">
+                    <div className="h-64 p-8 flex bg-gray-100 border-4 border-theme-color">
                       <Image
                         src={JSON.parse(atob(challenge.tokenURI.substring(29))).image}
                         alt={`Challenge ${challenge.challengeId}`}
@@ -104,7 +104,7 @@ export const TeamData = ({ address }: { address: string }) => {
                         height={573}
                       />
                     </div>
-                    <p className="m-0 py-3 bg-green-600/30 border-4 border-t-0 border-green-600 text-gray-200 text-sm text-center">
+                    <p className="m-0 py-3 bg-theme-color/30 border-4 border-t-0 border-theme-color text-gray-200 text-sm text-center">
                       {challenge.points} points @ {getFormattedDateTime(new Date(challenge.timestamp * 1000))}
                     </p>
                   </div>

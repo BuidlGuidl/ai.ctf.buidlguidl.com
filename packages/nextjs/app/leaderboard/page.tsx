@@ -66,7 +66,7 @@ const Leaderboard: NextPage = () => {
   });
 
   const joinGameBanner = isBigScreen && (
-    <div className="mb-12 p-4 border-2 border-green-500 bg-base-300/80 font-mono">
+    <div className="mb-12 p-4 border-2 border-theme-color -500 bg-base-300/80 font-mono">
       <div className="flex items-center gap-20">
         <div className="flex items-center gap-2">
           <div className="flex relative w-10 h-10">
@@ -74,12 +74,13 @@ const Leaderboard: NextPage = () => {
           </div>
           <div className="flex flex-col">
             <span className="font-dotGothic tracking-wide">BuidlGuidl CTF</span>
-            <span className="text-xs">Devcon SEA 2024</span>
+            <span className="text-xs">Devconnect Argentina 2025</span>
           </div>
         </div>
         <div className="flex-grow text-xl md:text-3xl font-bold tracking-wider text-center">
-          <span className="text-green-500">&gt;</span> JOIN THE GAME:{" "}
-          <span className="text-green-400 md:text-4xl">ctf.buidlguidl.com</span>
+          <span className="text-green-500">&gt;</span> JOIN THE GAME:
+          <br />
+          <span className="text-green-400 md:text-4xl">ctf-argentina.buidlguidl.com</span>
         </div>
         {enabled && enabledAt && (
           <div className="flex items-center gap-2">
@@ -120,9 +121,9 @@ const Leaderboard: NextPage = () => {
         <div className="mt-8 flow-root">
           <div className="overflow-x-auto">
             <div className="inline-block min-w-full py-2 align-middle">
-              <div className="overflow-hidden bg-base-100 border-2 border-t-4 border-l-4 border-green-700 border-t-green-600 border-l-green-500">
-                <table className="min-w-full divide-y divide-green-600">
-                  <thead className="bg-green-600/30 font-dotGothic tracking-wide text-left text-gray-50 md:text-xl">
+              <div className="overflow-hidden bg-base-100 border-2 border-t-4 border-l-4 border-theme-color-700 border-t-theme-color border-l-theme-color-500">
+                <table className="min-w-full divide-y divide-theme-color">
+                  <thead className="bg-theme-color/30 font-dotGothic tracking-wide text-left text-gray-50 md:text-xl">
                     <tr>
                       <th scope="col" className={thStyles}>
                         Rank

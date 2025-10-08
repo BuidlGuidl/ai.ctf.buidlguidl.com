@@ -10,17 +10,17 @@ export const TransactionsTable = ({ blocks, transactionReceipts }: TransactionsT
 
   return (
     <div className="flex justify-center px-4 md:px-0">
-      <div className="overflow-x-auto w-full border-2 border-green-600">
+      <div className="overflow-x-auto w-full border-2 border-theme-color">
         <table className="table text-xl bg-base-100 table-zebra w-full md:table-md table-sm">
           <thead>
             <tr className="text-lg text-white font-dotGothic tracking-wide">
-              <th className="border-b border-green-600 bg-green-600/30">Transaction Hash</th>
-              <th className="border-b border-green-600 bg-green-600/30">Function Called</th>
-              <th className="border-b border-green-600 bg-green-600/30">Block Number</th>
-              <th className="border-b border-green-600 bg-green-600/30">Time Mined</th>
-              <th className="border-b border-green-600 bg-green-600/30">From</th>
-              <th className="border-b border-green-600 bg-green-600/30">To</th>
-              <th className="border-b border-green-600 bg-green-600/30 text-end">
+              <th className="border-b border-theme-color bg-theme-color/30">Transaction Hash</th>
+              <th className="border-b border-theme-color bg-theme-color/30">Function Called</th>
+              <th className="border-b border-theme-color bg-theme-color/30">Block Number</th>
+              <th className="border-b border-theme-color bg-theme-color/30">Time Mined</th>
+              <th className="border-b border-theme-color bg-theme-color/30">From</th>
+              <th className="border-b border-theme-color bg-theme-color/30">To</th>
+              <th className="border-b border-theme-color bg-theme-color/30 text-end">
                 Value ({targetNetwork.nativeCurrency.symbol})
               </th>
             </tr>

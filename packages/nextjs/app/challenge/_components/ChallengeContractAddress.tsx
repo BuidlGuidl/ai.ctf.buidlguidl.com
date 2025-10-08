@@ -15,7 +15,7 @@ export const ChallengeContractAddress = ({ challengeNumber }: { challengeNumber:
 
   const { data: contractInfo } = useDeployedContractInfo(contractName);
 
-  const borderStyles = "absolute border-green-400 h-3 w-3";
+  const borderStyles = "absolute border-theme-color h-3 w-3";
 
   return (
     <>
