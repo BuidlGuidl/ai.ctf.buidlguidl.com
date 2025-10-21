@@ -42,22 +42,6 @@ contract NFTFlags is ERC721, IERC721Receiver, Ownable {
         "#2563eb", // Blue
         "#4f46e5", // Indigo
         "#7c3aed", // Violet
-        "#9333ea", // Purple
-        // TODO: delete this,
-        "#4b5563", // Default Gray
-        "#dc2626", // Red
-        "#ea580c", // Orange
-        "#d97706", // Amber
-        "#ca8a04", // Yellow
-        "#65a30d", // Lime
-        "#16a34a", // Green
-        "#059669", // Emerald
-        "#0d9488", // Teal
-        "#0891b2", // Cyan
-        "#0284c7", // Sky
-        "#2563eb", // Blue
-        "#4f46e5", // Indigo
-        "#7c3aed", // Violet
         "#9333ea" // Purple
     ];
 
