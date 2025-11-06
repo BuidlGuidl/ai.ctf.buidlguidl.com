@@ -131,7 +131,7 @@ const Home: NextPage = () => {
           <h2 className="text-3xl font-dotGothic tracking-wide text-white md:text-4xl">Prizes</h2>
           <Prizes />
           <p className="mt-12 leading-relaxed text-gray-100 text-lg md:leading-8 md:text-xl">
-            Top 10 winners will receive $50 USD and awesome BuidlGuidl swag!
+            Top 10 winners will receive $100 USD and awesome BuidlGuidl swag!
           </p>
         </div>
       </div>

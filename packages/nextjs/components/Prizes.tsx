@@ -16,12 +16,9 @@ export function Prizes() {
             <h3 className="text-yellow-300 text-xl/8 lg:text-3xl/8 font-dotGothic tracking-wide">1st Place</h3>
           </div>
           <p className="mt-6 flex items-baseline gap-x-1">
-            <span className="text-4xl font-semibold tracking-tight text-yellow-300">$1,000 USD</span>
+            <span className="text-4xl font-semibold tracking-tight text-yellow-300">$3,000 USD</span>
           </p>
-          <ul className="mt-5 pl-5 text-yellow-300 list-disc">
-            <li className="text-xl font-semibold">A fully functional Ethereum hardware node</li>
-            <li className="mt-4">Awesome BuidlGuidl swag</li>
-          </ul>
+          <p className="mt-8 text-yellow-300">And awesome BuidlGuidl swag</p>
         </div>
       </div>
       <div className="flex flex-col justify-between rounded-md lg:rounded-r-none lg:mt-8 lg:order-1 bg-base-300 p-8 ring-2 ring-gray-600 xl:p-10">
@@ -31,12 +28,9 @@ export function Prizes() {
             <h3 className="text-slate-200 text-xl/8 lg:text-3xl/8 font-dotGothic tracking-wide">2nd Place</h3>
           </div>
           <p className="mt-6 flex items-baseline gap-x-1">
-            <span className="text-4xl font-semibold tracking-tight text-slate-200">$500 USD</span>
+            <span className="text-4xl font-semibold tracking-tight text-slate-200">$1,500 USD</span>
           </p>
-          <ul className="mt-5 pl-5 text-slate-200 list-disc">
-            <li>A USB drive with an &quot;Ethereum node starter kit&quot;</li>
-            <li className="mt-4">Awesome BuidlGuidl swag</li>
-          </ul>
+          <p className="mt-8 text-slate-200">And awesome BuidlGuidl swag</p>
         </div>
       </div>
       <div className="flex flex-col justify-between rounded-md lg:rounded-l-none lg:mt-8 lg:order-3 bg-base-300 p-8 ring-2 ring-gray-600 xl:p-10">
@@ -46,12 +40,9 @@ export function Prizes() {
             <h3 className="text-amber-500 text-xl/8 lg:text-3xl/8 font-dotGothic tracking-wide">3rd Place</h3>
           </div>
           <p className="mt-6 flex items-baseline gap-x-1">
-            <span className="text-4xl font-semibold tracking-tight text-amber-500">$250 USD</span>
+            <span className="text-4xl font-semibold tracking-tight text-amber-500">$750 USD</span>
           </p>
-          <ul className="mt-5 pl-5 text-amber-500 list-disc">
-            <li>A USB drive with an &quot;Ethereum node starter kit&quot;</li>
-            <li className="mt-4">Awesome BuidlGuidl swag</li>
-          </ul>
+          <p className="mt-8 text-amber-500">And awesome BuidlGuidl swag</p>
         </div>
       </div>
     </div>
