@@ -47,7 +47,7 @@ contract NFTFlags is ERC721, IERC721Receiver, Ownable {
 
     event FlagMinted(address indexed minter, uint256 indexed tokenId, uint256 indexed challengeId);
 
-    constructor(address _initialOwner) Ownable(_initialOwner) ERC721("BG-CTF", "CTF") {}
+    constructor(address _initialOwner) Ownable(_initialOwner) ERC721("BG-CTF-ARG-2025", "CTF") {}
 
     function setGoldTokenAddress(address _goldTokenAddress) external onlyOwner {
         goldTokenAddress = _goldTokenAddress;
