@@ -4,7 +4,7 @@ ToDo. update image with Devconnect Argentina 2025
 
 The repository contains the website, contracts and ponder indexer for the Devconnect Argentina 2025 CTF.
 
-If you want to play the game using our stack, checkout the [extension branch](https://github.com/buidlguidl/ctf-argentina.buidlguidl.com/tree/extension).
+If you want to play the game using our stack, checkout the [extension branch](https://github.com/buidlguidl/ctf-argentina).
 
 ## Setting up the environment
 
@@ -21,8 +21,8 @@ You'll need to have the following tools installed on your machine:
 First, you'll need to clone this repository and install dependencies:
 
 ```
-git clone https://github.com/buidlguidl/ctf-argentina.buidlguidl.com.git
-cd ctf-argentina.buidlguidl.com
+git clone https://github.com/buidlguidl/ctf-argentina-internal.git
+cd ctf-argentina-internal
 yarn install
 ```
 

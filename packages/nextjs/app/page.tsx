@@ -87,11 +87,7 @@ const Home: NextPage = () => {
             <h2 className="text-3xl font-dotGothic tracking-wide text-white md:text-4xl">Choose Your Own Adventure</h2>
             <p className="mt-6 leading-relaxed text-gray-100 md:leading-8 md:text-lg">
               Challenges will become more difficult as you progress. Beginners are encouraged to use this{" "}
-              <a
-                className="link"
-                href="https://github.com/buidlguidl/ctf-argentina.buidlguidl.com/tree/extension"
-                target="_blank"
-              >
+              <a className="link" href="https://github.com/buidlguidl/ctf-argentina" target="_blank">
                 Scaffold-ETH 2 repository
               </a>{" "}
               to solve the challenges. Advanced players may use any means necessary to progress.
