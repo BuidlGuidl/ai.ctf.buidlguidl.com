@@ -1,5 +1,4 @@
 import Image from "next/image";
-import Link from "next/link";
 import type { NextPage } from "next";
 import { ClockIcon, FlagIcon, RocketLaunchIcon, UserGroupIcon } from "@heroicons/react/24/outline";
 import { FlagArt } from "~~/components/FlagArt";
@@ -61,9 +60,6 @@ const Home: NextPage = () => {
               wins. Good Luck...
             </p>
             <div className="mt-10 flex items-center gap-x-6">
-              <Link href="/challenge/1" className="btn btn-primary rounded-md">
-                Start Challenges →
-              </Link>
               <a href="#rules" className="btn btn-primary btn-outline rounded-md">
                 Learn More
               </a>
