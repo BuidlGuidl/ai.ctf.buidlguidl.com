@@ -7,7 +7,7 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-eth/contract";
 const deployedContracts = {
   10: {
     Challenge1: {
-      address: "0x89F348C632C01256Bcf1cd077AB0a79c669157B4",
+      address: "0x11e8f11C7dfc40227dd36Ddf6B4c3F3b24D6aaA1",
       abi: [
         {
           inputs: [
@@ -104,7 +104,7 @@ const deployedContracts = {
       inheritedFunctions: {},
     },
     Challenge10: {
-      address: "0xAdf6c7e86b71476a2Be912Fe1d1f7aeE862dd91a",
+      address: "0x12A40a5Dc2B54413721631A34286CD33c8d58549",
       abi: [
         {
           inputs: [
@@ -141,7 +141,7 @@ const deployedContracts = {
       inheritedFunctions: {},
     },
     Challenge11: {
-      address: "0x7607404D90c2bD9bA03e527322dca3b192DF900B",
+      address: "0x787410120599E371E1A55Ebe31297C86e0798d1b",
       abi: [
         {
           inputs: [
@@ -261,7 +261,7 @@ const deployedContracts = {
       inheritedFunctions: {},
     },
     Challenge12: {
-      address: "0xc5c15D5e1cA1546DDdb4CCfb4E3583669f8C7872",
+      address: "0xC3731408885D828B5a4411C6479DF427d70F5878",
       abi: [
         {
           inputs: [
@@ -444,7 +444,7 @@ const deployedContracts = {
       },
     },
     Challenge12Dungeon: {
-      address: "0x61D367A0D40a74cB296E01774210C051b6dc5BbE",
+      address: "0x7cd1210f6ec5148000E8f85b96FF7d9CaBA62dDe",
       abi: [
         {
           inputs: [
@@ -519,7 +519,7 @@ const deployedContracts = {
       inheritedFunctions: {},
     },
     Challenge12GoldToken: {
-      address: "0x1926fcB107966685Aa70f8117782D1202615f8dA",
+      address: "0xf95DEb4143173c275D15A859aaceAf394E6248d2",
       abi: [
         {
           inputs: [
@@ -919,7 +919,7 @@ const deployedContracts = {
       inheritedFunctions: {},
     },
     Challenge12HeroNFT: {
-      address: "0x12eB38335f06BA2D349f1d8161648AB43706cC47",
+      address: "0xabe72699aa93858de0a24Eaae49968641dbfAA9e",
       abi: [
         {
           inputs: [],
@@ -1414,7 +1414,7 @@ const deployedContracts = {
       inheritedFunctions: {},
     },
     Challenge12Inventory: {
-      address: "0x1456DEF91787C003663d452eE03F7a4C41E9b197",
+      address: "0x716e43a0Eb3D6D80A41A3Db38684e6a66Eea8dC0",
       abi: [
         {
           inputs: [
@@ -1526,7 +1526,7 @@ const deployedContracts = {
       inheritedFunctions: {},
     },
     Challenge12Quest: {
-      address: "0x3c391E87b2d70c8305297381441dE1d99d1Ae10D",
+      address: "0x059151fB6961Fd8DD53F36edB0ED21bc7672AB2f",
       abi: [
         {
           inputs: [
@@ -1564,7 +1564,7 @@ const deployedContracts = {
       inheritedFunctions: {},
     },
     Challenge12Victory: {
-      address: "0xB0cF8320c6c1e4BE881A67D9A9745a88e0C81429",
+      address: "0x2da45bD290a5D28CE79596Dfe7de66D9784EC760",
       abi: [
         {
           inputs: [
@@ -1639,7 +1639,7 @@ const deployedContracts = {
       inheritedFunctions: {},
     },
     Challenge2: {
-      address: "0xEa76B94542763D9952dA3943b18d0FA161450D2e",
+      address: "0x62cE2547b1b6e8e0f944Bb9E6844336Ac6dc89EC",
       abi: [
         {
           inputs: [
@@ -1682,7 +1682,7 @@ const deployedContracts = {
       inheritedFunctions: {},
     },
     Challenge3: {
-      address: "0x7826186a79E774521E872c5492E11bA8aC543B40",
+      address: "0x27E0C09097e3fad2e3CE66c5A47DA715a7317f8D",
       abi: [
         {
           inputs: [
@@ -1719,7 +1719,7 @@ const deployedContracts = {
       inheritedFunctions: {},
     },
     Challenge4: {
-      address: "0x868CFC68e335a181b9B87a15Db773830E15018Ac",
+      address: "0xE08787967948Fd4F5A667A14965B242786F8Cf07",
       abi: [
         {
           inputs: [
@@ -1773,7 +1773,7 @@ const deployedContracts = {
       inheritedFunctions: {},
     },
     Challenge5: {
-      address: "0x188Bc74d591A38b3c60168B23D1101a0445cc6cC",
+      address: "0xb072a5de143fF4B01108002d0D61d33fd99cE90e",
       abi: [
         {
           inputs: [
@@ -1821,7 +1821,7 @@ const deployedContracts = {
       inheritedFunctions: {},
     },
     Challenge6: {
-      address: "0x74fC165fB825b659a4f7e2412Ed60d9ceC528D00",
+      address: "0x39f29d0509C1618f11280413122926A44298FF0A",
       abi: [
         {
           inputs: [
@@ -1956,7 +1956,7 @@ const deployedContracts = {
       inheritedFunctions: {},
     },
     Challenge7: {
-      address: "0x9A6F0dE325cE4Ee5255B5c5Ce603a4EC36293793",
+      address: "0x880e350607c4f69d10A10238d570E1D2D714bB8e",
       abi: [
         {
           inputs: [
@@ -2045,7 +2045,7 @@ const deployedContracts = {
       inheritedFunctions: {},
     },
     Challenge8: {
-      address: "0x2064D77F69160f638Ab3A03BdcF01BFfd8975Ddd",
+      address: "0x46e223B242ba890cF76b69bd4bb139b11f2E9D6C",
       abi: [
         {
           inputs: [
@@ -2097,12 +2097,12 @@ const deployedContracts = {
       inheritedFunctions: {},
     },
     Challenge9: {
-      address: "0x49a6Fbdf423Ce79f4Bf880bDce8D9d5935431257",
+      address: "0x367dadaF9Ca70e684edBdf97F55733434a4294a9",
       abi: [],
       inheritedFunctions: {},
     },
     NFTFlags: {
-      address: "0x36D02C77DcFe4BAe202378564f753eA0C16a943D",
+      address: "0xFF1DD80d8dCf298fBFAce009B9f5803a5315b417",
       abi: [
         {
           inputs: [

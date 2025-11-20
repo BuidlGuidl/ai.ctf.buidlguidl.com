@@ -14,7 +14,7 @@ const scaffoldConfig = {
   targetNetworks: [chains.optimism],
 
   // startBlock for indexer
-  startBlock: 143989378,
+  startBlock: 144000924,
 
   // The interval at which your front-end polls the RPC servers for new data
   // it has no effect if you only target the local network (default is 4000)

@@ -1,5 +1,5 @@
 {
-  "address": "0xEa76B94542763D9952dA3943b18d0FA161450D2e",
+  "address": "0x62cE2547b1b6e8e0f944Bb9E6844336Ac6dc89EC",
   "abi": [
     {
       "inputs": [
@@ -39,26 +39,26 @@
       "type": "function"
     }
   ],
-  "transactionHash": "0xe3ab0e73a33c7b848666e339b51c223a64bc01a153ecda62df9a4d8641399d0f",
+  "transactionHash": "0x6362b72b2c0b55dd5b03985f433f7f95427f480dbde68909fed2e90985fb6e42",
   "receipt": {
     "to": null,
     "from": "0x9BEa4176C1914651b954d9cCcE5466eA76AC3DaB",
-    "contractAddress": "0xEa76B94542763D9952dA3943b18d0FA161450D2e",
-    "transactionIndex": 53,
+    "contractAddress": "0x62cE2547b1b6e8e0f944Bb9E6844336Ac6dc89EC",
+    "transactionIndex": 8,
     "gasUsed": "173476",
     "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
-    "blockHash": "0x2e60b225432afa311326d2dfcbaeeb4b3b4bbf3dc5240570707e21f2806293b6",
-    "transactionHash": "0xe3ab0e73a33c7b848666e339b51c223a64bc01a153ecda62df9a4d8641399d0f",
+    "blockHash": "0xd7d548f8bead5830bcc19951e4142dce18ed1b5ebaa811dd25700008806f6a41",
+    "transactionHash": "0x6362b72b2c0b55dd5b03985f433f7f95427f480dbde68909fed2e90985fb6e42",
     "logs": [],
-    "blockNumber": 143989422,
-    "cumulativeGasUsed": "21188787",
+    "blockNumber": 144000942,
+    "cumulativeGasUsed": "817036",
     "status": 1,
     "byzantium": true
   },
   "args": [
-    "0x36D02C77DcFe4BAe202378564f753eA0C16a943D"
+    "0xFF1DD80d8dCf298fBFAce009B9f5803a5315b417"
   ],
-  "numDeployments": 2,
+  "numDeployments": 1,
   "solcInputHash": "222426fceb77f953b13af6d9be21a9c4",
   "metadata": "{\"compiler\":{\"version\":\"0.8.20+commit.a1b79de6\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_nftContract\",\"type\":\"address\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"yourKey\",\"type\":\"bytes32\"}],\"name\":\"mintFlag\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"nftContract\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"}],\"devdoc\":{\"kind\":\"dev\",\"methods\":{},\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{},\"version\":1}},\"settings\":{\"compilationTarget\":{\"contracts/Challenge2.sol\":\"Challenge2\"},\"evmVersion\":\"paris\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\",\"useLiteralContent\":true},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[]},\"sources\":{\"contracts/Challenge2.sol\":{\"content\":\"//SPDX-License-Identifier: MIT\\npragma solidity >=0.8.0 <0.9.0;\\n\\nimport \\\"./INFTFlags.sol\\\";\\n\\ncontract Challenge2 {\\n    address public nftContract;\\n\\n    constructor(address _nftContract) {\\n        nftContract = _nftContract;\\n    }\\n\\n    function mintFlag(bytes32 yourKey) external {\\n        bytes32 key = keccak256(abi.encodePacked(msg.sender, address(this)));\\n        require(yourKey == key, \\\"bad key :(\\\");\\n\\n        INFTFlags(nftContract).mint(tx.origin, 2);\\n    }\\n}\\n\",\"keccak256\":\"0xd17a282c10a1f60fc42ffc80254b545b2965c68305fd62fcf74f6253320acf4e\",\"license\":\"MIT\"},\"contracts/INFTFlags.sol\":{\"content\":\"//SPDX-License-Identifier: MIT\\npragma solidity >=0.8.0 <0.9.0;\\n\\ninterface INFTFlags {\\n    function mint(address _recipient, uint256 _challengeId) external;\\n}\\n\",\"keccak256\":\"0xe623eea1d08afa3f13cc5b80cc3445a673e8f7ac221ce2acc62a670402e7bf8b\",\"license\":\"MIT\"}},\"version\":1}",
   "bytecode": "0x608060405234801561001057600080fd5b5060405161024e38038061024e83398101604081905261002f91610054565b600080546001600160a01b0319166001600160a01b0392909216919091179055610084565b60006020828403121561006657600080fd5b81516001600160a01b038116811461007d57600080fd5b9392505050565b6101bb806100936000396000f3fe608060405234801561001057600080fd5b50600436106100365760003560e01c8063d56d229d1461003b578063dfa0c2d61461006a575b600080fd5b60005461004e906001600160a01b031681565b6040516001600160a01b03909116815260200160405180910390f35b61007d61007836600461016c565b61007f565b005b6040516bffffffffffffffffffffffff1933606090811b8216602084015230901b1660348201526000906048016040516020818303038152906040528051906020012090508082146101045760405162461bcd60e51b815260206004820152600a6024820152690c4c2c840d6caf24074560b31b604482015260640160405180910390fd5b6000546040516340c10f1960e01b8152326004820152600260248201526001600160a01b03909116906340c10f1990604401600060405180830381600087803b15801561015057600080fd5b505af1158015610164573d6000803e3d6000fd5b505050505050565b60006020828403121561017e57600080fd5b503591905056fea264697066735822122057419efb55ff511314ba6357e562065d8cddd3d080265df6e693b4ad29b196dc64736f6c63430008140033",
