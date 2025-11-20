@@ -1,8 +1,10 @@
 import Image from "next/image";
+import Link from "next/link";
 import type { NextPage } from "next";
 import { ClockIcon, FlagIcon, RocketLaunchIcon, UserGroupIcon } from "@heroicons/react/24/outline";
 import { FlagArt } from "~~/components/FlagArt";
 import { Prizes } from "~~/components/Prizes";
+import { TelegramIcon } from "~~/components/assets/TelegramIcon";
 import { getMetadata } from "~~/utils/scaffold-eth/getMetadata";
 
 const rules = [
@@ -60,10 +62,21 @@ const Home: NextPage = () => {
               wins. Good Luck...
             </p>
             <div className="mt-10 flex items-center gap-x-6">
+              <Link href="/challenge/1" className="btn btn-primary rounded-md">
+                Start Challenges →
+              </Link>
               <a href="#rules" className="btn btn-primary btn-outline rounded-md">
                 Learn More
               </a>
             </div>
+            <a
+              href="https://t.me/+kqYNxQx9M601ZDJh"
+              target="_blank"
+              className="mt-12 text-lg flex items-center gap-2 link"
+            >
+              <TelegramIcon className="h-8 w-8" />
+              Join the BG CTF Telegram group
+            </a>
           </div>
           <div className="mt-16 sm:mt-24 lg:mt-0 lg:flex-shrink-0 lg:flex-grow">
             <FlagArt />
