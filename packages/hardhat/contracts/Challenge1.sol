@@ -2,29 +2,30 @@
 pragma solidity >=0.8.0 <0.9.0;
 
 import "./INFTFlags.sol";
+import "./IIdentityRegistry.sol";
 
 contract Challenge1 {
-    address public nftContract;
+    address public immutable nftContract;
+    address public immutable identityRegistry;
 
-    struct TeamInfo {
-        string name;
-        uint8 teamSize;
-    }
+    mapping(address => bool) public registered;
 
-    mapping(address => TeamInfo) public teamInfo;
+    event AgentInit(address indexed agent, uint256 agentId);
 
-    event TeamInit(address indexed team, string name, uint8 teamSize);
-
-    constructor(address _nftContract) {
+    constructor(address _nftContract, address _identityRegistry) {
         nftContract = _nftContract;
+        identityRegistry = _identityRegistry;
     }
 
-    function registerTeam(string memory _name, uint8 _teamSize) public {
-        require(bytes(_name).length > 0, "Name cannot be empty");
-        require(_teamSize > 0 && _teamSize <= 4, "Team size must be between 1 and 4");
+    function registerAgent(uint256 agentId) external {
+        require(!registered[msg.sender], "Already registered");
 
-        teamInfo[msg.sender] = TeamInfo(_name, _teamSize);
-        emit TeamInit(msg.sender, _name, _teamSize);
+        // Verify caller is the wallet for this agentId
+        address agentWallet = IIdentityRegistry(identityRegistry).getAgentWallet(agentId);
+        require(agentWallet == msg.sender, "Caller is not the agent wallet for this agentId");
+
+        registered[msg.sender] = true;
+        emit AgentInit(msg.sender, agentId);
         INFTFlags(nftContract).mint(msg.sender, 1);
     }
 }

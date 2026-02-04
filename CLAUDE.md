@@ -22,6 +22,10 @@ packages/
 └── ponder/    # Blockchain event indexer (GraphQL API)
 ```
 
+## Comments
+
+Please don't use unnecessary comments in the code.
+
 ## Architecture
 
 **Data Flow:**

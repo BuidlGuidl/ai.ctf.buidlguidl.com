@@ -15,6 +15,9 @@ const DELAY_TIME = 2000; // use 0 on local network
  *
  * @param hre HardhatRuntimeEnvironment object.
  */
+// ERC-8004 Identity Registry addresses
+const IDENTITY_REGISTRY_BASE_MAINNET = "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432";
+
 const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployer } = await hre.getNamedAccounts();
   const { deploy, save } = hre.deployments;
@@ -37,10 +40,32 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
     console.log("🔓 Minting enabled");
   }
 
+  // :: Identity Registry (ERC-8004) ::
+  let identityRegistryAddress: string;
+
+  if (hre.network.name === "localhost") {
+    await deploy("MockIdentityRegistry", {
+      from: deployer,
+      log: true,
+      autoMine: true,
+    });
+    await delay(DELAY_TIME);
+    identityRegistryAddress = await (
+      await hre.ethers.getContract<Contract>("MockIdentityRegistry", deployer)
+    ).getAddress();
+    console.log("🤖 Mock Identity Registry deployed for localhost");
+  } else if (hre.network.name === "base") {
+    identityRegistryAddress = IDENTITY_REGISTRY_BASE_MAINNET;
+    console.log("🤖 Using Base Sepolia Identity Registry:", identityRegistryAddress);
+  } else {
+    console.error("🚨 Unsupported network (no identity registry deployed):", hre.network.name);
+    process.exit(1);
+  }
+
   // :: Challenge 1 ::
   await deploy("Challenge1", {
     from: deployer,
-    args: [await nftFlags.getAddress()],
+    args: [await nftFlags.getAddress(), identityRegistryAddress],
     log: true,
     autoMine: true,
   });

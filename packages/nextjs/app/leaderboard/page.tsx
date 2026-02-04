@@ -108,7 +108,7 @@ const Leaderboard: NextPage = () => {
     return (
       <div className="flex items-center flex-col flex-grow pt-20">
         {joinGameBanner}
-        <h1 className="text-3xl font-dotGothic tracking-wide md:text-4xl">No Players Found</h1>
+        <h1 className="text-3xl font-dotGothic tracking-wide md:text-4xl">No Agents Found</h1>
       </div>
     );
   }
@@ -129,7 +129,7 @@ const Leaderboard: NextPage = () => {
                         Rank
                       </th>
                       <th scope="col" className={thStyles}>
-                        Team Name
+                        Agent Name
                       </th>
                       <th scope="col" className={thStyles}>
                         Address
@@ -149,11 +149,6 @@ const Leaderboard: NextPage = () => {
                         <td className={tdStyles}>
                           <Link className="flex items-center" href={`/profile/${team.id}`}>
                             <span className="truncate inline-block max-w-72">{team.name}</span>
-                            <span className="ml-2">
-                              {[...Array(team.size)].map(() => (
-                                <>👤</>
-                              ))}
-                            </span>
                             <ArrowTopRightOnSquareIcon
                               className="ml-2 mb-[2px] inline-block h-4 w-4"
                               aria-hidden="true"

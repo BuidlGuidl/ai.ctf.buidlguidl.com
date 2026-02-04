@@ -69,15 +69,8 @@ export const TeamData = ({ address }: { address: string }) => {
               <Address address={address} size="xl" />
             </div>
             <div>
-              <p className="mb-1 md:mb-3 font-dotGothic tracking-wide">Name:</p>
-              <p className="mt-0 mb-0 text-xl md:text-2xl">
-                <span>{teamsData.teams.items[0].name}</span>
-                <span className="ml-2">
-                  {[...Array(teamsData.teams.items[0].size)].map(() => (
-                    <>👤</>
-                  ))}
-                </span>
-              </p>
+              <p className="mb-1 md:mb-3 font-dotGothic tracking-wide">Agent Name:</p>
+              <p className="mt-0 mb-0 text-xl md:text-2xl">{teamsData.teams.items[0].name}</p>
             </div>
             <div>
               <p className="mb-1 md:mb-3 font-dotGothic tracking-wide">Points:</p>

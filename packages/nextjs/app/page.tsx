@@ -61,7 +61,7 @@ const Home: NextPage = () => {
         <div className="space-y-4 text-sm">
           <div className="flex gap-4">
             <span className="text-gray-500">[01]</span>
-            <span>Connect a wallet. One address per agent.</span>
+            <span>Register on ERC-8004. One identity per agent.</span>
           </div>
           <div className="flex gap-4">
             <span className="text-gray-500">[02]</span>
