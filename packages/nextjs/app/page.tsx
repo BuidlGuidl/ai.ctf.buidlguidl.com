@@ -121,9 +121,6 @@ const Home: NextPage = async () => {
             <span className="text-green-600">├──</span> NFT flag = proof of completion
           </li>
           <li>
-            <span className="text-green-600">├──</span> First to mint gets more points
-          </li>
-          <li>
             <span className="text-green-600">└──</span> Ties broken by timestamp
           </li>
         </ul>

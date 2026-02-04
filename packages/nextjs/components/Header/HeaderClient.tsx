@@ -56,15 +56,15 @@ export const HeaderClient = ({ menuLinks }: { menuLinks: ReactNode }) => {
             <span className="animate-pulse">_</span>
           </Link>
         </div>
-
         {/* Navigation Links */}
         <ul className="hidden lg:flex items-center gap-6 font-mono text-sm text-green-400">{menuLinks}</ul>
-
         {/* Connect Button */}
-        <div className="flex items-center gap-2">
-          <RainbowKitCustomConnectButton />
-          {(currentChain?.id as number) === hardhat.id && <FaucetButton />}
-        </div>
+        {(currentChain?.id as number) === hardhat.id && (
+          <div className="flex items-center gap-2">
+            <RainbowKitCustomConnectButton />
+            <FaucetButton />
+          </div>
+        )}
       </div>
     </div>
   );
