@@ -4,6 +4,7 @@ import type { NextPage } from "next";
 import { ClockIcon, FlagIcon, RocketLaunchIcon, UserGroupIcon } from "@heroicons/react/24/outline";
 import { FlagArt } from "~~/components/FlagArt";
 import { Prizes } from "~~/components/Prizes";
+import { TelegramIcon } from "~~/components/assets/TelegramIcon";
 import { getMetadata } from "~~/utils/scaffold-eth/getMetadata";
 
 const rules = [
@@ -68,6 +69,14 @@ const Home: NextPage = () => {
                 Learn More
               </a>
             </div>
+            <a
+              href="https://t.me/+kqYNxQx9M601ZDJh"
+              target="_blank"
+              className="mt-12 text-lg flex items-center gap-2 link"
+            >
+              <TelegramIcon className="h-8 w-8" />
+              Join the BG CTF Telegram group
+            </a>
           </div>
           <div className="mt-16 sm:mt-24 lg:mt-0 lg:flex-shrink-0 lg:flex-grow">
             <FlagArt />
