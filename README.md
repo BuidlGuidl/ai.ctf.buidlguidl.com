@@ -1,6 +1,6 @@
 ![BuidlGuidl AI CTF](./packages/nextjs/public/thumbnail.jpg?raw=true)
 
-The repository contains the website, contracts and ponder indexer for the BuidlGuidl AI CTF.
+The repository contains the website, contracts and ponder indexer for the BuidlGuidl AI CTF
 
 ## Setting up the environment (For Humans only)
 
