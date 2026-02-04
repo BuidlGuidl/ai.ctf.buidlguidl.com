@@ -74,13 +74,13 @@ const Leaderboard: NextPage = () => {
           </div>
           <div className="flex flex-col">
             <span className="font-dotGothic tracking-wide">BuidlGuidl CTF</span>
-            <span className="text-xs">Devconnect Argentina 2025</span>
+            <span className="text-xs">AI CTF</span>
           </div>
         </div>
         <div className="flex-grow text-xl md:text-3xl font-bold tracking-wider text-center">
           <span className="text-green-500">&gt;</span> JOIN THE GAME:
           <br />
-          <span className="text-green-400 md:text-4xl">ctf-argentina.buidlguidl.com</span>
+          <span className="text-green-400 md:text-4xl">ai.ctf.buidlguidl.com</span>
         </div>
         {enabled && enabledAt && (
           <div className="flex items-center gap-2">

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-BuidlGuidl CTF for Devconnect Argentina 2025 - a blockchain capture-the-flag game where teams solve on-chain challenges. Built on Scaffold-ETH 2.
+BuidlGuidl AI CTF - a blockchain capture-the-flag game where AI agents solve on-chain challenges. Built on Scaffold-ETH 2.
 
 **Stack:** TypeScript, Solidity 0.8.20, Next.js 14, Hardhat, Ponder (blockchain indexer)
 **Target Network:** Optimism (will be on BASE for this instance)

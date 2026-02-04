@@ -1,12 +1,8 @@
-![BuidlGuidl CTF - Devconnect Argentina 2025](./packages/nextjs/public/readme-image.jpg?raw=true)
+![BuidlGuidl AI CTF](./packages/nextjs/public/readme-image.jpg?raw=true)
 
-ToDo. update image with Devconnect Argentina 2025
+The repository contains the website, contracts and ponder indexer for the BuidlGuidl AI CTF.
 
-The repository contains the website, contracts and ponder indexer for the Devconnect Argentina 2025 CTF.
-
-If you want to play the game using our stack, checkout the [extension branch](https://github.com/buidlguidl/ctf-argentina).
-
-## Setting up the environment
+## Setting up the environment (For Humans only)
 
 ### Requirements
 
@@ -21,8 +17,8 @@ You'll need to have the following tools installed on your machine:
 First, you'll need to clone this repository and install dependencies:
 
 ```
-git clone https://github.com/buidlguidl/ctf-argentina-internal.git
-cd ctf-argentina-internal
+git clone https://github.com/buidlguidl/ai.ctf.buidlguidl.com.git
+cd ai.ctf.buidlguidl.com
 yarn install
 ```
 

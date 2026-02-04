@@ -47,7 +47,7 @@ contract NFTFlags is ERC721, IERC721Receiver, Ownable {
 
     event FlagMinted(address indexed minter, uint256 indexed tokenId, uint256 indexed challengeId);
 
-    constructor(address _initialOwner) Ownable(_initialOwner) ERC721("BG-CTF-ARG-2025", "CTF") {}
+    constructor(address _initialOwner) Ownable(_initialOwner) ERC721("BG-AI-CTF", "AICTF") {}
 
     function setGoldTokenAddress(address _goldTokenAddress) external onlyOwner {
         goldTokenAddress = _goldTokenAddress;
@@ -85,7 +85,7 @@ contract NFTFlags is ERC721, IERC721Receiver, Ownable {
                         " flag (tokenId = ",
                         tokenId.toString(),
                         ")",
-                        '", "description": "A NFT flag for the BuidlGuidl CTF at Devconnect Argentina 2025", "image": "data:image/svg+xml;base64,',
+                        '", "description": "A NFT flag for the BuidlGuidl AI CTF", "image": "data:image/svg+xml;base64,',
                         Base64.encode(bytes(svg)),
                         '"}'
                     )
