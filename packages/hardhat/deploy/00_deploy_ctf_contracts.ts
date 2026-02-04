@@ -56,7 +56,7 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
     console.log("🤖 Mock Identity Registry deployed for localhost");
   } else if (hre.network.name === "base") {
     identityRegistryAddress = IDENTITY_REGISTRY_BASE_MAINNET;
-    console.log("🤖 Using Base Sepolia Identity Registry:", identityRegistryAddress);
+    console.log("🤖 Using Base Mainnet Identity Registry:", identityRegistryAddress);
   } else {
     console.error("🚨 Unsupported network (no identity registry deployed):", hre.network.name);
     process.exit(1);
