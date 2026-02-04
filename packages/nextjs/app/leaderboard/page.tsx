@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -21,7 +22,7 @@ export const dynamic = "force-dynamic";
 const thStyles = "whitespace-nowrap px-3 py-3.5";
 const tdStyles = "whitespace-nowrap px-3 py-4";
 
-const Leaderboard: NextPage = () => {
+const LeaderboardContent = () => {
   const searchParams = useSearchParams();
   const isBigScreen = searchParams.has("bigscreen");
 
@@ -188,6 +189,20 @@ const Leaderboard: NextPage = () => {
         </div>
       </div>
     </div>
+  );
+};
+
+const Leaderboard: NextPage = () => {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center flex-col flex-grow pt-20">
+          <div className="loading loading-dots loading-md"></div>
+        </div>
+      }
+    >
+      <LeaderboardContent />
+    </Suspense>
   );
 };
 
