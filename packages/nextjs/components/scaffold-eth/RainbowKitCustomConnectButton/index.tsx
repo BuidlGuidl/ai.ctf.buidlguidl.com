@@ -27,7 +27,16 @@ export const RainbowKitCustomConnectButton = () => {
           : undefined;
 
         return (
-          <>
+          <div
+            {...(!mounted && {
+              "aria-hidden": true,
+              style: {
+                opacity: 0,
+                pointerEvents: "none",
+                userSelect: "none",
+              },
+            })}
+          >
             {(() => {
               if (!connected) {
                 return (
@@ -42,7 +51,7 @@ export const RainbowKitCustomConnectButton = () => {
               }
 
               return (
-                <>
+                <div className="flex items-center">
                   <div className="flex flex-col items-center mr-1">
                     <Balance address={account.address as Address} className="min-h-0 h-auto" usdMode={true} />
                     <span className="text-xs" style={{ color: networkColor }}>
@@ -56,10 +65,10 @@ export const RainbowKitCustomConnectButton = () => {
                     blockExplorerAddressLink={blockExplorerAddressLink}
                   />
                   <AddressQRCodeModal address={account.address as Address} modalId="qrcode-modal" />
-                </>
+                </div>
               );
             })()}
-          </>
+          </div>
         );
       }}
     </ConnectButton.Custom>

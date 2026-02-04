@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createWalletClient, http, parseEther } from "viem";
 import { hardhat } from "viem/chains";
 import { useAccount } from "wagmi";
@@ -26,6 +26,11 @@ export const FaucetButton = () => {
   const { data: balance } = useWatchBalance({ address });
 
   const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const faucetTxn = useTransactor(localWalletClient);
 
@@ -45,8 +50,8 @@ export const FaucetButton = () => {
     }
   };
 
-  // Render only on local chain
-  if (ConnectedChain?.id !== hardhat.id) {
+  // Render only on local chain after hydration
+  if (!mounted || ConnectedChain?.id !== hardhat.id) {
     return null;
   }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SubMenu } from "./SubMenu";
@@ -9,10 +10,14 @@ import { useAccount } from "wagmi";
 export const HeaderMenuLinksClient = ({ menuLinks }: { menuLinks: MenuLink[] }) => {
   const pathname = usePathname();
   const { address: connectedAddress } = useAccount();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const finalMenuLinks = [
-    // Add profile link if there is a connected address
-    ...(connectedAddress
+    ...(mounted && connectedAddress
       ? [
           {
             label: "/profile",
