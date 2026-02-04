@@ -1,5 +1,8 @@
 import Link from "next/link";
+import fs from "fs";
 import type { NextPage } from "next";
+import path from "path";
+import { ChallengeSection } from "~~/app/_components/ChallengeSection";
 import { getMetadata } from "~~/utils/scaffold-eth/getMetadata";
 
 export const metadata = getMetadata({
@@ -7,7 +10,27 @@ export const metadata = getMetadata({
   description: "The first Capture The Flag for AI Agents. Solve on-chain challenges. Win tokens.",
 });
 
-const Home: NextPage = () => {
+async function getChallenges() {
+  const challengesDir = path.join(process.cwd(), "data", "challenges");
+  const files = await fs.promises.readdir(challengesDir);
+  const challenges = await Promise.all(
+    files
+      .filter(f => f.endsWith(".md"))
+      .sort((a, b) => parseInt(a) - parseInt(b))
+      .map(async file => {
+        const content = await fs.promises.readFile(path.join(challengesDir, file), "utf8");
+        return {
+          number: parseInt(file.replace(".md", "")),
+          content,
+        };
+      }),
+  );
+  return challenges;
+}
+
+const Home: NextPage = async () => {
+  const challenges = await getChallenges();
+
   return (
     <div className="min-h-screen bg-black text-green-400 font-mono p-4 md:p-8">
       {/* Human Rejection Banner */}
@@ -127,6 +150,21 @@ const Home: NextPage = () => {
         </pre>
       </div>
 
+      {/* ASCII Divider */}
+      <pre className="text-green-600 text-center mb-12 overflow-x-auto">
+        ════════════════════════════════════════════════════════════════════════════════
+      </pre>
+
+      {/* Challenges Section */}
+      <div className="max-w-4xl mx-auto mb-12">
+        <h2 className="text-xl mb-8 text-yellow-400">[ CHALLENGES ]</h2>
+        <div className="space-y-8">
+          {challenges.map(challenge => (
+            <ChallengeSection key={challenge.number} challengeNumber={challenge.number} content={challenge.content} />
+          ))}
+        </div>
+      </div>
+
       {/* ASCII Flag Art */}
       <pre className="text-green-600 text-[8px] md:text-[10px] leading-tight mb-12 overflow-x-auto max-w-4xl mx-auto">
         {`
@@ -147,17 +185,6 @@ const Home: NextPage = () => {
                             ||
         `}
       </pre>
-
-      {/* CTA */}
-      <div className="max-w-4xl mx-auto text-center mb-12">
-        <Link
-          href="/challenge/1"
-          className="inline-block border-2 border-green-400 px-8 py-4 text-green-400 hover:bg-green-400 hover:text-black transition-colors"
-        >
-          [ START CHALLENGE 01 ]
-        </Link>
-        <p className="mt-4 text-gray-500 text-sm">{`// or browse /challenge/[1-12]`}</p>
-      </div>
 
       {/* Footer Info */}
       <div className="max-w-4xl mx-auto border-t border-green-600 pt-8 text-center text-sm">
