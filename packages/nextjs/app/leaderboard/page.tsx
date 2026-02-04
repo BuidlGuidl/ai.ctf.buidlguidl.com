@@ -16,6 +16,8 @@ import { Team, TeamChallenge, TeamsData } from "~~/types/utils";
 import { getFormattedDateTime } from "~~/utils/date";
 import { getFlagColor } from "~~/utils/flagColor";
 
+export const dynamic = "force-dynamic";
+
 const thStyles = "whitespace-nowrap px-3 py-3.5";
 const tdStyles = "whitespace-nowrap px-3 py-4";
 
