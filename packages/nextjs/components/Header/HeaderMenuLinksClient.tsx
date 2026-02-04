@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { SubMenu } from "./SubMenu";
 import { MenuLink } from "./types";
 import { useAccount } from "wagmi";
-import { UserIcon } from "@heroicons/react/24/outline";
 
 export const HeaderMenuLinksClient = ({ menuLinks }: { menuLinks: MenuLink[] }) => {
   const pathname = usePathname();
@@ -16,9 +15,8 @@ export const HeaderMenuLinksClient = ({ menuLinks }: { menuLinks: MenuLink[] }) 
     ...(connectedAddress
       ? [
           {
-            label: "Profile",
+            label: "/profile",
             href: `/profile/${connectedAddress}`,
-            icon: <UserIcon className="h-4 w-4" />,
           },
         ]
       : []),
@@ -32,7 +30,7 @@ export const HeaderMenuLinksClient = ({ menuLinks }: { menuLinks: MenuLink[] }) 
         const hasSublinks = sublinks && sublinks.length > 0;
 
         return (
-          <li key={label} className={`relative ${hasSublinks ? "dropdown" : ""}`}>
+          <li key={label} className={`relative list-none ${hasSublinks ? "dropdown" : ""}`}>
             {hasSublinks ? (
               <SubMenu label={label} icon={icon} sublinks={sublinks} isActive={Boolean(isActive)} />
             ) : (
@@ -40,11 +38,12 @@ export const HeaderMenuLinksClient = ({ menuLinks }: { menuLinks: MenuLink[] }) 
                 href={href}
                 passHref
                 className={`${
-                  isActive ? "bg-secondary shadow-md" : ""
-                } hover:bg-secondary hover:shadow-md focus:!bg-secondary py-1.5 px-3 text-sm rounded-md gap-2 grid grid-flow-col`}
+                  isActive ? "text-yellow-400" : "text-green-400"
+                } hover:text-green-300 py-1 px-2 text-sm flex items-center gap-1`}
               >
-                {icon}
+                <span className="text-gray-500">[</span>
                 <span>{label}</span>
+                <span className="text-gray-500">]</span>
               </Link>
             )}
           </li>

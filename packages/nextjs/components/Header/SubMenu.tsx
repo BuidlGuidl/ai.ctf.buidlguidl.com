@@ -14,7 +14,7 @@ interface SubMenuProps {
   isActive: boolean;
 }
 
-export const SubMenu: React.FC<SubMenuProps> = ({ label, icon, sublinks, isActive }) => {
+export const SubMenu: React.FC<SubMenuProps> = ({ label, sublinks, isActive }) => {
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const pathname = usePathname();
@@ -37,24 +37,25 @@ export const SubMenu: React.FC<SubMenuProps> = ({ label, icon, sublinks, isActiv
         ref={buttonRef}
         onClick={handleDropdownToggle}
         className={`${
-          isActive ? "bg-secondary shadow-md" : ""
-        } max-lg:hidden btn btn-sm w-full bg-base-100 lg:w-auto max-lg:justify-start hover:bg-secondary hover:shadow-md focus:!bg-secondary py-1 px-3 text-sm rounded-md h-full gap-2 border-0`}
+          isActive ? "text-yellow-400" : "text-green-400"
+        } max-lg:hidden hover:text-green-300 py-1 px-2 text-sm flex items-center gap-1 bg-transparent border-0`}
       >
-        {icon}
+        <span className="text-gray-500">[</span>
         <span>{label}</span>
-        <ChevronDownIcon className={`h-6 w-4 ml-2 sm:ml-0 transition-transform duration-200`} />
+        <ChevronDownIcon className="h-4 w-4" />
+        <span className="text-gray-500">]</span>
       </button>
       <ul
         className={`${
-          isOpen ? "dropdown-content" : "lg:hidden"
-        } lg:absolute dropdown-end ml-0 menu lg:w-40 z-[2] px-0 py-0 lg:p-2 lg:mt-2 bg-base-200 lg:rounded-md gap-1 lg:border lg:border-secondary`}
+          isOpen ? "block" : "lg:hidden"
+        } lg:absolute dropdown-end ml-0 z-[2] p-2 mt-1 bg-black border border-green-600 font-mono`}
       >
         {sublinks.map(sublink => (
-          <li key={sublink.href} className="ml-0">
+          <li key={sublink.href} className="list-none">
             <Link
               href={sublink.href}
-              className={`block px-3 lg:px-4 py-1.5 text-sm rounded-md hover:bg-secondary focus:!bg-secondary ${
-                pathname === sublink.href ? "bg-secondary" : ""
+              className={`block px-3 py-1 text-sm hover:text-green-300 ${
+                pathname === sublink.href ? "text-yellow-400" : "text-green-400"
               }`}
               onClick={handleLinkClick}
             >
