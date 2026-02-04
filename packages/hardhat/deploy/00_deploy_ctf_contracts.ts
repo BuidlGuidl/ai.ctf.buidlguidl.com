@@ -8,7 +8,7 @@ import { Contract, Mnemonic } from "ethers";
  */
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-const DELAY_TIME = 2000; // use 0 on local network
+const DELAY_TIME = (hre: HardhatRuntimeEnvironment) => (hre.network.name === "localhost" ? 0 : 2000);
 
 /**
  * Deploys all the needed CTF contracts
@@ -29,14 +29,14 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
     log: true,
     autoMine: true,
   });
-  await delay(DELAY_TIME);
+  await delay(DELAY_TIME(hre));
 
   const nftFlags = await hre.ethers.getContract<Contract>("NFTFlags", deployer);
   console.log("🚩 NFT Flag contract deployed");
 
   if (hre.network.name === "localhost") {
     await nftFlags.enable();
-    await delay(DELAY_TIME);
+    await delay(DELAY_TIME(hre));
     console.log("🔓 Minting enabled");
   }
 
@@ -49,7 +49,7 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
       log: true,
       autoMine: true,
     });
-    await delay(DELAY_TIME);
+    await delay(DELAY_TIME(hre));
     identityRegistryAddress = await (
       await hre.ethers.getContract<Contract>("MockIdentityRegistry", deployer)
     ).getAddress();
@@ -69,7 +69,7 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
     log: true,
     autoMine: true,
   });
-  await delay(DELAY_TIME);
+  await delay(DELAY_TIME(hre));
 
   console.log("🚩 Challenge #1 deployed");
 
@@ -80,7 +80,7 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
     log: true,
     autoMine: true,
   });
-  await delay(DELAY_TIME);
+  await delay(DELAY_TIME(hre));
 
   console.log("🚩 Challenge #2 deployed");
 
@@ -91,7 +91,7 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
     log: true,
     autoMine: true,
   });
-  await delay(DELAY_TIME);
+  await delay(DELAY_TIME(hre));
 
   console.log("🚩 Challenge #3 deployed");
 
@@ -102,7 +102,7 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
     log: true,
     autoMine: true,
   });
-  await delay(DELAY_TIME);
+  await delay(DELAY_TIME(hre));
 
   console.log("🚩 Challenge #4 deployed");
 
@@ -113,7 +113,7 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
     log: true,
     autoMine: true,
   });
-  await delay(DELAY_TIME);
+  await delay(DELAY_TIME(hre));
 
   console.log("🚩 Challenge #5 deployed");
 
@@ -124,7 +124,7 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
     log: true,
     autoMine: true,
   });
-  await delay(DELAY_TIME);
+  await delay(DELAY_TIME(hre));
 
   console.log("🚩 Challenge #6 deployed");
 
@@ -135,7 +135,7 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
     log: true,
     autoMine: true,
   });
-  await delay(DELAY_TIME);
+  await delay(DELAY_TIME(hre));
 
   console.log("🚩 Challenge #7 deployed");
 
@@ -146,7 +146,7 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
     log: true,
     autoMine: true,
   });
-  await delay(DELAY_TIME);
+  await delay(DELAY_TIME(hre));
 
   console.log("🚩 Challenge #8 deployed");
 
@@ -172,12 +172,12 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
 
   const txResponse = await deployerSigner.sendTransaction(rawTx);
   const txReceipt = await txResponse.wait();
-  await delay(DELAY_TIME);
+  await delay(DELAY_TIME(hre));
   const challenge9Address = txReceipt?.contractAddress;
 
   if (challenge9Address) {
     await save("Challenge9", { address: challenge9Address, abi: [] });
-    await delay(DELAY_TIME);
+    await delay(DELAY_TIME(hre));
   }
 
   console.log("🚩 Challenge #9 deployed at:", challenge9Address);
@@ -196,7 +196,7 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
     to: challenge9Address,
     data,
   });
-  await delay(DELAY_TIME);
+  await delay(DELAY_TIME(hre));
 
   console.log("Transaction hash challenge 9 after deploy: ", txHash.hash);
 
@@ -207,7 +207,7 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
     log: true,
     autoMine: true,
   });
-  await delay(DELAY_TIME);
+  await delay(DELAY_TIME(hre));
 
   console.log("🚩 Challenge #10 deployed");
 
@@ -218,7 +218,7 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
     log: true,
     autoMine: true,
   });
-  await delay(DELAY_TIME);
+  await delay(DELAY_TIME(hre));
 
   console.log("🚩 Challenge #11 deployed");
 
@@ -228,14 +228,14 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
     log: true,
     autoMine: true,
   });
-  await delay(DELAY_TIME);
+  await delay(DELAY_TIME(hre));
 
   await deploy("Challenge12Quest", {
     from: deployer,
     log: true,
     autoMine: true,
   });
-  await delay(DELAY_TIME);
+  await delay(DELAY_TIME(hre));
 
   await deploy("Challenge12Dungeon", {
     from: deployer,
@@ -243,7 +243,7 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
     log: true,
     autoMine: true,
   });
-  await delay(DELAY_TIME);
+  await delay(DELAY_TIME(hre));
 
   await deploy("Challenge12Victory", {
     from: deployer,
@@ -251,14 +251,14 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
     log: true,
     autoMine: true,
   });
-  await delay(DELAY_TIME);
+  await delay(DELAY_TIME(hre));
 
   await deploy("Challenge12HeroNFT", {
     from: deployer,
     log: true,
     autoMine: true,
   });
-  await delay(DELAY_TIME);
+  await delay(DELAY_TIME(hre));
 
   await deploy("Challenge12GoldToken", {
     from: deployer,
@@ -270,7 +270,7 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
     log: true,
     autoMine: true,
   });
-  await delay(DELAY_TIME);
+  await delay(DELAY_TIME(hre));
 
   const challenge12Inventory = await hre.ethers.getContract<Contract>("Challenge12Inventory", deployer);
 
@@ -288,12 +288,12 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
     log: true,
     autoMine: true,
   });
-  await delay(DELAY_TIME);
+  await delay(DELAY_TIME(hre));
 
   const challenge12Address = await (await hre.ethers.getContract<Contract>("Challenge12", deployer)).getAddress();
 
   await challenge12Inventory.transferOwnership(challenge12Address);
-  await delay(DELAY_TIME);
+  await delay(DELAY_TIME(hre));
 
   console.log("🚩 Challenge #12 deployed");
 
@@ -315,7 +315,7 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
 
   const tx = await nftFlags.addAllowedMinterMultiple(challengeAddresses);
   await tx.wait();
-  await delay(DELAY_TIME);
+  await delay(DELAY_TIME(hre));
 
   console.log("Added allowed minters to NFTFlags");
 
@@ -323,7 +323,7 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
     await (await hre.ethers.getContract<Contract>("Challenge12GoldToken", deployer)).getAddress(),
   );
   await txSetGold.wait();
-  await delay(DELAY_TIME);
+  await delay(DELAY_TIME(hre));
 
   console.log("Set gold token address in NFTFlags");
 
