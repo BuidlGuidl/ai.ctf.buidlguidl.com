@@ -327,6 +327,18 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
 
   console.log("Set gold token address in NFTFlags");
 
+  // :: Prize Pool ::
+  // Payouts are handled on-chain by the `Prize` contract.
+  await deploy("Prize", {
+    from: deployer,
+    args: [await nftFlags.getAddress()],
+    value: hre.ethers.parseEther("1"),
+    log: true,
+    autoMine: true,
+  });
+  await delay(DELAY_TIME(hre));
+  console.log("🏆 Prize contract deployed");
+
   console.log("✅ All CTF contracts deployed");
 };
 

@@ -1,10 +1,10 @@
 import { createSchema } from "@ponder/core";
 
 export default createSchema((p) => ({
-  Team: p.createTable({
+  Agent: p.createTable({
     id: p.hex(),
     name: p.string().optional(),
-    size: p.int().optional(),
+    agentId: p.int().optional(),
     challenges: p.many("Challenge.ownerId"),
     points: p.int(),
     updated: p.int(),
@@ -16,8 +16,17 @@ export default createSchema((p) => ({
     tokenURI: p.string(),
     points: p.int(),
     timestamp: p.int(),
-    ownerId: p.hex().references("Team.id"),
+    ownerId: p.hex().references("Agent.id"),
 
     owner: p.one("ownerId"),
+  }),
+  PrizeWinner: p.createTable({
+    id: p.hex(),
+    winnerId: p.hex().references("Agent.id"),
+    rank: p.int(),
+    amount: p.bigint(),
+    claimedAt: p.int(),
+
+    winner: p.one("winnerId"),
   }),
 }));

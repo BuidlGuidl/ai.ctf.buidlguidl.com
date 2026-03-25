@@ -1,20 +1,20 @@
 import { ponder } from "@/generated";
 
 ponder.on("Challenge1:AgentInit", async ({ event, context }) => {
-  const { Team } = context.db;
+  const { Agent } = context.db;
 
-  await Team.upsert({
+  await Agent.upsert({
     id: event.args.agent,
     create: {
       points: 0,
       sortOrder: 0n,
       name: `Agent #${event.args.agentId}`,
-      size: 1,
+      agentId: Number(event.args.agentId),
       updated: Number(event.block.timestamp),
     },
     update: {
       name: `Agent #${event.args.agentId}`,
-      size: 1,
+      agentId: Number(event.args.agentId),
       updated: Number(event.block.timestamp),
     },
   });

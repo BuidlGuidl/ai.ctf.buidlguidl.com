@@ -3,7 +3,10 @@ import fs from "fs";
 import type { NextPage } from "next";
 import path from "path";
 import { ChallengeSection } from "~~/app/_components/ChallengeSection";
+import deployedContracts from "~~/contracts/deployedContracts";
+import scaffoldConfig from "~~/scaffold.config";
 import { getMetadata } from "~~/utils/scaffold-eth/getMetadata";
+import { getBlockExplorerAddressLink } from "~~/utils/scaffold-eth/networks";
 
 export const metadata = getMetadata({
   title: "AI CTF | BuidlGuidl",
@@ -30,6 +33,9 @@ async function getChallenges() {
 
 const Home: NextPage = async () => {
   const challenges = await getChallenges();
+  const targetNetwork = scaffoldConfig.targetNetworks[0];
+  const prizeAddress = deployedContracts[targetNetwork.id]?.Prize?.address;
+  const prizeExplorerLink = prizeAddress ? getBlockExplorerAddressLink(targetNetwork, prizeAddress) : undefined;
 
   return (
     <div className="min-h-screen bg-black text-green-400 font-mono p-4 md:p-8">
@@ -104,6 +110,13 @@ const Home: NextPage = async () => {
             <span className="text-gray-500">[05]</span>
             <span>Repeat until all 12 challenges are captured.</span>
           </div>
+          <div className="flex gap-4">
+            <span className="text-gray-500">[06]</span>
+            <span>
+              Claim your payout: call <span className="text-yellow-400">claimPrize()</span> on the Prize contract.{" "}
+              <span className="text-gray-500">{`// the first 5 eligible agents win`}</span>
+            </span>
+          </div>
         </div>
       </div>
 
@@ -159,6 +172,47 @@ const Home: NextPage = async () => {
           {challenges.map(challenge => (
             <ChallengeSection key={challenge.number} challengeNumber={challenge.number} content={challenge.content} />
           ))}
+        </div>
+      </div>
+
+      {/* Prize Contract */}
+      <div className="max-w-4xl mx-auto mb-12">
+        <div className="border border-green-600 p-6">
+          <div className="flex items-center gap-4 mb-6">
+            <span className="text-yellow-400 text-xl font-bold">[ PRIZE CONTRACT ]</span>
+          </div>
+
+          <div className="prose prose-invert max-w-none prose-headings:text-green-400 prose-headings:font-mono prose-h1:text-lg prose-h1:mb-4 prose-p:text-gray-300 prose-a:text-cyan-400 prose-li:text-gray-300 prose-h2:text-base prose-h2:text-yellow-400/80 prose-h2:mt-6">
+            <h1>Claiming Prize</h1>
+
+            <p>Claim the prize after capturing all 12 flags.</p>
+
+            <h2>Claiming</h2>
+            <ul>
+              <li>Hold all 12 NFT flags on your agent wallet.</li>
+              <li>
+                Call <code>claimPrize()</code> immediately after finish last challenge.
+              </li>
+              <li>Only the first 5 eligible agents can claim.</li>
+              <li>Payouts are descending by claim order.</li>
+            </ul>
+          </div>
+
+          <div className="mt-6 pt-4 border-t border-green-600/50">
+            <span className="text-gray-500">Contract: </span>
+            {prizeAddress && prizeExplorerLink ? (
+              <a
+                href={prizeExplorerLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-cyan-400 hover:text-cyan-300 underline break-all"
+              >
+                {prizeAddress}
+              </a>
+            ) : (
+              <span className="text-red-400">Contract not found</span>
+            )}
+          </div>
         </div>
       </div>
 
