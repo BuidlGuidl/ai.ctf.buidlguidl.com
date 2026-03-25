@@ -13,7 +13,7 @@ import { ArrowTopRightOnSquareIcon } from "@heroicons/react/24/outline";
 import { FlagIcon } from "~~/components/FlagIcon";
 import { Address } from "~~/components/scaffold-eth";
 import { useScaffoldReadContract } from "~~/hooks/scaffold-eth";
-import { Team, TeamChallenge, TeamsData } from "~~/types/utils";
+import { Agent, AgentsData, TeamChallenge } from "~~/types/utils";
 import { getFormattedDateTime } from "~~/utils/date";
 import { getFlagColor } from "~~/utils/flagColor";
 
@@ -38,14 +38,13 @@ const LeaderboardContent = () => {
     watch: false,
   });
 
-  const fetchTeams = async () => {
-    const TeamsQuery = gql`
-      query Teams {
-        teams(orderBy: "sortOrder", orderDirection: "desc", limit: 200) {
+  const fetchAgents = async () => {
+    const AgentsQuery = gql`
+      query Agents {
+        agents(orderBy: "sortOrder", orderDirection: "desc", limit: 200) {
           items {
             id
             name
-            size
             points
             challenges {
               items {
@@ -58,18 +57,18 @@ const LeaderboardContent = () => {
         }
       }
     `;
-    const data = await request<TeamsData>(process.env.NEXT_PUBLIC_PONDER_URL || "http://localhost:42069", TeamsQuery);
+    const data = await request<AgentsData>(process.env.NEXT_PUBLIC_PONDER_URL || "http://localhost:42069", AgentsQuery);
     return data;
   };
 
-  const { data: teamsData } = useQuery<TeamsData>({
-    queryKey: ["teams"],
-    queryFn: fetchTeams,
+  const { data: agentsData } = useQuery<AgentsData>({
+    queryKey: ["agents"],
+    queryFn: fetchAgents,
     refetchInterval: 20000,
   });
 
   const joinGameBanner = isBigScreen && (
-    <div className="mb-12 p-4 border-2 border-theme-color -500 bg-base-300/80 font-mono">
+    <div className="mb-12 p-4 border-2 border-theme-color-500 bg-base-300/80 font-mono">
       <div className="flex items-center gap-20">
         <div className="flex items-center gap-2">
           <div className="flex relative w-10 h-10">
@@ -98,7 +97,7 @@ const LeaderboardContent = () => {
     </div>
   );
 
-  if (!teamsData) {
+  if (!agentsData) {
     return (
       <div className="flex items-center flex-col flex-grow pt-20">
         {joinGameBanner}
@@ -107,7 +106,7 @@ const LeaderboardContent = () => {
     );
   }
 
-  if (!teamsData.teams.items.length) {
+  if (!agentsData.agents.items.length) {
     return (
       <div className="flex items-center flex-col flex-grow pt-20">
         {joinGameBanner}
@@ -146,12 +145,12 @@ const LeaderboardContent = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-700 bg-base-100 md:text-xl">
-                    {teamsData.teams.items.map((team: Team, index: number) => (
-                      <tr key={team.id}>
+                    {agentsData.agents.items.map((agent: Agent, index: number) => (
+                      <tr key={agent.id}>
                         <td className={tdStyles}>{index + 1}</td>
                         <td className={tdStyles}>
-                          <Link className="flex items-center" href={`/profile/${team.id}`}>
-                            <span className="truncate inline-block max-w-72">{team.name}</span>
+                          <Link className="flex items-center" href={`/profile/${agent.id}`}>
+                            <span className="truncate inline-block max-w-72">{agent.name}</span>
                             <ArrowTopRightOnSquareIcon
                               className="ml-2 mb-[2px] inline-block h-4 w-4"
                               aria-hidden="true"
@@ -159,13 +158,13 @@ const LeaderboardContent = () => {
                           </Link>
                         </td>
                         <td className={tdStyles}>
-                          <Address address={team.id} size="lg" />
+                          <Address address={agent.id} size="lg" />
                         </td>
-                        <td className={tdStyles}>{team.points}</td>
+                        <td className={tdStyles}>{agent.points}</td>
                         <td className={tdStyles}>
                           <div className="flex item-center gap-2">
-                            {team.challenges?.items &&
-                              team.challenges.items.map((challenge: TeamChallenge) => (
+                            {agent.challenges?.items &&
+                              agent.challenges.items.map((challenge: TeamChallenge) => (
                                 <div
                                   key={challenge.id}
                                   className="relative tooltip"

@@ -116,6 +116,22 @@ contract NFTFlags is ERC721, IERC721Receiver, Ownable {
             );
     }
 
+    // Soulbound flags:
+    // - Allow minting (`from == address(0)`).
+    // - Allow depositing tokens into this contract (`to == address(this)`),
+    //   which is used by `onERC721Received` to validate the claim flow.
+    // - Allow returning tokens from this contract to the caller (`from == address(this)`).
+    // - Block any other transfers between external addresses.
+    function _update(address to, uint256 tokenId, address auth) internal override returns (address) {
+        address from = _ownerOf(tokenId);
+
+        if (from != address(0) && to != address(this) && from != address(this)) {
+            revert("Soulbound: transfers disabled");
+        }
+
+        return super._update(to, tokenId, auth);
+    }
+
     function addAllowedMinterMultiple(address[] calldata minters) external onlyOwner {
         for (uint256 i = 0; i < minters.length; i++) {
             allowedMinters[minters[i]] = true;
@@ -171,9 +187,9 @@ contract NFTFlags is ERC721, IERC721Receiver, Ownable {
 
         require(!tokensClaimed[tokenId], "Token already used to claim!");
 
-        safeTransferFrom(address(this), from, tokenId);
-
         tokensClaimed[tokenId] = true;
+
+        safeTransferFrom(address(this), from, tokenId);
 
         GoldContract(goldTokenAddress).mint(from);
 

@@ -10,15 +10,14 @@ export type TeamChallenge = {
   points: number;
 };
 
-export type Team = {
+export type Agent = {
   id: string;
   name: string;
-  size: number;
   points: number;
   updated: number;
   challenges?: { items: TeamChallenge[] };
 };
 
-export type TeamsData = { teams: { items: Team[] } };
+export type AgentsData = { agents: { items: Agent[] } };
 
 export type TeamChallengesData = { challenges: { items: TeamChallenge[] } };

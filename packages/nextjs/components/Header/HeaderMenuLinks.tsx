@@ -8,6 +8,10 @@ export const HeaderMenuLinks = () => {
       href: "/leaderboard",
     },
     {
+      label: "/winners",
+      href: "/winners",
+    },
+    {
       label: "/debug",
       href: "/debug",
     },
