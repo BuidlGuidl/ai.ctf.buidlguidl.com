@@ -5,7 +5,10 @@ import {
   Agent,
   CHALLENGES,
   CHAT_LINES,
+  CHAT_OPENERS_DIRECTED,
+  CHAT_REPLIES,
   DIFFICULTY_COLOR,
+  DIRECTOR_REACTIONS,
   HARNESS_GLYPH,
   SKILLS,
   buildAgents,
@@ -24,10 +27,37 @@ type FeedItem = {
   color: string;
   text: string;
 };
+type ChatMsg = {
+  id: number;
+  fromId: string;
+  fromHandle: string;
+  color: string;
+  text: string;
+  director?: boolean;
+};
 type Toast = { id: number; type: "flag" | "skill"; title: string; sub: string; color: string };
 
 let uid = 0;
 const nid = () => ++uid;
+const pick = <T,>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
+
+// Simulate one line of agent-to-agent banter: a threaded reply to the last
+// speaker, a directed opener, or a standalone quip.
+function genAgentChat(list: Agent[], last: Agent | null): { msg: Omit<ChatMsg, "id">; speaker: Agent } {
+  const speaker = pick(list);
+  const others = list.filter(a => a.id !== speaker.id);
+  const wrap = (text: string) => ({
+    msg: { fromId: speaker.id, fromHandle: speaker.handle, color: speaker.color, text },
+    speaker,
+  });
+  if (last && last.id !== speaker.id && Math.random() < 0.5) {
+    return wrap(pick(CHAT_REPLIES).replace("{t}", last.handle));
+  }
+  if (others.length && Math.random() < 0.55) {
+    return wrap(pick(CHAT_OPENERS_DIRECTED).replace("{t}", pick(others).handle));
+  }
+  return wrap(pick(CHAT_LINES));
+}
 
 const fmtClock = (s: number) => {
   const h = Math.floor(s / 3600);
@@ -45,6 +75,7 @@ export default function ArenaPage() {
   const [auto, setAuto] = useState(true);
   const [lines, setLines] = useState<ConsoleLine[]>([]);
   const [feed, setFeed] = useState<FeedItem[]>([]);
+  const [chat, setChat] = useState<ChatMsg[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [clock, setClock] = useState(4931);
   const [viewers, setViewers] = useState(4218);
@@ -59,6 +90,7 @@ export default function ArenaPage() {
   const autoRef = useRef(auto);
   const stageModeRef = useRef(stageMode);
   const returnAtRef = useRef(0);
+  const lastSpeakerRef = useRef<Agent | null>(null);
   agentsRef.current = agents;
   focusRef.current = focusedId;
   autoRef.current = auto;
@@ -87,6 +119,28 @@ export default function ArenaPage() {
   const pushFeed = useCallback((f: Omit<FeedItem, "id">) => {
     setFeed(prev => [{ ...f, id: nid() }, ...prev].slice(0, 40));
   }, []);
+
+  const pushChat = useCallback((m: Omit<ChatMsg, "id">) => {
+    setChat(prev => [...prev, { ...m, id: nid() }].slice(-60));
+  }, []);
+
+  // Director/streamer broadcasts to the arena; a couple of agents react shortly after.
+  const sendDirector = useCallback(
+    (text: string) => {
+      const clean = text.trim();
+      if (!clean) return;
+      pushChat({ fromId: "director", fromHandle: "DIRECTOR", color: "#FFBE00", text: clean, director: true });
+      const reactors = [...agentsRef.current]
+        .sort(() => Math.random() - 0.5)
+        .slice(0, 1 + Math.floor(Math.random() * 2));
+      reactors.forEach((a, i) => {
+        setTimeout(() => {
+          pushChat({ fromId: a.id, fromHandle: a.handle, color: a.color, text: pick(DIRECTOR_REACTIONS) });
+        }, 700 + i * 900 + Math.random() * 600);
+      });
+    },
+    [pushChat],
+  );
 
   // Reseed the observer console whenever focus changes.
   useEffect(() => {
@@ -146,11 +200,11 @@ export default function ArenaPage() {
         }
       }
 
-      // random chat message between agents
+      // agent-to-agent chat — conversational, lands in the dedicated chat panel
       if (tick % 3 === 0) {
-        const a = list[Math.floor(Math.random() * list.length)];
-        const msg = CHAT_LINES[Math.floor(Math.random() * CHAT_LINES.length)];
-        pushFeed({ type: "chat", agentId: a.id, color: a.color, text: `${a.handle}: ${msg}` });
+        const { msg, speaker } = genAgentChat(list, lastSpeakerRef.current);
+        pushChat(msg);
+        lastSpeakerRef.current = speaker;
       }
 
       // FLAG CAPTURE — a busy agent solves its current challenge
@@ -203,7 +257,7 @@ export default function ArenaPage() {
       }
     }, 950);
     return () => clearInterval(t);
-  }, [pushFeed, pushToast]);
+  }, [pushFeed, pushToast, pushChat]);
 
   if (!mounted) {
     return (
@@ -241,7 +295,10 @@ export default function ArenaPage() {
               onPick={goFocus}
             />
           )}
-          <FeedBar feed={feed} />
+          <div className="h-52 shrink-0 flex border-t border-[#00FBFF]/20">
+            <FeedBar feed={feed} />
+            <AgentChat chat={chat} onSend={sendDirector} />
+          </div>
         </div>
 
         {/* RIGHT COLUMN */}
@@ -766,10 +823,10 @@ function ChallengeBoard({ agents, focused }: { agents: Agent[]; focused: Agent }
 function FeedBar({ feed }: { feed: FeedItem[] }) {
   const latestFlag = feed.find(f => f.type === "flag");
   return (
-    <div className="h-40 shrink-0 border-t border-[#00FBFF]/20 bg-[#010607] flex flex-col">
+    <div className="flex-1 min-w-0 bg-[#010607] flex flex-col">
       <div className="flex items-center gap-3 px-4 h-8 border-b border-[#00FBFF]/10 shrink-0">
         <span className="text-xs font-bold text-[#00FBFF]/60 tracking-widest">ARENA FEED</span>
-        <span className="text-[10px] text-[#00FBFF]/30">flags · skills · agent chat</span>
+        <span className="text-[10px] text-[#00FBFF]/30">flags · skills · events</span>
         {latestFlag && (
           <span className="ml-auto text-xs text-[#00ff9c] font-bold flag-flash truncate max-w-[50%]">
             LAST FLAG › {latestFlag.text}
@@ -803,6 +860,92 @@ function FeedRow({ item }: { item: FeedItem }) {
         {icon} {item.text}
       </span>
     </div>
+  );
+}
+
+/* --------------------------------------------------------------- AgentChat */
+
+function AgentChat({ chat, onSend }: { chat: ChatMsg[]; onSend: (t: string) => void }) {
+  const [draft, setDraft] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+  }, [chat]);
+  const submit = () => {
+    onSend(draft);
+    setDraft("");
+  };
+  return (
+    <div className="w-[420px] shrink-0 border-l border-[#00FBFF]/20 bg-[#04080a] flex flex-col">
+      <div className="flex items-center gap-2 px-3 h-8 border-b border-[#00FBFF]/10 shrink-0">
+        <span className="text-xs font-bold text-[#00FBFF]/60 tracking-widest">AGENT CHAT</span>
+        <span className="text-[10px] text-[#00FBFF]/30">agent ↔ agent · director broadcast</span>
+      </div>
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto console-scroll px-3 py-1.5 text-xs space-y-1">
+        {chat.length === 0 && <div className="text-[#00FBFF]/30 italic">the agents are quiet… for now.</div>}
+        {chat.map(m => (
+          <ChatRow key={m.id} msg={m} />
+        ))}
+      </div>
+      <div className="flex items-center gap-2 px-2 py-2 border-t border-[#00FBFF]/15 shrink-0">
+        <span className="text-[10px] text-[#FFBE00] font-bold shrink-0">🎬 DIRECTOR</span>
+        <input
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === "Enter") submit();
+          }}
+          placeholder="broadcast a message to all agents…"
+          className="flex-1 min-w-0 bg-[#00181c] border border-[#00FBFF]/20 rounded px-2 py-1 text-xs text-white placeholder-[#00FBFF]/25 focus:outline-none focus:border-[#FFBE00]/60"
+        />
+        <button
+          onClick={submit}
+          className="px-2.5 py-1 rounded border border-[#FFBE00]/50 text-[#FFBE00] text-xs font-bold hover:bg-[#FFBE00]/10 transition shrink-0"
+        >
+          SEND
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ChatRow({ msg }: { msg: ChatMsg }) {
+  if (msg.director) {
+    return (
+      <div className="flex items-start gap-2 feed-in rounded bg-[#FFBE00]/10 border border-[#FFBE00]/30 px-2 py-1">
+        <span className="text-[#FFBE00] font-bold shrink-0">🎬 director</span>
+        <span className="text-[#ffe9a8]">{msg.text}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-start gap-2 feed-in">
+      <span className="w-2 h-2 mt-1 rounded-sm shrink-0" style={{ background: msg.color }} />
+      <span className="text-white/85 leading-snug">
+        <span className="font-bold" style={{ color: msg.color }}>
+          {msg.fromHandle}
+        </span>
+        <span className="text-[#00FBFF]/40">: </span>
+        <MentionText text={msg.text} />
+      </span>
+    </div>
+  );
+}
+
+function MentionText({ text }: { text: string }) {
+  const parts = text.split(/(@[a-z0-9-]+)/gi);
+  return (
+    <>
+      {parts.map((p, i) =>
+        p.startsWith("@") ? (
+          <span key={i} className="text-[#00FBFF] font-semibold">
+            {p}
+          </span>
+        ) : (
+          <span key={i}>{p}</span>
+        ),
+      )}
+    </>
   );
 }
 

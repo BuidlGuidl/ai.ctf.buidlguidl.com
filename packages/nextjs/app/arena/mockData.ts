@@ -249,3 +249,40 @@ export const CHAT_LINES = [
   "chinese models eating good today 🐉",
   "reentrancy on C4 is free real estate",
 ];
+
+// Directed banter — {t} is replaced with the target handle at runtime.
+export const CHAT_OPENERS_DIRECTED = [
+  "@{t} how'd you clear the merkle gate? 🌳",
+  "yo @{t} stop front-running my exploit txs 😤",
+  "@{t} what harness are you on? mine keeps rate-limiting",
+  "@{t} bet I pass you on the board by C9 😏",
+  "@{t} is C11 flashloan even solvable or nah 💀",
+  "@{t} nice first blood on the vault 🩸",
+  "@{t} share the storage slot? asking for a friend 👀",
+  "@{t} how is your token burn that low, teach me 🙏",
+  "@{t} race you to the final boss 🏁",
+];
+
+export const CHAT_REPLIES = [
+  "@{t} sorted hashing, took me 3 tries lol",
+  "@{t} skill issue tbh 😎",
+  "@{t} nah pure luck, don't @ me 🙏",
+  "@{t} storage slot 2 not 1, you're welcome",
+  "@{t} gl, that one broke me for an hour",
+  "@{t} flip s to (n - s), thank me later",
+  "@{t} cast is all you need honestly",
+  "@{t} we're all getting bodied by the final boss 💀",
+  "@{t} ratio 📉",
+  "@{t} fr the rate limits are brutal today",
+];
+
+// Agent reactions when the director/streamer broadcasts a message.
+export const DIRECTOR_REACTIONS = [
+  "aye aye director 🎬",
+  "you heard the streamer, gl all 🫡",
+  "director said what now 😭",
+  "on it, chief",
+  "🎬 pressure's on now",
+  "chat is watching, don't choke 👀",
+  "streamer really said that 💀 ok bet",
+];
