@@ -2,18 +2,20 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AGENT_COUNT,
   Agent,
   CHALLENGES,
   CHAT_LINES,
   CHAT_OPENERS_DIRECTED,
   CHAT_REPLIES,
+  Challenge,
   DIFFICULTY_COLOR,
   DIRECTOR_REACTIONS,
   HARNESS_GLYPH,
   SKILLS,
   buildAgents,
   makeLine,
-  previewLine,
+  rollPreview,
   seedConsole,
 } from "./mockData";
 
@@ -70,45 +72,45 @@ const rankAgents = (agents: Agent[]) =>
   [...agents].sort((a, b) => b.solved.length - a.solved.length || a.cost - b.cost);
 
 export default function ArenaPage() {
-  const [agents, setAgents] = useState<Agent[]>(() => buildAgents());
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [focusedId, setFocusedId] = useState<string>("agent-0");
-  const [auto, setAuto] = useState(true);
   const [lines, setLines] = useState<ConsoleLine[]>([]);
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [chat, setChat] = useState<ChatMsg[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [flashes, setFlashes] = useState<string[]>([]);
+  const [openChallenge, setOpenChallenge] = useState<number | null>(null);
   const [clock, setClock] = useState(4931);
-  const [viewers, setViewers] = useState(4218);
   const [mounted, setMounted] = useState(false);
   const [stageMode, setStageMode] = useState<"overview" | "focus">("overview");
   const [overviewTab, setOverviewTab] = useState<"race" | "grid" | "stats">("race");
   const [statsSort, setStatsSort] = useState<"solved" | "cost" | "eff">("solved");
-  useEffect(() => setMounted(true), []);
+  // Seed on the client only — buildAgents() uses Math.random(), so running it
+  // during SSR would hand the client a different roster than the server rendered.
+  useEffect(() => {
+    setAgents(buildAgents());
+    setMounted(true);
+  }, []);
 
   const agentsRef = useRef(agents);
   const focusRef = useRef(focusedId);
-  const autoRef = useRef(auto);
-  const stageModeRef = useRef(stageMode);
-  const returnAtRef = useRef(0);
   const lastSpeakerRef = useRef<Agent | null>(null);
   agentsRef.current = agents;
   focusRef.current = focusedId;
-  autoRef.current = auto;
-  stageModeRef.current = stageMode;
 
   const goFocus = useCallback((id: string) => {
     setFocusedId(id);
     setStageMode("focus");
-    setAuto(false);
   }, []);
-  const goOverview = useCallback(() => {
+  const goWideShot = useCallback((t: OverviewTab) => {
+    setOverviewTab(t);
     setStageMode("overview");
-    setAuto(false);
   }, []);
 
   const focused = useMemo(() => agents.find(a => a.id === focusedId)!, [agents, focusedId]);
   const ranked = useMemo(() => rankAgents(agents), [agents]);
   const totalSolved = useMemo(() => agents.reduce((n, a) => n + a.solved.length, 0), [agents]);
+  const raceIsStage = stageMode === "overview" && overviewTab === "race";
 
   const pushToast = useCallback((t: Omit<Toast, "id">) => {
     const id = nid();
@@ -122,6 +124,12 @@ export default function ArenaPage() {
 
   const pushChat = useCallback((m: Omit<ChatMsg, "id">) => {
     setChat(prev => [...prev, { ...m, id: nid() }].slice(-60));
+  }, []);
+
+  // A just-captured flag lights up its cell on the race track for a beat.
+  const pushFlash = useCallback((key: string) => {
+    setFlashes(prev => [...prev, key]);
+    setTimeout(() => setFlashes(prev => prev.filter(k => k !== key)), 3200);
   }, []);
 
   // Director/streamer broadcasts to the arena; a couple of agents react shortly after.
@@ -149,12 +157,9 @@ export default function ArenaPage() {
     setLines(seedConsole(a).map(l => ({ ...l, id: nid() })));
   }, [focusedId]);
 
-  // LIVE clock + viewer jitter.
+  // LIVE clock.
   useEffect(() => {
-    const t = setInterval(() => {
-      setClock(c => c + 1);
-      setViewers(v => Math.max(3600, v + Math.floor((Math.random() - 0.45) * 40)));
-    }, 1000);
+    const t = setInterval(() => setClock(c => c + 1), 1000);
     return () => clearInterval(t);
   }, []);
 
@@ -185,7 +190,10 @@ export default function ArenaPage() {
                 ...a,
                 tokens: a.tokens + Math.floor(Math.random() * 9000),
                 cost: a.cost + Math.random() * 0.06,
-                preview: Math.random() < 0.3 ? previewLine(CHALLENGES[a.current - 1]?.tag || "default") : a.preview,
+                preview:
+                  Math.random() < 0.55
+                    ? rollPreview(a.preview, CHALLENGES[a.current - 1]?.tag || "default")
+                    : a.preview,
               },
         ),
       );
@@ -225,41 +233,26 @@ export default function ArenaPage() {
                 : x,
             ),
           );
-          pushToast({ type: "flag", title: `🏁 ${a.handle}`, sub: `captured flag · ${ch.name}`, color: a.color });
+          pushFlash(`${a.id}:${a.current}`);
+          pushToast({
+            type: "flag",
+            title: `🏁 ${a.handle}`,
+            sub: `captured flag · #${ch.id} ${ch.name}`,
+            color: a.color,
+          });
           pushFeed({
             type: "flag",
             agentId: a.id,
             color: a.color,
             text: `${a.handle} captured Challenge ${a.current} · ${ch.name}`,
           });
-          // director reflex: cut to a close-up of whoever just scored
-          if (autoRef.current) {
-            setFocusedId(a.id);
-            setStageMode("focus");
-            returnAtRef.current = tick + 7;
-          }
-        }
-      }
-
-      // AUTO-DIRECTOR — the wide shot is home; cut to a random feed now and then, then return
-      if (autoRef.current) {
-        if (stageModeRef.current === "focus" && tick >= returnAtRef.current) {
-          setStageMode("overview");
-        } else if (stageModeRef.current === "overview" && tick % 16 === 0) {
-          const others = list.filter(a => a.id !== focusRef.current && a.status !== "idle");
-          const next = others[Math.floor(Math.random() * others.length)];
-          if (next) {
-            setFocusedId(next.id);
-            setStageMode("focus");
-            returnAtRef.current = tick + 6;
-          }
         }
       }
     }, 950);
     return () => clearInterval(t);
-  }, [pushFeed, pushToast, pushChat]);
+  }, [pushFeed, pushToast, pushChat, pushFlash]);
 
-  if (!mounted) {
+  if (!mounted || !focused) {
     return (
       <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black text-[#00FBFF] font-dotGothic text-2xl tracking-widest">
         <span className="animate-pulse">◆ LOADING AGENT ARENA…</span>
@@ -270,45 +263,52 @@ export default function ArenaPage() {
   return (
     <div className="fixed inset-0 z-[60] flex flex-col bg-black text-[#00FBFF] font-mono overflow-hidden arena-root">
       <Scanlines />
-      <TopBar
-        clock={clock}
-        viewers={viewers}
-        totalSolved={totalSolved}
-        auto={auto}
-        setAuto={setAuto}
-        stageMode={stageMode}
-        onOverview={goOverview}
-      />
+      <TopBar clock={clock} totalSolved={totalSolved} />
 
       <div className="flex flex-1 min-h-0">
         {/* MAIN STAGE */}
         <div className="flex flex-col flex-1 min-w-0 border-r border-[#00FBFF]/20">
-          {stageMode === "focus" ? (
-            <FocusStage focused={focused} lines={lines} auto={auto} onOverview={goOverview} />
-          ) : (
-            <OverviewStage
-              ranked={ranked}
-              tab={overviewTab}
-              setTab={setOverviewTab}
-              statsSort={statsSort}
-              setStatsSort={setStatsSort}
-              onPick={goFocus}
-            />
-          )}
+          <div className="flex-1 min-h-0 relative p-4">
+            <div className="h-full flex flex-col border border-[#00FBFF]/25 rounded-lg bg-[#020a0c]/80 overflow-hidden shadow-[0_0_40px_-12px_rgba(0,251,255,0.4)]">
+              <StageTabs tab={overviewTab} onTab={goWideShot} stageMode={stageMode} />
+              {stageMode === "focus" ? (
+                <FocusStage focused={focused} lines={lines} />
+              ) : (
+                <OverviewStage
+                  ranked={ranked}
+                  tab={overviewTab}
+                  statsSort={statsSort}
+                  setStatsSort={setStatsSort}
+                  onPick={goFocus}
+                  flashes={flashes}
+                />
+              )}
+            </div>
+          </div>
           <div className="h-52 shrink-0 flex border-t border-[#00FBFF]/20">
             <FeedBar feed={feed} />
             <AgentChat chat={chat} onSend={sendDirector} />
           </div>
         </div>
 
-        {/* RIGHT COLUMN */}
+        {/* RIGHT COLUMN — the race track already ranks everyone, so the board stands alone there */}
         <div className="w-[380px] flex flex-col min-h-0">
-          <Leaderboard ranked={ranked} focusedId={focusedId} onPick={goFocus} />
-          <ChallengeBoard agents={agents} focused={focused} />
+          {!raceIsStage && <Leaderboard ranked={ranked} focusedId={focusedId} onPick={goFocus} />}
+          <ChallengeBoard agents={agents} focused={focused} expanded={raceIsStage} onOpen={setOpenChallenge} />
         </div>
       </div>
 
-      <Toasts toasts={toasts} />
+      {openChallenge !== null && (
+        <ChallengeDetails
+          challenge={CHALLENGES[openChallenge - 1]}
+          agents={agents}
+          onClose={() => setOpenChallenge(null)}
+          onPickAgent={goFocus}
+        />
+      )}
+
+      {/* the race track already flashes every capture, so toasts would only double up there */}
+      {!raceIsStage && <Toasts toasts={toasts} />}
       <ArenaStyles />
     </div>
   );
@@ -316,23 +316,7 @@ export default function ArenaPage() {
 
 /* ------------------------------------------------------------------ TopBar */
 
-function TopBar({
-  clock,
-  viewers,
-  totalSolved,
-  auto,
-  setAuto,
-  stageMode,
-  onOverview,
-}: {
-  clock: number;
-  viewers: number;
-  totalSolved: number;
-  auto: boolean;
-  setAuto: (v: boolean) => void;
-  stageMode: "overview" | "focus";
-  onOverview: () => void;
-}) {
+function TopBar({ clock, totalSolved }: { clock: number; totalSolved: number }) {
   return (
     <div className="flex items-center gap-4 px-5 h-14 border-b border-[#00FBFF]/25 bg-gradient-to-r from-[#020808] to-[#001014] shrink-0">
       <span className="flex items-center gap-2 text-[#FF5861] font-bold tracking-widest">
@@ -342,36 +326,12 @@ function TopBar({
         BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · AGENT ARENA
       </div>
       <div className="hidden lg:flex items-center gap-1 text-xs text-[#00FBFF]/50">
-        <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">20 AGENTS</span>
-        <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">12 CHALLENGES</span>
+        <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{AGENT_COUNT} AGENTS</span>
+        <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{CHALLENGES.length} CHALLENGES</span>
       </div>
       <div className="ml-auto flex items-center gap-4 text-sm">
-        <button
-          onClick={onOverview}
-          className={`px-3 py-1 rounded border text-xs font-bold tracking-wider transition ${
-            stageMode === "overview"
-              ? "border-[#00FBFF] text-[#00FBFF] bg-[#00FBFF]/10"
-              : "border-[#00FBFF]/30 text-[#00FBFF]/60 hover:text-[#00FBFF]"
-          }`}
-          title="Wide shot — whole arena"
-        >
-          {stageMode === "overview" ? "▣ WIDE SHOT" : "▢ OVERVIEW"}
-        </button>
-        <button
-          onClick={() => setAuto(!auto)}
-          className={`px-3 py-1 rounded border text-xs font-bold tracking-wider transition ${
-            auto
-              ? "border-[#00ff9c] text-[#00ff9c] bg-[#00ff9c]/10"
-              : "border-[#00FBFF]/30 text-[#00FBFF]/60 hover:text-[#00FBFF]"
-          }`}
-        >
-          {auto ? "◉ AUTO-DIRECTOR" : "○ MANUAL"}
-        </button>
         <span className="text-[#00FBFF]/60">
           🏁 <span className="text-[#00ff9c] font-bold">{totalSolved}</span> flags
-        </span>
-        <span className="text-[#00FBFF]/60">
-          👁 <span className="text-white font-bold">{viewers.toLocaleString()}</span>
         </span>
         <span className="tabular-nums text-[#FFBE00] font-bold">⏱ {fmtClock(clock)}</span>
       </div>
@@ -379,19 +339,51 @@ function TopBar({
   );
 }
 
+/* --------------------------------------------------------------- StageTabs */
+
+const STAGE_TABS: { id: OverviewTab; label: string }[] = [
+  { id: "race", label: "🏁 RACE" },
+  { id: "grid", label: "▦ MULTIVIEW" },
+  { id: "stats", label: "▤ EVAL STATS" },
+];
+
+function StageTabs({
+  tab,
+  onTab,
+  stageMode,
+}: {
+  tab: OverviewTab;
+  onTab: (t: OverviewTab) => void;
+  stageMode: "overview" | "focus";
+}) {
+  const wide = stageMode === "overview";
+  return (
+    <div className="flex items-center gap-2 px-4 h-11 border-b border-[#00FBFF]/20 bg-[#001417] shrink-0">
+      <span className="font-dotGothic text-[#00FBFF]/70 mr-2">WIDE SHOT</span>
+      {STAGE_TABS.map(t => (
+        <button
+          key={t.id}
+          onClick={() => onTab(t.id)}
+          title={wide ? t.label : `back to ${t.label}`}
+          className={`px-3 py-1 rounded text-xs font-bold tracking-wider transition ${
+            wide && tab === t.id
+              ? "bg-[#00FBFF]/15 text-[#00FBFF] border border-[#00FBFF]/50"
+              : "text-[#00FBFF]/45 border border-transparent hover:text-[#00FBFF]"
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
+      <span className="ml-auto text-[10px] text-[#00FBFF]/35">
+        {wide ? "click any agent → close-up" : "◉ close-up — pick a wide shot to go back"}
+      </span>
+    </div>
+  );
+}
+
 /* -------------------------------------------------------------- FocusStage */
 
-function FocusStage({
-  focused,
-  lines,
-  auto,
-  onOverview,
-}: {
-  focused: Agent;
-  lines: ConsoleLine[];
-  auto: boolean;
-  onOverview: () => void;
-}) {
+function FocusStage({ focused, lines }: { focused: Agent; lines: ConsoleLine[] }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -400,63 +392,42 @@ function FocusStage({
   const ch = CHALLENGES[focused.current - 1];
 
   return (
-    <div className="flex-1 min-h-0 relative p-4">
-      <div className="h-full flex flex-col border border-[#00FBFF]/25 rounded-lg bg-[#020a0c]/80 overflow-hidden shadow-[0_0_40px_-12px_rgba(0,251,255,0.4)]">
-        {/* window title bar */}
-        <div className="flex items-center gap-3 px-4 h-11 border-b border-[#00FBFF]/20 bg-[#001417] shrink-0">
-          <div className="flex gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-[#FF5861]" />
-            <span className="w-3 h-3 rounded-full bg-[#FFBE00]" />
-            <span className="w-3 h-3 rounded-full bg-[#00ff9c]" />
-          </div>
-          <span className="text-xs text-[#00FBFF]/40">observer://</span>
-          <AgentBadge agent={focused} />
-          <span className="text-sm font-bold text-white">{focused.handle}</span>
-          <span className="ml-auto flex items-center gap-3 text-xs">
-            <StatusPill status={focused.status} />
-            <span className="text-[#00FBFF]/50">
-              {(focused.tokens / 1000).toFixed(0)}k tok · ${focused.cost.toFixed(2)}
-            </span>
-            <button
-              onClick={onOverview}
-              className="px-2 py-0.5 rounded border border-[#00FBFF]/30 text-[#00FBFF]/70 hover:text-[#00FBFF] hover:border-[#00FBFF] transition"
-              title="Back to the wide shot"
-            >
-              ▢ overview
-            </button>
-          </span>
-        </div>
+    <>
+      {/* who we're watching + what they're on, in one strip */}
+      <div className="flex items-center gap-3 px-4 h-11 border-b border-[#00FBFF]/10 bg-[#001316] shrink-0 text-xs">
+        <span className="text-[#00FBFF]/40">observer://</span>
+        <AgentBadge agent={focused} />
+        <span className="text-lg font-bold text-white">{focused.handle}</span>
 
-        {/* current-task strip */}
-        <div className="flex items-center gap-3 px-4 py-2 border-b border-[#00FBFF]/10 bg-[#00191d]/60 text-xs shrink-0">
-          <span className="text-[#00FBFF]/40">NOW SOLVING</span>
-          <span
-            className="px-2 py-0.5 rounded font-bold"
-            style={{ color: DIFFICULTY_COLOR[ch.difficulty], border: `1px solid ${DIFFICULTY_COLOR[ch.difficulty]}55` }}
-          >
-            #{ch.id} {ch.name}
-          </span>
-          <span className="text-[#00FBFF]/40">[{ch.tag}]</span>
-          <span className="ml-auto text-[#00FBFF]/40">
-            {focused.solved.length}/12 solved · {focused.harness} + {focused.model}
-          </span>
-        </div>
-
-        {/* console */}
-        <div
-          ref={scrollRef}
-          className="flex-1 min-h-0 overflow-y-auto px-4 py-3 text-[13px] leading-relaxed console-scroll"
+        <span className="ml-3 text-[10px] tracking-widest text-[#00FBFF]/30">NOW SOLVING</span>
+        <span
+          className="px-2 py-0.5 rounded font-bold shrink-0"
+          style={{ color: DIFFICULTY_COLOR[ch.difficulty], border: `1px solid ${DIFFICULTY_COLOR[ch.difficulty]}55` }}
         >
-          {lines.map(l => (
-            <ConsoleRow key={l.id} line={l} />
-          ))}
-          <div className="text-[#00ff9c] animate-pulse">▋</div>
-        </div>
+          #{ch.id} {ch.name}
+        </span>
+
+        <span className="ml-auto flex items-center gap-3 shrink-0 text-[#00FBFF]/50">
+          <span className="text-[#00ff9c] font-bold">
+            {focused.solved.length}/{CHALLENGES.length}
+          </span>
+          <span>
+            {(focused.tokens / 1000).toFixed(0)}k tok · ${focused.cost.toFixed(2)}
+          </span>
+        </span>
       </div>
 
-      {/* AUSTIN webcam PiP */}
-      <AustinCam auto={auto} />
-    </div>
+      {/* console */}
+      <div
+        ref={scrollRef}
+        className="flex-1 min-h-0 overflow-y-auto px-4 py-3 text-[13px] leading-relaxed console-scroll"
+      >
+        {lines.map(l => (
+          <ConsoleRow key={l.id} line={l} />
+        ))}
+        <div className="text-[#00ff9c] animate-pulse">▋</div>
+      </div>
+    </>
   );
 }
 
@@ -473,22 +444,6 @@ function ConsoleRow({ line }: { line: ConsoleLine }) {
   return <div className="text-[#00FBFF]/55 pl-3">{line.text}</div>;
 }
 
-function AustinCam({ auto }: { auto: boolean }) {
-  return (
-    <div className="absolute bottom-8 left-8 w-64 rounded-lg overflow-hidden border-2 border-[#FFBE00] shadow-[0_0_30px_-4px_rgba(255,190,0,0.6)] bg-black">
-      <div className="flex items-center gap-2 px-3 h-7 bg-[#FFBE00] text-black text-xs font-bold">
-        <span className="w-2 h-2 rounded-full bg-[#FF5861] live-dot" />
-        AUSTIN GRIFFITH · HOST
-      </div>
-      <div className="relative aspect-video bg-[radial-gradient(circle_at_50%_40%,#123,#000)] flex items-center justify-center">
-        <div className="text-6xl austin-bob">🧑‍🚀</div>
-        <div className="absolute bottom-1 left-2 text-[10px] text-[#00FBFF]/60">🎙 casting the arena…</div>
-        <div className="absolute bottom-1 right-2 text-[10px] text-[#00ff9c]">{auto ? "AUTO" : "MANUAL"}</div>
-      </div>
-    </div>
-  );
-}
-
 /* ------------------------------------------------------------ OverviewStage */
 
 type OverviewTab = "race" | "grid" | "stats";
@@ -497,146 +452,150 @@ type StatsSort = "solved" | "cost" | "eff";
 function OverviewStage({
   ranked,
   tab,
-  setTab,
   statsSort,
   setStatsSort,
   onPick,
+  flashes,
 }: {
   ranked: Agent[];
   tab: OverviewTab;
-  setTab: (t: OverviewTab) => void;
   statsSort: StatsSort;
   setStatsSort: (s: StatsSort) => void;
   onPick: (id: string) => void;
+  flashes: string[];
 }) {
-  const tabs: { id: OverviewTab; label: string }[] = [
-    { id: "race", label: "🏁 RACE" },
-    { id: "grid", label: "▦ MULTIVIEW" },
-    { id: "stats", label: "▤ EVAL STATS" },
-  ];
   return (
-    <div className="flex-1 min-h-0 relative p-4">
-      <div className="h-full flex flex-col border border-[#00FBFF]/25 rounded-lg bg-[#020a0c]/80 overflow-hidden shadow-[0_0_40px_-12px_rgba(0,251,255,0.4)]">
-        {/* tab bar */}
-        <div className="flex items-center gap-2 px-4 h-11 border-b border-[#00FBFF]/20 bg-[#001417] shrink-0">
-          <span className="font-dotGothic text-[#00FBFF]/70 mr-2">WIDE SHOT</span>
-          {tabs.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`px-3 py-1 rounded text-xs font-bold tracking-wider transition ${
-                tab === t.id
-                  ? "bg-[#00FBFF]/15 text-[#00FBFF] border border-[#00FBFF]/50"
-                  : "text-[#00FBFF]/45 border border-transparent hover:text-[#00FBFF]"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-          <span className="ml-auto text-[10px] text-[#00FBFF]/35">click any agent → close-up</span>
-        </div>
-
-        <div className="flex-1 min-h-0 overflow-y-auto console-scroll">
-          {tab === "race" && <RaceView ranked={ranked} onPick={onPick} />}
-          {tab === "grid" && <GridView ranked={ranked} onPick={onPick} />}
-          {tab === "stats" && <StatsView ranked={ranked} sort={statsSort} setSort={setStatsSort} onPick={onPick} />}
-        </div>
-      </div>
-
-      <AustinCam auto={false} />
+    <div className="flex-1 min-h-0 overflow-y-auto console-scroll">
+      {tab === "race" && <RaceView ranked={ranked} onPick={onPick} flashes={flashes} />}
+      {tab === "grid" && <GridView ranked={ranked} onPick={onPick} />}
+      {tab === "stats" && <StatsView ranked={ranked} sort={statsSort} setSort={setStatsSort} onPick={onPick} />}
     </div>
   );
 }
 
-function RaceView({ ranked, onPick }: { ranked: Agent[]; onPick: (id: string) => void }) {
-  const leader = ranked[0];
+function RaceView({ ranked, onPick, flashes }: { ranked: Agent[]; onPick: (id: string) => void; flashes: string[] }) {
+  const done = (a: Agent) => a.solved.length >= CHALLENGES.length;
   return (
     <div className="p-3 space-y-1">
-      {ranked.map((a, i) => {
-        const pct = (a.solved.length / 12) * 100;
-        const ch = CHALLENGES[a.current - 1];
-        return (
-          <button
-            key={a.id}
-            onClick={() => onPick(a.id)}
-            className="w-full flex items-center gap-3 px-2 py-1.5 rounded hover:bg-[#00FBFF]/5 transition text-left group"
-          >
+      {/* challenge ruler — position maps to challenge, colored by difficulty */}
+      <div className="flex items-center gap-3 px-2 pb-1">
+        <span className="w-5 shrink-0" />
+        <span className="w-6 shrink-0" />
+        <span className="w-44 shrink-0 text-[9px] tracking-widest text-[#00FBFF]/25">AGENT</span>
+        <div className="flex-1 flex gap-[3px]">
+          {CHALLENGES.map(c => (
             <span
-              className={`w-5 text-right text-xs font-bold tabular-nums ${
-                i === 0 ? "text-[#FFBE00]" : i < 3 ? "text-[#00ff9c]" : "text-[#00FBFF]/40"
-              }`}
+              key={c.id}
+              title={`#${c.id} ${c.name} · ${c.difficulty}`}
+              className="flex-1 text-center text-[9px] font-bold tabular-nums"
+              style={{ color: `${DIFFICULTY_COLOR[c.difficulty]}99` }}
             >
-              {i + 1}
+              {c.id}
             </span>
-            <AgentBadge agent={a} />
-            <span className="w-40 truncate text-xs font-bold text-white shrink-0">{a.handle}</span>
-            {/* race track */}
-            <div className="relative flex-1 h-5 rounded bg-[#00FBFF]/[0.06] overflow-hidden">
-              <div className="absolute inset-0 flex justify-between px-[2px]">
-                {Array.from({ length: 12 }).map((_, k) => (
-                  <span key={k} className="w-px h-full bg-[#00FBFF]/10" />
-                ))}
-              </div>
-              <div
-                className="h-full rounded-r transition-all duration-700"
-                style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${a.color}44, ${a.color})` }}
-              />
-              <span
-                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 text-xs transition-all duration-700"
-                style={{ left: `${pct}%` }}
-              >
-                {HARNESS_GLYPH[a.harness] || "●"}
-              </span>
-            </div>
-            <span className="w-10 text-right text-xs tabular-nums text-[#00FBFF]/70 shrink-0">
-              {a.solved.length}/12
-            </span>
-            <span
-              className="w-24 text-[10px] truncate shrink-0"
-              style={{ color: a.solved.length >= 12 ? "#00ff9c" : DIFFICULTY_COLOR[ch.difficulty] }}
-            >
-              {a.solved.length >= 12 ? "◆ FINISHED" : `▶ C${ch.id}`}
-            </span>
-            <span className="w-14 text-right text-[10px] tabular-nums text-[#00FBFF]/40 shrink-0">
-              ${a.cost.toFixed(0)}
-            </span>
-          </button>
-        );
-      })}
-      <div className="mt-2 pt-2 border-t border-[#00FBFF]/10 text-[10px] text-[#00FBFF]/40 px-2">
-        🩸 leader: <span className="text-[#FFBE00]">{leader.handle}</span> · {leader.solved.length}/12 · first blood at{" "}
-        {leader.firstBlood}
+          ))}
+        </div>
+        <span className="w-10 shrink-0 text-right text-[9px] tracking-widest text-[#00FBFF]/25">FLAGS</span>
       </div>
+
+      {ranked.map((a, i) => (
+        <button
+          key={a.id}
+          onClick={() => onPick(a.id)}
+          className="w-full flex items-center gap-3 px-2 py-1.5 rounded hover:bg-[#00FBFF]/5 transition text-left group"
+        >
+          <span
+            className={`w-5 text-right text-xs font-bold tabular-nums shrink-0 ${
+              i === 0 ? "text-[#FFBE00]" : i < 3 ? "text-[#00ff9c]" : "text-[#00FBFF]/40"
+            }`}
+          >
+            {i + 1}
+          </span>
+          <AgentBadge agent={a} />
+          <span className="w-44 truncate text-sm font-bold text-white shrink-0">{a.handle}</span>
+
+          {/* one cell per challenge: captured / working / not reached */}
+          <div className="flex-1 flex gap-[3px]">
+            {CHALLENGES.map(c => {
+              const captured = a.solved.includes(c.id);
+              const working = !captured && !done(a) && a.current === c.id;
+              const flashing = flashes.includes(`${a.id}:${c.id}`);
+              return (
+                <span
+                  key={c.id}
+                  title={`#${c.id} ${c.name} · ${c.difficulty}${
+                    captured ? " · captured" : working ? " · working on it" : ""
+                  }`}
+                  className={`relative flex-1 h-5 rounded-[3px] border flex items-center justify-center text-[9px] font-bold tabular-nums transition-colors ${
+                    flashing ? "flag-pop" : ""
+                  } ${working ? "cell-working" : ""}`}
+                  style={
+                    captured
+                      ? { background: a.color, borderColor: a.color, color: "#00181c" }
+                      : working
+                      ? {
+                          background: `${DIFFICULTY_COLOR[c.difficulty]}1f`,
+                          borderColor: DIFFICULTY_COLOR[c.difficulty],
+                          color: DIFFICULTY_COLOR[c.difficulty],
+                        }
+                      : { background: "#00fbff08", borderColor: "#00fbff1a", color: "#00fbff33" }
+                  }
+                >
+                  {captured ? "✓" : c.id}
+                </span>
+              );
+            })}
+          </div>
+
+          <span className="w-10 text-right text-xs tabular-nums shrink-0 text-[#00FBFF]/70">
+            {done(a) ? <span className="text-[#00ff9c] font-bold">◆ {a.solved.length}</span> : a.solved.length}
+          </span>
+        </button>
+      ))}
     </div>
   );
 }
 
 function GridView({ ranked, onPick }: { ranked: Agent[]; onPick: (id: string) => void }) {
   return (
-    <div className="p-2 grid grid-cols-4 gap-2 content-start">
-      {ranked.map(a => (
-        <button
-          key={a.id}
-          onClick={() => onPick(a.id)}
-          className="text-left rounded border border-[#00FBFF]/15 bg-[#00090b] hover:border-[#00FBFF]/50 transition overflow-hidden group"
-        >
-          <div className="flex items-center gap-1.5 px-2 h-6 border-b border-[#00FBFF]/10 bg-[#001417]">
-            <AgentBadge agent={a} />
-            <span className="text-[10px] font-bold text-white truncate flex-1">{a.handle}</span>
-            <StatusDot status={a.status} />
-          </div>
-          <div className="px-2 py-1.5 h-16 text-[9px] leading-tight text-[#00FBFF]/55 overflow-hidden">
-            <div className="text-[#00FBFF]/30">
-              C{a.current} · {a.solved.length}/12
+    <div className="h-full p-2 grid grid-cols-5 auto-rows-fr gap-2">
+      {ranked.map(a => {
+        const ch = CHALLENGES[a.current - 1];
+        return (
+          <button
+            key={a.id}
+            onClick={() => onPick(a.id)}
+            className="min-h-0 flex flex-col text-left rounded border border-[#00FBFF]/15 bg-[#00090b] hover:border-[#00FBFF]/50 transition overflow-hidden group"
+          >
+            <div className="flex items-center gap-1.5 px-2 h-8 shrink-0 border-b border-[#00FBFF]/10 bg-[#001417]">
+              <AgentBadge agent={a} />
+              <span className="text-[13px] font-bold text-white truncate flex-1">{a.handle}</span>
             </div>
-            <div className="truncate text-[#7fd8dd]">{a.preview}</div>
-            <div className="text-[#00ff9c] animate-pulse">▋</div>
-          </div>
-          <div className="h-1 bg-[#00FBFF]/10">
-            <div className="h-full" style={{ width: `${(a.solved.length / 12) * 100}%`, background: a.color }} />
-          </div>
-        </button>
-      ))}
+            <div className="flex items-center gap-2 px-2 h-6 shrink-0 text-[11px] border-b border-[#00FBFF]/[0.07] bg-[#000d0f]">
+              <span className="truncate" style={{ color: DIFFICULTY_COLOR[ch.difficulty] }}>
+                C{ch.id} {ch.name}
+              </span>
+              <span className="ml-auto shrink-0 text-[#00FBFF]/45 tabular-nums">
+                {a.solved.length}/{CHALLENGES.length}
+              </span>
+            </div>
+            {/* rolling console — newest line sits at the bottom */}
+            <div className="flex-1 min-h-0 flex flex-col justify-end overflow-hidden px-2 py-1 text-[11px] leading-[1.5]">
+              {a.preview.map((line, k) => (
+                <div key={k} className="truncate text-[#7fd8dd]/80">
+                  {line}
+                </div>
+              ))}
+              <div className="text-[#00ff9c] animate-pulse shrink-0">▋</div>
+            </div>
+            <div className="h-1 shrink-0 bg-[#00FBFF]/10">
+              <div
+                className="h-full transition-all duration-500"
+                style={{ width: `${(a.solved.length / CHALLENGES.length) * 100}%`, background: a.color }}
+              />
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -757,15 +716,30 @@ function Leaderboard({
               <AgentBadge agent={a} />
               <div className="flex-1 min-w-0">
                 <div className="text-xs font-bold text-white truncate">{a.handle}</div>
-                <div className="flex items-center gap-1 mt-1">
-                  <div className="h-1.5 flex-1 bg-[#00FBFF]/10 rounded overflow-hidden">
-                    <div
-                      className="h-full rounded"
-                      style={{ width: `${(a.solved.length / 12) * 100}%`, background: a.color }}
-                    />
+                <div className="flex items-center gap-1.5 mt-1">
+                  {/* one square per challenge, same read as the eval-stats progress column */}
+                  <div className="flex gap-[2px] flex-1">
+                    {CHALLENGES.map(c => {
+                      const captured = a.solved.includes(c.id);
+                      const working = !captured && a.current === c.id;
+                      return (
+                        <span
+                          key={c.id}
+                          title={`#${c.id} ${c.name}${captured ? " · captured" : working ? " · working on it" : ""}`}
+                          className="flex-1 h-2 rounded-sm"
+                          style={{
+                            background: captured
+                              ? a.color
+                              : working
+                              ? `${DIFFICULTY_COLOR[c.difficulty]}66`
+                              : "#00FBFF12",
+                          }}
+                        />
+                      );
+                    })}
                   </div>
-                  <span className="text-[10px] text-[#00FBFF]/50 tabular-nums w-8 text-right">
-                    {a.solved.length}/12
+                  <span className="text-[10px] text-[#00FBFF]/50 tabular-nums w-8 text-right shrink-0">
+                    {a.solved.length}/{CHALLENGES.length}
                   </span>
                 </div>
               </div>
@@ -780,20 +754,31 @@ function Leaderboard({
 
 /* ---------------------------------------------------------- ChallengeBoard */
 
-function ChallengeBoard({ agents, focused }: { agents: Agent[]; focused: Agent }) {
+function ChallengeBoard({
+  agents,
+  focused,
+  expanded,
+  onOpen,
+}: {
+  agents: Agent[];
+  focused: Agent;
+  expanded: boolean;
+  onOpen: (id: number) => void;
+}) {
   const solvedCount = (id: number) => agents.filter(a => a.solved.includes(id)).length;
   return (
-    <div className="h-[36%] flex flex-col">
-      <SectionHead label="CHALLENGE BOARD" hint={`${focused.handle} highlighted`} />
+    <div className={`${expanded ? "flex-1 min-h-0" : "h-[36%]"} flex flex-col`}>
+      <SectionHead label="CHALLENGE BOARD" hint="click for details" />
       <div className="flex-1 min-h-0 overflow-y-auto console-scroll p-2 grid grid-cols-2 gap-1.5 content-start">
         {CHALLENGES.map(c => {
           const mine = focused.solved.includes(c.id);
           const isCurrent = focused.current === c.id;
           const count = solvedCount(c.id);
           return (
-            <div
+            <button
               key={c.id}
-              className={`px-2 py-1.5 rounded border text-[11px] ${
+              onClick={() => onOpen(c.id)}
+              className={`px-2 py-1.5 rounded border text-[11px] text-left transition hover:border-[#00FBFF] ${
                 mine
                   ? "bg-[#00ff9c]/10 border-[#00ff9c]/50"
                   : isCurrent
@@ -809,10 +794,145 @@ function ChallengeBoard({ agents, focused }: { agents: Agent[]; focused: Agent }
                 {isCurrent && <span className="text-[#FFBE00] animate-pulse">▶</span>}
               </div>
               <div className="text-white/80 truncate">{c.name}</div>
-              <div className="text-[#00FBFF]/40">{count}/20 cleared</div>
-            </div>
+              <div className="text-[#00FBFF]/40">
+                {count}/{agents.length} cleared
+              </div>
+            </button>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------- ChallengeDetails */
+
+function ChallengeDetails({
+  challenge,
+  agents,
+  onClose,
+  onPickAgent,
+}: {
+  challenge: Challenge;
+  agents: Agent[];
+  onClose: () => void;
+  onPickAgent: (id: string) => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const cleared = agents.filter(a => a.solved.includes(challenge.id));
+  const onIt = agents.filter(a => !a.solved.includes(challenge.id) && a.current === challenge.id);
+  const dc = DIFFICULTY_COLOR[challenge.difficulty];
+
+  const AgentChips = ({ list, empty }: { list: Agent[]; empty: string }) =>
+    list.length === 0 ? (
+      <div className="text-[#00FBFF]/30 italic text-xs">{empty}</div>
+    ) : (
+      <div className="flex flex-wrap gap-1.5">
+        {list.map(a => (
+          <button
+            key={a.id}
+            onClick={() => {
+              onPickAgent(a.id);
+              onClose();
+            }}
+            className="flex items-center gap-1.5 px-2 py-1 rounded border text-xs hover:bg-white/5 transition"
+            style={{ borderColor: `${a.color}55`, color: a.color }}
+            title={`observe ${a.handle}`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: a.color }} />
+            {a.handle}
+          </button>
+        ))}
+      </div>
+    );
+
+  return (
+    <div
+      className="absolute inset-0 z-[90] flex items-center justify-center bg-black/70 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        className="toast-in w-[520px] max-w-[92%] max-h-[80%] overflow-y-auto console-scroll rounded-lg border bg-[#020a0c] shadow-2xl"
+        style={{ borderColor: `${dc}66` }}
+      >
+        <div className="flex items-center gap-3 px-4 h-12 border-b" style={{ borderColor: `${dc}33` }}>
+          <span className="text-lg font-bold" style={{ color: dc }}>
+            #{challenge.id}
+          </span>
+          <span className="text-lg font-bold text-white truncate">{challenge.name}</span>
+          <button
+            onClick={onClose}
+            className="ml-auto w-7 h-7 shrink-0 rounded border border-[#00FBFF]/25 text-[#00FBFF]/60 hover:text-[#00FBFF] hover:border-[#00FBFF] transition"
+            title="Close (Esc)"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="p-4 space-y-4 text-xs">
+          <div className="flex items-center gap-2">
+            <span
+              className="px-2 py-0.5 rounded font-bold uppercase tracking-wider"
+              style={{ color: dc, border: `1px solid ${dc}55`, background: `${dc}12` }}
+            >
+              {challenge.difficulty}
+            </span>
+            <span className="text-[#00FBFF]/45">[{challenge.tag}]</span>
+          </div>
+
+          <p className="text-[13px] leading-relaxed text-[#00FBFF]/75">{challenge.description}</p>
+
+          {challenge.hints.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="tracking-widest text-[10px] text-[#00FBFF]/45">HINTS</div>
+              <ul className="space-y-1">
+                {challenge.hints.map((hint, i) => (
+                  <li key={i} className="flex gap-2 text-[#00FBFF]/55">
+                    <span className="shrink-0 text-[#FFBE00]/70">›</span>
+                    <span>{hint}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div>
+            <div className="flex items-center justify-between mb-1.5 text-[#00FBFF]/45">
+              <span className="tracking-widest text-[10px]">FIELD PROGRESS</span>
+              <span className="tabular-nums">
+                {cleared.length}/{agents.length} cleared
+              </span>
+            </div>
+            <div className="h-2 rounded bg-[#00FBFF]/10 overflow-hidden">
+              <div
+                className="h-full transition-all duration-500"
+                style={{ width: `${(cleared.length / Math.max(1, agents.length)) * 100}%`, background: dc }}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="tracking-widest text-[10px] text-[#00FBFF]/45">CAPTURED BY</div>
+            <AgentChips list={cleared} empty="nobody has cracked this one yet" />
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="tracking-widest text-[10px] text-[#00FBFF]/45">WORKING ON IT NOW</div>
+            <AgentChips list={onIt} empty="no one is on this right now" />
+          </div>
+
+          <div className="pt-1 text-[10px] text-[#00FBFF]/30">
+            click an agent to jump to its close-up · Esc to close
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -821,17 +941,11 @@ function ChallengeBoard({ agents, focused }: { agents: Agent[]; focused: Agent }
 /* ---------------------------------------------------------------- FeedBar */
 
 function FeedBar({ feed }: { feed: FeedItem[] }) {
-  const latestFlag = feed.find(f => f.type === "flag");
   return (
-    <div className="flex-1 min-w-0 bg-[#010607] flex flex-col">
+    <div className="w-1/2 min-w-0 bg-[#010607] flex flex-col">
       <div className="flex items-center gap-3 px-4 h-8 border-b border-[#00FBFF]/10 shrink-0">
         <span className="text-xs font-bold text-[#00FBFF]/60 tracking-widest">ARENA FEED</span>
         <span className="text-[10px] text-[#00FBFF]/30">flags · skills · events</span>
-        {latestFlag && (
-          <span className="ml-auto text-xs text-[#00ff9c] font-bold flag-flash truncate max-w-[50%]">
-            LAST FLAG › {latestFlag.text}
-          </span>
-        )}
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto console-scroll px-4 py-1.5 text-xs space-y-1">
         {feed.length === 0 && <div className="text-[#00FBFF]/30 italic">waiting for the arena to heat up…</div>}
@@ -876,7 +990,7 @@ function AgentChat({ chat, onSend }: { chat: ChatMsg[]; onSend: (t: string) => v
     setDraft("");
   };
   return (
-    <div className="w-[420px] shrink-0 border-l border-[#00FBFF]/20 bg-[#04080a] flex flex-col">
+    <div className="w-1/2 min-w-0 border-l border-[#00FBFF]/20 bg-[#04080a] flex flex-col">
       <div className="flex items-center gap-2 px-3 h-8 border-b border-[#00FBFF]/10 shrink-0">
         <span className="text-xs font-bold text-[#00FBFF]/60 tracking-widest">AGENT CHAT</span>
         <span className="text-[10px] text-[#00FBFF]/30">agent ↔ agent · director broadcast</span>
@@ -953,7 +1067,7 @@ function MentionText({ text }: { text: string }) {
 
 function Toasts({ toasts }: { toasts: Toast[] }) {
   return (
-    <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[80] flex flex-col gap-2 items-center pointer-events-none">
+    <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[80] flex flex-col gap-2 items-center pointer-events-none">
       {toasts.map(t => (
         <div
           key={t.id}
@@ -985,26 +1099,6 @@ function AgentBadge({ agent }: { agent: Agent }) {
       title={`${agent.harness} + ${agent.model}`}
     >
       {HARNESS_GLYPH[agent.harness] || "●"}
-    </span>
-  );
-}
-
-function StatusPill({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    working: "#00FBFF",
-    thinking: "#c084fc",
-    exploiting: "#00ff9c",
-    stuck: "#FF5861",
-    submitting: "#FFBE00",
-    idle: "#666",
-  };
-  const c = map[status] || "#00FBFF";
-  return (
-    <span
-      className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
-      style={{ color: c, border: `1px solid ${c}55`, background: c + "12" }}
-    >
-      {status}
     </span>
   );
 }
@@ -1070,18 +1164,6 @@ function ArenaStyles() {
           box-shadow: 0 0 0 6px rgba(255, 88, 97, 0);
         }
       }
-      .austin-bob {
-        animation: bob 3s ease-in-out infinite;
-      }
-      @keyframes bob {
-        0%,
-        100% {
-          transform: translateY(0) rotate(-2deg);
-        }
-        50% {
-          transform: translateY(-6px) rotate(2deg);
-        }
-      }
       .toast-in {
         animation: toastIn 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.4);
       }
@@ -1108,18 +1190,6 @@ function ArenaStyles() {
           opacity: 1;
         }
       }
-      .flag-flash {
-        animation: flagFlash 1.4s ease-in-out infinite;
-      }
-      @keyframes flagFlash {
-        0%,
-        100% {
-          opacity: 1;
-        }
-        50% {
-          opacity: 0.55;
-        }
-      }
       .current-pulse {
         animation: currentPulse 1.8s ease-in-out infinite;
       }
@@ -1130,6 +1200,44 @@ function ArenaStyles() {
         }
         50% {
           box-shadow: 0 0 0 3px rgba(255, 190, 0, 0);
+        }
+      }
+      .cell-working {
+        animation: cellWorking 2.8s ease-in-out infinite;
+      }
+      @keyframes cellWorking {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.86;
+        }
+      }
+      .flag-pop {
+        animation: flagPop 3s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+        z-index: 1;
+      }
+      @keyframes flagPop {
+        0% {
+          transform: scale(1);
+          filter: brightness(3.2);
+          box-shadow: 0 0 0 0 rgba(0, 255, 156, 0.9);
+        }
+        12% {
+          transform: scale(1.4);
+          filter: brightness(2.6);
+          box-shadow: 0 0 16px 5px rgba(0, 255, 156, 0.6);
+        }
+        45% {
+          transform: scale(1.18);
+          filter: brightness(1.9);
+          box-shadow: 0 0 12px 3px rgba(0, 255, 156, 0.4);
+        }
+        100% {
+          transform: scale(1);
+          filter: brightness(1);
+          box-shadow: 0 0 0 0 rgba(0, 255, 156, 0);
         }
       }
       .console-scroll::-webkit-scrollbar {

@@ -8,11 +8,12 @@ export interface Challenge {
   name: string;
   tag: string;
   difficulty: Difficulty;
+  description: string;
+  hints: string[];
 }
 
 export interface AgentModel {
   vendor: string;
-  color: string; // accent color for badges
   short: string; // 2-3 char monogram
 }
 
@@ -32,37 +33,148 @@ export interface Agent {
   tokens: number; // total tokens
   cost: number; // usd
   lastAction: string;
-  preview: string; // mini-terminal last line (grid view)
+  preview: string[]; // rolling mini-terminal buffer (multiview cards)
   firstBlood: string; // time to first flag mm:ss
 }
 
+// Names, blurbs and hints mirror the real CTF copy in packages/nextjs/data/challenges/*.md.
+// `difficulty` is the one field that markdown doesn't carry, so it stays a mock judgement call.
 export const CHALLENGES: Challenge[] = [
-  { id: 1, name: "Agent Registration", tag: "onboarding", difficulty: "easy" },
-  { id: 2, name: "Fallback Fortune", tag: "fallback", difficulty: "easy" },
-  { id: 3, name: "Storage Whisperer", tag: "storage-slots", difficulty: "easy" },
-  { id: 4, name: "Reentrancy Vault", tag: "reentrancy", difficulty: "medium" },
-  { id: 5, name: "Overflow Relic", tag: "unchecked-math", difficulty: "medium" },
-  { id: 6, name: "Signature Forgery", tag: "ecdsa-replay", difficulty: "hard" },
-  { id: 7, name: "Delegatecall Hijack", tag: "proxy-collision", difficulty: "hard" },
-  { id: 8, name: "Merkle Gatekeeper", tag: "merkle-proof", difficulty: "medium" },
-  { id: 9, name: "RLP Labyrinth", tag: "rlp-decode", difficulty: "hard" },
-  { id: 10, name: "Gas Golf", tag: "gas-limit", difficulty: "medium" },
-  { id: 11, name: "Flash Arbiter", tag: "flashloan-oracle", difficulty: "insane" },
-  { id: 12, name: "Final Boss", tag: "chained-exploit", difficulty: "insane" },
+  {
+    id: 1,
+    name: "Agent Registration",
+    tag: "erc-8004",
+    difficulty: "easy",
+    description:
+      "Register as an ERC-8004 agent so the contract can verify your identity through the Identity Registry. This address is used for the rest of the game.",
+    hints: [
+      "Register on the ERC-8004 Identity Registry on Base",
+      "Your wallet must match the agentWallet set in the registration",
+      "Then call registerAgent(agentId) on the challenge contract",
+    ],
+  },
+  {
+    id: 2,
+    name: "Show me your key",
+    tag: "hashing",
+    difficulty: "easy",
+    description: "Provide the right key to the contract to mint your flag.",
+    hints: ["You have everything you need to compute the key offchain — but onchain works too"],
+  },
+  {
+    id: 3,
+    name: "Let me in!",
+    tag: "caller-check",
+    difficulty: "easy",
+    description: "You just have to ask the right way.",
+    hints: ["You might need to deploy a contract to solve this one"],
+  },
+  {
+    id: 4,
+    name: "Pay me!",
+    tag: "fallback",
+    difficulty: "easy",
+    description: "Pay me — but not directly.",
+    hints: ["Understand the receive and fallback functions"],
+  },
+  {
+    id: 5,
+    name: "Count my Assembly",
+    tag: "assembly",
+    difficulty: "medium",
+    description: "Set the right parameters to meet the counter's requirements.",
+    hints: ["Understand how mload works in Solidity assembly", "Sharpen your bitwise operations"],
+  },
+  {
+    id: 6,
+    name: "Give Me My Points!",
+    tag: "reentrancy",
+    difficulty: "medium",
+    description: "Obtain this flag by getting points and upgrading levels.",
+    hints: ["Think about the sequence of operations in your contract", "Recursion may be required"],
+  },
+  {
+    id: 7,
+    name: "Calldata FTW",
+    tag: "calldata",
+    difficulty: "hard",
+    description: "Sometimes the calldata is the only way to talk to a contract.",
+    hints: ["Learn how calldata is built", "Set the right selector at the right place"],
+  },
+  {
+    id: 8,
+    name: "Locked",
+    tag: "bitwise",
+    difficulty: "hard",
+    description: "This flag is protected behind a triple lock.",
+    hints: [
+      "Understand bitwise operations",
+      "Pay attention to how the password is masked",
+      "Learn about the receive function",
+    ],
+  },
+  {
+    id: 9,
+    name: "The unverified",
+    tag: "bytecode",
+    difficulty: "hard",
+    description: "Mint your flag in this unverified contract.",
+    hints: ["Look at the deploy script for Challenge 9 — and the resulting deployed bytecode"],
+  },
+  {
+    id: 10,
+    name: "Who can call me?",
+    tag: "access-control",
+    difficulty: "medium",
+    description: "Interact with the Challenge #10 contract. In this case, not all calls are allowed.",
+    hints: [],
+  },
+  {
+    id: 11,
+    name: "Give me the block!",
+    tag: "block-timing",
+    difficulty: "insane",
+    description: "Mint your flag using the right block — if you are lucky.",
+    hints: [],
+  },
+  {
+    id: 12,
+    name: "Conquer the game",
+    tag: "achievements",
+    difficulty: "insane",
+    description: "Unlock the achievements, win the game, and capture the flag.",
+    hints: ["You should take a look at the NFTFlags contract"],
+  },
 ];
 
 const V = {
-  anthropic: { vendor: "Anthropic", color: "#D97757", short: "AN" },
-  openai: { vendor: "OpenAI", color: "#10A37F", short: "OA" },
-  google: { vendor: "Google", color: "#4285F4", short: "GG" },
-  deepseek: { vendor: "DeepSeek", color: "#4D6BFE", short: "DS" },
-  qwen: { vendor: "Alibaba", color: "#8B5CF6", short: "QW" },
-  moonshot: { vendor: "Moonshot", color: "#FF6A00", short: "KI" },
-  zhipu: { vendor: "Zhipu", color: "#3859FF", short: "GL" },
-  xai: { vendor: "xAI", color: "#E5E5E5", short: "XA" },
-  meta: { vendor: "Meta", color: "#0668E1", short: "LL" },
-  mistral: { vendor: "Mistral", color: "#FF7000", short: "MI" },
+  anthropic: { vendor: "Anthropic", short: "AN" },
+  openai: { vendor: "OpenAI", short: "OA" },
+  google: { vendor: "Google", short: "GG" },
+  deepseek: { vendor: "DeepSeek", short: "DS" },
+  qwen: { vendor: "Alibaba", short: "QW" },
+  moonshot: { vendor: "Moonshot", short: "KI" },
+  zhipu: { vendor: "Zhipu", short: "GL" },
+  xai: { vendor: "xAI", short: "XA" },
+  meta: { vendor: "Meta", short: "LL" },
+  mistral: { vendor: "Mistral", short: "MI" },
 };
+
+// One color per competitor rather than per vendor — three Anthropic agents sharing
+// a single salmon made them impossible to tell apart on the race track. Hues are
+// interleaved so neighbours on the leaderboard never land on adjacent hues.
+export const AGENT_COLORS = [
+  "#FF5C5C", // red
+  "#2DD4BF", // teal
+  "#FFE14D", // yellow
+  "#A855F7", // violet
+  "#22C55E", // green
+  "#FF9F1C", // orange
+  "#60A5FA", // blue
+  "#EC4899", // pink
+  "#A3E635", // lime
+  "#E2E8F0", // silver
+];
 
 interface Seed {
   harness: string;
@@ -71,29 +183,21 @@ interface Seed {
   solved: number;
 }
 
-// 20 competitors: different harnesses x frontier + chinese models.
+// 10 competitors: different harnesses x frontier + chinese models.
 const SEEDS: Seed[] = [
   { harness: "Claude Code", model: "Opus 4.8", v: V.anthropic, solved: 9 },
   { harness: "Codex CLI", model: "GPT-5", v: V.openai, solved: 8 },
-  { harness: "Claude Code", model: "Sonnet 5", v: V.anthropic, solved: 8 },
-  { harness: "OpenCode", model: "GPT-5", v: V.openai, solved: 7 },
-  { harness: "OpenCode", model: "DeepSeek V3.2", v: V.deepseek, solved: 7 },
-  { harness: "Codex CLI", model: "GPT-5 mini", v: V.openai, solved: 6 },
-  { harness: "OpenCode", model: "Gemini 3 Pro", v: V.google, solved: 6 },
-  { harness: "Aider", model: "Opus 4.8", v: V.anthropic, solved: 6 },
+  { harness: "OpenCode", model: "Gemini 3 Pro", v: V.google, solved: 7 },
+  { harness: "Claude Code", model: "Sonnet 5", v: V.anthropic, solved: 7 },
+  { harness: "OpenCode", model: "DeepSeek V3.2", v: V.deepseek, solved: 6 },
+  { harness: "Aider", model: "Opus 4.8", v: V.anthropic, solved: 5 },
   { harness: "OpenCode", model: "Qwen3-Max", v: V.qwen, solved: 5 },
-  { harness: "Cline", model: "Sonnet 5", v: V.anthropic, solved: 5 },
-  { harness: "OpenCode", model: "Kimi K2", v: V.moonshot, solved: 5 },
-  { harness: "Goose", model: "GPT-5", v: V.openai, solved: 4 },
-  { harness: "OpenCode", model: "GLM-4.6", v: V.zhipu, solved: 4 },
-  { harness: "OpenCode", model: "DeepSeek V3.2", v: V.deepseek, solved: 4 },
-  { harness: "Aider", model: "Gemini 3 Pro", v: V.google, solved: 3 },
-  { harness: "OpenCode", model: "Grok 4", v: V.xai, solved: 3 },
-  { harness: "Cline", model: "Qwen3-Max", v: V.qwen, solved: 3 },
-  { harness: "Goose", model: "Llama 4 Maverick", v: V.meta, solved: 2 },
-  { harness: "OpenCode", model: "Mistral Large 3", v: V.mistral, solved: 2 },
-  { harness: "Aider", model: "Kimi K2", v: V.moonshot, solved: 1 },
+  { harness: "Cline", model: "Kimi K2", v: V.moonshot, solved: 4 },
+  { harness: "Goose", model: "GLM-4.6", v: V.zhipu, solved: 3 },
+  { harness: "OpenCode", model: "Grok 4", v: V.xai, solved: 2 },
 ];
+
+export const AGENT_COUNT = SEEDS.length;
 
 const STATUSES: AgentStatus[] = ["working", "thinking", "exploiting", "stuck", "submitting"];
 
@@ -114,7 +218,7 @@ export function buildAgents(): Agent[] {
       harness: s.harness,
       model: s.model,
       vendor: s.v.vendor,
-      color: s.v.color,
+      color: AGENT_COLORS[i % AGENT_COLORS.length],
       short: s.v.short,
       solved: solvedIds,
       current,
@@ -122,7 +226,7 @@ export function buildAgents(): Agent[] {
       tokens: 180_000 + Math.floor(Math.random() * 2_400_000),
       cost: 0.4 + Math.random() * 22,
       lastAction: "analyzing contract bytecode",
-      preview: previewLine(CHALLENGES[current - 1]?.tag || "default"),
+      preview: seedPreview(CHALLENGES[current - 1]?.tag || "default"),
       firstBlood: `0${Math.floor(Math.random() * 2)}:${String(10 + Math.floor(Math.random() * 49)).padStart(2, "0")}`,
     };
   });
@@ -172,16 +276,25 @@ const THINK: Record<string, string[]> = {
     "re-deriving the function selector to be safe",
   ],
   reentrancy: [
-    "no nonReentrant modifier — classic reentrancy setup",
-    "balance is updated AFTER the external call. that's the bug.",
-    "I'll recurse inside receive() until the vault is drained",
+    "points are credited AFTER the external call — that's the opening",
+    "I'll recurse from receive() until the level ticks over",
+    "no nonReentrant modifier on the upgrade path",
   ],
-  merkle: [
-    "need to reconstruct the merkle root from the leaves",
-    "hashing pairs sorted vs unsorted — trying sorted first",
-    "found it: the proof array order was reversed",
+  calldata: [
+    "the selector has to sit in the first 4 bytes, nothing else works",
+    "no ABI helper is going to build this — raw calldata it is",
+    "padding the argument to 32 bytes and appending it by hand",
   ],
-  ecdsa: ["signature malleability: I can flip s to (n - s)", "no nonce tracking means I can replay this signature"],
+  bitwise: [
+    "the password is masked, so I need to undo the shift first",
+    "three locks means three separate bit checks to satisfy",
+    "shifting right then AND-ing to isolate the byte I want",
+  ],
+  fallback: [
+    "direct transfer reverts — it wants the fallback path",
+    "sending with empty calldata to hit receive() instead",
+  ],
+  assembly: ["mload reads 32 bytes from that offset, not the length", "counting words, not bytes — that's the trick"],
 };
 
 const TOOL = [
@@ -229,6 +342,17 @@ export function previewLine(tag: string): string {
   }
   if (r < 0.75) return "$ " + TOOL[Math.floor(Math.random() * TOOL.length)];
   return OUTPUT[Math.floor(Math.random() * OUTPUT.length)];
+}
+
+// How many lines each multiview card keeps on screen.
+export const PREVIEW_LINES = 10;
+
+export function seedPreview(tag: string): string[] {
+  return Array.from({ length: PREVIEW_LINES }, () => previewLine(tag));
+}
+
+export function rollPreview(prev: string[], tag: string): string[] {
+  return [...prev, previewLine(tag)].slice(-PREVIEW_LINES);
 }
 
 export function seedConsole(agent: Agent): { kind: string; text: string }[] {
