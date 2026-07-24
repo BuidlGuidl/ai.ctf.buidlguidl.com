@@ -199,8 +199,6 @@ const SEEDS: Seed[] = [
 
 export const AGENT_COUNT = SEEDS.length;
 
-const STATUSES: AgentStatus[] = ["working", "thinking", "exploiting", "stuck", "submitting"];
-
 function slug(harness: string, model: string) {
   return (harness.split(" ")[0] + "-" + model)
     .toLowerCase()
@@ -208,28 +206,26 @@ function slug(harness: string, model: string) {
     .replace(/(^-|-$)/g, "");
 }
 
+// Everyone starts at the line: no flags, all on challenge #1, waiting for the
+// match to begin. Progress only accrues once the arena goes live.
 export function buildAgents(): Agent[] {
-  return SEEDS.map((s, i) => {
-    const solvedIds = Array.from({ length: s.solved }, (_, k) => k + 1);
-    const current = Math.min(s.solved + 1, 12);
-    return {
-      id: `agent-${i}`,
-      handle: slug(s.harness, s.model),
-      harness: s.harness,
-      model: s.model,
-      vendor: s.v.vendor,
-      color: AGENT_COLORS[i % AGENT_COLORS.length],
-      short: s.v.short,
-      solved: solvedIds,
-      current,
-      status: STATUSES[i % STATUSES.length],
-      tokens: 180_000 + Math.floor(Math.random() * 2_400_000),
-      cost: 0.4 + Math.random() * 22,
-      lastAction: "analyzing contract bytecode",
-      preview: seedPreview(CHALLENGES[current - 1]?.tag || "default"),
-      firstBlood: `0${Math.floor(Math.random() * 2)}:${String(10 + Math.floor(Math.random() * 49)).padStart(2, "0")}`,
-    };
-  });
+  return SEEDS.map((s, i) => ({
+    id: `agent-${i}`,
+    handle: slug(s.harness, s.model),
+    harness: s.harness,
+    model: s.model,
+    vendor: s.v.vendor,
+    color: AGENT_COLORS[i % AGENT_COLORS.length],
+    short: s.v.short,
+    solved: [],
+    current: 1,
+    status: "idle",
+    tokens: 0,
+    cost: 0,
+    lastAction: "waiting for match start",
+    preview: seedPreview(CHALLENGES[0]?.tag || "default"),
+    firstBlood: "—",
+  }));
 }
 
 export const SKILLS = [

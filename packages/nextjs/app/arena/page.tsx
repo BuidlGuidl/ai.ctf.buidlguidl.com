@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArenaLobby } from "./Lobby";
 import {
   AGENT_COUNT,
@@ -69,8 +69,20 @@ const fmtClock = (s: number) => {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 };
 
+// Flags first, then who drew first blood soonest, then a stable id tiebreak.
+// Cost is deliberately kept out of the tiebreak — it changes every tick, which
+// would make the race rows swap (and animate) constantly for no real reason.
 const rankAgents = (agents: Agent[]) =>
-  [...agents].sort((a, b) => b.solved.length - a.solved.length || a.cost - b.cost);
+  [...agents].sort(
+    (a, b) => b.solved.length - a.solved.length || a.firstBlood.localeCompare(b.firstBlood) || a.id.localeCompare(b.id),
+  );
+
+// Challenge #1 must be minted first; after that any remaining flag is fair game.
+const nextTarget = (solved: number[]): number => {
+  if (!solved.includes(1)) return 1;
+  const remaining = CHALLENGES.filter(c => !solved.includes(c.id)).map(c => c.id);
+  return remaining.length ? pick(remaining) : 1;
+};
 
 export default function ArenaPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -81,7 +93,7 @@ export default function ArenaPage() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [flashes, setFlashes] = useState<string[]>([]);
   const [openChallenge, setOpenChallenge] = useState<number | null>(null);
-  const [clock, setClock] = useState(4931);
+  const [clock, setClock] = useState(0);
   const [mounted, setMounted] = useState(false);
   const [stageMode, setStageMode] = useState<"overview" | "focus">("overview");
   const [overviewTab, setOverviewTab] = useState<"race" | "grid" | "stats">("race");
@@ -97,23 +109,30 @@ export default function ArenaPage() {
 
   const agentsRef = useRef(agents);
   const focusRef = useRef(focusedId);
+  const clockRef = useRef(clock);
   const lastSpeakerRef = useRef<Agent | null>(null);
   agentsRef.current = agents;
   focusRef.current = focusedId;
+  clockRef.current = clock;
 
+  // START MATCH — the agents come off the line and the clock starts only now.
+  const startMatch = useCallback(() => {
+    setAgents(prev => prev.map(a => ({ ...a, status: "working" })));
+    setPhase("live");
+  }, []);
+
+  // Observe an agent's live log in the right column — the wide shot stays put.
   const goFocus = useCallback((id: string) => {
     setFocusedId(id);
     setStageMode("focus");
   }, []);
-  const goWideShot = useCallback((t: OverviewTab) => {
-    setOverviewTab(t);
-    setStageMode("overview");
-  }, []);
+  const closeLog = useCallback(() => setStageMode("overview"), []);
 
   const focused = useMemo(() => agents.find(a => a.id === focusedId)!, [agents, focusedId]);
   const ranked = useMemo(() => rankAgents(agents), [agents]);
   const totalSolved = useMemo(() => agents.reduce((n, a) => n + a.solved.length, 0), [agents]);
-  const raceIsStage = stageMode === "overview" && overviewTab === "race";
+  // The race track already ranks everyone, so the standalone leaderboard/toasts step aside for it.
+  const raceIsStage = overviewTab === "race";
 
   const pushToast = useCallback((t: Omit<Toast, "id">) => {
     const id = nid();
@@ -160,18 +179,56 @@ export default function ArenaPage() {
     setLines(seedConsole(a).map(l => ({ ...l, id: nid() })));
   }, [focusedId]);
 
-  // LIVE clock.
+  // LIVE clock — only runs once the match has started.
   useEffect(() => {
+    if (phase !== "live") return;
     const t = setInterval(() => setClock(c => c + 1), 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [phase]);
 
-  // Master simulation loop.
+  // Master simulation loop — dormant until the match starts.
   useEffect(() => {
+    if (phase !== "live") return;
+
+    // Mint one flag for an agent and announce it across the arena.
+    const mint = (a: Agent, flagId: number) => {
+      const ch = CHALLENGES[flagId - 1];
+      if (!ch) return;
+      setAgents(prev =>
+        prev.map(x => {
+          if (x.id !== a.id || x.solved.includes(flagId)) return x;
+          const solved = [...x.solved, flagId];
+          const finished = solved.length >= CHALLENGES.length;
+          return {
+            ...x,
+            solved,
+            current: finished ? x.current : nextTarget(solved),
+            status: finished ? "idle" : "exploiting",
+            firstBlood: x.solved.length === 0 ? fmtClock(clockRef.current) : x.firstBlood,
+          };
+        }),
+      );
+      pushFlash(`${a.id}:${flagId}`);
+      pushToast({ type: "flag", title: `🏁 ${a.handle}`, sub: `captured flag · #${ch.id} ${ch.name}`, color: a.color });
+      pushFeed({
+        type: "flag",
+        agentId: a.id,
+        color: a.color,
+        text: `${a.handle} captured Challenge ${flagId} · ${ch.name}`,
+      });
+    };
+
     let tick = 0;
     const t = setInterval(() => {
       tick++;
       const list = agentsRef.current;
+
+      // WARM-UP — flag #1 is the gate, so clear it for everyone in a quick burst
+      // before the any-order race really gets going.
+      const needFirst = list.filter(a => a.status !== "idle" && !a.solved.includes(1));
+      if (needFirst.length) {
+        needFirst.slice(0, 4).forEach(a => mint(a, 1));
+      }
 
       // stream a console line for the focused agent
       const foc = list.find(a => a.id === focusRef.current);
@@ -218,42 +275,19 @@ export default function ArenaPage() {
         lastSpeakerRef.current = speaker;
       }
 
-      // FLAG CAPTURE — a busy agent solves its current challenge
+      // FLAG CAPTURE — a busy agent mints the flag it's currently working on.
+      // Agents past the flag-#1 gate work a random remaining challenge, so
+      // whatever they're on is what gets captured.
       if (tick % 6 === 0) {
-        const candidates = list.filter(a => a.solved.length < 12 && a.status !== "idle");
+        const candidates = list.filter(
+          a => a.solved.includes(1) && a.solved.length < CHALLENGES.length && a.status !== "idle",
+        );
         const a = candidates[Math.floor(Math.random() * candidates.length)];
-        if (a) {
-          const ch = CHALLENGES[a.current - 1];
-          setAgents(prev =>
-            prev.map(x =>
-              x.id === a.id
-                ? {
-                    ...x,
-                    solved: x.solved.includes(a.current) ? x.solved : [...x.solved, a.current],
-                    current: Math.min(x.current + 1, 12),
-                    status: "exploiting",
-                  }
-                : x,
-            ),
-          );
-          pushFlash(`${a.id}:${a.current}`);
-          pushToast({
-            type: "flag",
-            title: `🏁 ${a.handle}`,
-            sub: `captured flag · #${ch.id} ${ch.name}`,
-            color: a.color,
-          });
-          pushFeed({
-            type: "flag",
-            agentId: a.id,
-            color: a.color,
-            text: `${a.handle} captured Challenge ${a.current} · ${ch.name}`,
-          });
-        }
+        if (a) mint(a, a.current);
       }
     }, 950);
     return () => clearInterval(t);
-  }, [pushFeed, pushToast, pushChat, pushFlash]);
+  }, [phase, pushFeed, pushToast, pushChat, pushFlash]);
 
   if (!mounted || !focused) {
     return (
@@ -264,7 +298,7 @@ export default function ArenaPage() {
   }
 
   if (phase === "lobby") {
-    return <ArenaLobby onLaunch={() => setPhase("live")} />;
+    return <ArenaLobby onLaunch={startMatch} />;
   }
 
   return (
@@ -272,15 +306,13 @@ export default function ArenaPage() {
       <Scanlines />
       <TopBar clock={clock} totalSolved={totalSolved} />
 
-      <div className="flex flex-1 min-h-0">
-        {/* MAIN STAGE */}
-        <div className="flex flex-col flex-1 min-w-0 border-r border-[#00FBFF]/20">
-          <div className="flex-1 min-h-0 relative p-4">
-            <div className="h-full flex flex-col border border-[#00FBFF]/25 rounded-lg bg-[#020a0c]/80 overflow-hidden shadow-[0_0_40px_-12px_rgba(0,251,255,0.4)]">
-              <StageTabs tab={overviewTab} onTab={goWideShot} stageMode={stageMode} />
-              {stageMode === "focus" ? (
-                <FocusStage focused={focused} lines={lines} />
-              ) : (
+      <div className="flex flex-col flex-1 min-h-0">
+        <div className="flex flex-1 min-h-0">
+          {/* MAIN STAGE — always the wide shot, so observing an agent never hides the race */}
+          <div className="flex flex-col flex-1 min-w-0 border-r border-[#00FBFF]/20">
+            <div className="flex-1 min-h-0 relative p-4">
+              <div className="h-full flex flex-col border border-[#00FBFF]/25 rounded-lg bg-[#020a0c]/80 overflow-hidden shadow-[0_0_40px_-12px_rgba(0,251,255,0.4)]">
+                <StageTabs tab={overviewTab} onTab={setOverviewTab} />
                 <OverviewStage
                   ranked={ranked}
                   tab={overviewTab}
@@ -289,20 +321,23 @@ export default function ArenaPage() {
                   onPick={goFocus}
                   flashes={flashes}
                 />
-              )}
+              </div>
             </div>
           </div>
-          <div className="h-52 shrink-0 flex border-t border-[#00FBFF]/20">
-            <FeedBar feed={feed} />
-            <AgentChat chat={chat} onSend={sendDirector} />
+
+          {/* RIGHT COLUMN — leaderboard + unified arena stream; the observed agent's log takes over here */}
+          <div className="w-[400px] flex flex-col min-h-0 min-w-0">
+            {!raceIsStage && <Leaderboard ranked={ranked} focusedId={focusedId} onPick={goFocus} />}
+            {stageMode === "focus" ? (
+              <AgentLog focused={focused} lines={lines} onClose={closeLog} />
+            ) : (
+              <ArenaStream feed={feed} chat={chat} onSend={sendDirector} />
+            )}
           </div>
         </div>
 
-        {/* RIGHT COLUMN — the race track already ranks everyone, so the board stands alone there */}
-        <div className="w-[380px] flex flex-col min-h-0">
-          {!raceIsStage && <Leaderboard ranked={ranked} focusedId={focusedId} onPick={goFocus} />}
-          <ChallengeBoard agents={agents} focused={focused} expanded={raceIsStage} onOpen={setOpenChallenge} />
-        </div>
+        {/* BOTTOM — the challenge board is fixed-size, so it runs full-width along the bottom */}
+        <ChallengeBoard agents={agents} focused={focused} onOpen={setOpenChallenge} />
       </div>
 
       {openChallenge !== null && (
@@ -354,16 +389,7 @@ const STAGE_TABS: { id: OverviewTab; label: string }[] = [
   { id: "stats", label: "▤ EVAL STATS" },
 ];
 
-function StageTabs({
-  tab,
-  onTab,
-  stageMode,
-}: {
-  tab: OverviewTab;
-  onTab: (t: OverviewTab) => void;
-  stageMode: "overview" | "focus";
-}) {
-  const wide = stageMode === "overview";
+function StageTabs({ tab, onTab }: { tab: OverviewTab; onTab: (t: OverviewTab) => void }) {
   return (
     <div className="flex items-center gap-2 px-4 h-11 border-b border-[#00FBFF]/20 bg-[#001417] shrink-0">
       <span className="font-dotGothic text-[#00FBFF]/70 mr-2">WIDE SHOT</span>
@@ -371,9 +397,9 @@ function StageTabs({
         <button
           key={t.id}
           onClick={() => onTab(t.id)}
-          title={wide ? t.label : `back to ${t.label}`}
+          title={t.label}
           className={`px-3 py-1 rounded text-xs font-bold tracking-wider transition ${
-            wide && tab === t.id
+            tab === t.id
               ? "bg-[#00FBFF]/15 text-[#00FBFF] border border-[#00FBFF]/50"
               : "text-[#00FBFF]/45 border border-transparent hover:text-[#00FBFF]"
           }`}
@@ -381,16 +407,16 @@ function StageTabs({
           {t.label}
         </button>
       ))}
-      <span className="ml-auto text-[10px] text-[#00FBFF]/35">
-        {wide ? "click any agent → close-up" : "◉ close-up — pick a wide shot to go back"}
-      </span>
+      <span className="ml-auto text-[10px] text-[#00FBFF]/35">click any agent → observe its log ▸</span>
     </div>
   );
 }
 
-/* -------------------------------------------------------------- FocusStage */
+/* ---------------------------------------------------------------- AgentLog */
 
-function FocusStage({ focused, lines }: { focused: Agent; lines: ConsoleLine[] }) {
+// The observer console for one agent — lives in the right column so the wide
+// shot behind it keeps running.
+function AgentLog({ focused, lines, onClose }: { focused: Agent; lines: ConsoleLine[]; onClose: () => void }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -399,42 +425,38 @@ function FocusStage({ focused, lines }: { focused: Agent; lines: ConsoleLine[] }
   const ch = CHALLENGES[focused.current - 1];
 
   return (
-    <>
-      {/* who we're watching + what they're on, in one strip */}
-      <div className="flex items-center gap-3 px-4 h-11 border-b border-[#00FBFF]/10 bg-[#001316] shrink-0 text-xs">
-        <span className="text-[#00FBFF]/40">observer://</span>
+    <div className="flex-1 min-h-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#020a0c]">
+      <div className="flex items-center gap-2 px-3 h-9 border-b border-[#00FBFF]/15 bg-[#00141733] shrink-0 text-xs">
         <AgentBadge agent={focused} />
-        <span className="text-lg font-bold text-white">{focused.handle}</span>
-
-        <span className="ml-3 text-[10px] tracking-widest text-[#00FBFF]/30">NOW SOLVING</span>
+        <span className="text-sm font-bold text-white truncate">{focused.handle}</span>
         <span
-          className="px-2 py-0.5 rounded font-bold shrink-0"
+          className="px-1.5 py-0.5 rounded font-bold shrink-0 text-[10px]"
           style={{ color: DIFFICULTY_COLOR[ch.difficulty], border: `1px solid ${DIFFICULTY_COLOR[ch.difficulty]}55` }}
         >
           #{ch.id} {ch.name}
         </span>
-
-        <span className="ml-auto flex items-center gap-3 shrink-0 text-[#00FBFF]/50">
-          <span className="text-[#00ff9c] font-bold">
-            {focused.solved.length}/{CHALLENGES.length}
-          </span>
-          <span>
-            {(focused.tokens / 1000).toFixed(0)}k tok · ${focused.cost.toFixed(2)}
-          </span>
+        <span className="ml-auto text-[#00ff9c] font-bold shrink-0">
+          {focused.solved.length}/{CHALLENGES.length}
         </span>
+        <button
+          onClick={onClose}
+          title="back to arena feed"
+          className="w-6 h-6 shrink-0 rounded border border-[#00FBFF]/25 text-[#00FBFF]/60 hover:text-[#00FBFF] hover:border-[#00FBFF] transition"
+        >
+          ✕
+        </button>
       </div>
 
-      {/* console */}
       <div
         ref={scrollRef}
-        className="flex-1 min-h-0 overflow-y-auto px-4 py-3 text-[13px] leading-relaxed console-scroll"
+        className="flex-1 min-h-0 overflow-y-auto px-3 py-2 text-[12px] leading-relaxed console-scroll"
       >
         {lines.map(l => (
           <ConsoleRow key={l.id} line={l} />
         ))}
         <div className="text-[#00ff9c] animate-pulse">▋</div>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -481,23 +503,63 @@ function OverviewStage({
 }
 
 function RaceView({ ranked, onPick, flashes }: { ranked: Agent[]; onPick: (id: string) => void; flashes: string[] }) {
-  const done = (a: Agent) => a.solved.length >= CHALLENGES.length;
+  const total = CHALLENGES.length;
+  const done = (a: Agent) => a.solved.length >= total;
+  // Columns are mint-order slots, not fixed challenges — slot k holds the k-th
+  // flag an agent minted, so a row reads left-to-right as its capture history.
+  const slots = Array.from({ length: total }, (_, k) => k);
+
+  // FLIP: when the ranking changes, slide each row from where it was to where it
+  // now sits so a rank change reads as a physical move up (or down) the board.
+  const rowRefs = useRef(new Map<string, HTMLElement>());
+  const prevTops = useRef(new Map<string, number>());
+  useLayoutEffect(() => {
+    rowRefs.current.forEach((el, id) => {
+      const newTop = el.offsetTop; // offsetTop ignores transforms → safe mid-animation
+      const oldTop = prevTops.current.get(id);
+      prevTops.current.set(id, newTop);
+      if (oldTop === undefined || oldTop === newTop) return;
+      el.style.transition = "none";
+      el.style.transform = `translateY(${oldTop - newTop}px)`;
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          el.style.transition = "transform 450ms cubic-bezier(0.2, 0.8, 0.2, 1)";
+          el.style.transform = "";
+        }),
+      );
+    });
+  });
+
+  // Grabbing the #1 spot gets its own celebratory glow — a normal row move up
+  // shouldn't feel the same as taking the lead.
+  const [leadTaker, setLeadTaker] = useState<string | null>(null);
+  const prevLeader = useRef<string | undefined>(undefined);
+  const leadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const leader = ranked[0]?.id;
+    if (leader && prevLeader.current !== undefined && leader !== prevLeader.current) {
+      setLeadTaker(leader);
+      if (leadTimer.current) clearTimeout(leadTimer.current);
+      leadTimer.current = setTimeout(() => setLeadTaker(null), 1800);
+    }
+    prevLeader.current = leader;
+  }, [ranked]);
+  useEffect(() => () => void (leadTimer.current && clearTimeout(leadTimer.current)), []);
   return (
     <div className="p-3 space-y-1">
-      {/* challenge ruler — position maps to challenge, colored by difficulty */}
+      {/* ruler — one column per flag minted, in capture order */}
       <div className="flex items-center gap-3 px-2 pb-1">
         <span className="w-5 shrink-0" />
         <span className="w-6 shrink-0" />
-        <span className="w-44 shrink-0 text-[9px] tracking-widest text-[#00FBFF]/25">AGENT</span>
+        <span className="w-44 shrink-0 text-[9px] tracking-widest text-[#00FBFF]/25">AGENT · MINTS →</span>
         <div className="flex-1 flex gap-[3px]">
-          {CHALLENGES.map(c => (
+          {slots.map(k => (
             <span
-              key={c.id}
-              title={`#${c.id} ${c.name} · ${c.difficulty}`}
-              className="flex-1 text-center text-[9px] font-bold tabular-nums"
-              style={{ color: `${DIFFICULTY_COLOR[c.difficulty]}99` }}
+              key={k}
+              title={`${k + 1}. flag minted`}
+              className="flex-1 text-center text-[9px] font-bold tabular-nums text-[#00FBFF]/25"
             >
-              {c.id}
+              {k + 1}
             </span>
           ))}
         </div>
@@ -507,48 +569,67 @@ function RaceView({ ranked, onPick, flashes }: { ranked: Agent[]; onPick: (id: s
       {ranked.map((a, i) => (
         <button
           key={a.id}
+          ref={el => {
+            if (el) rowRefs.current.set(a.id, el);
+            else rowRefs.current.delete(a.id);
+          }}
           onClick={() => onPick(a.id)}
-          className="w-full flex items-center gap-3 px-2 py-1.5 rounded hover:bg-[#00FBFF]/5 transition text-left group"
+          className={`relative w-full flex items-center gap-3 px-2 py-1.5 rounded hover:bg-[#00FBFF]/5 will-change-transform text-left group ${
+            leadTaker === a.id ? "lead-take" : ""
+          }`}
         >
           <span
-            className={`w-5 text-right text-xs font-bold tabular-nums shrink-0 ${
+            className={`w-5 text-center text-xs font-bold tabular-nums shrink-0 ${
               i === 0 ? "text-[#FFBE00]" : i < 3 ? "text-[#00ff9c]" : "text-[#00FBFF]/40"
             }`}
           >
-            {i + 1}
+            {i === 0 ? <span className={`inline-block ${leadTaker === a.id ? "crown-pop" : ""}`}>👑</span> : i + 1}
           </span>
           <AgentBadge agent={a} />
           <span className="w-44 truncate text-sm font-bold text-white shrink-0">{a.handle}</span>
 
-          {/* one cell per challenge: captured / working / not reached */}
+          {/* each square shows the flag number minted at that step; the next
+              square is the challenge being worked, the rest are flags left */}
           <div className="flex-1 flex gap-[3px]">
-            {CHALLENGES.map(c => {
-              const captured = a.solved.includes(c.id);
-              const working = !captured && !done(a) && a.current === c.id;
-              const flashing = flashes.includes(`${a.id}:${c.id}`);
+            {slots.map(k => {
+              const flagId = a.solved[k];
+              if (flagId !== undefined) {
+                const ch = CHALLENGES[flagId - 1];
+                const flashing = flashes.includes(`${a.id}:${flagId}`);
+                return (
+                  <span
+                    key={k}
+                    title={`#${flagId} ${ch?.name ?? ""} · minted ${k + 1} of ${total}`}
+                    className={`relative flex-1 h-5 rounded-[3px] border flex items-center justify-center text-[9px] font-bold tabular-nums transition-colors ${
+                      flashing ? "flag-pop" : ""
+                    }`}
+                    style={{ background: a.color, borderColor: a.color, color: "#00181c" }}
+                  >
+                    {flagId}
+                  </span>
+                );
+              }
+              if (k === a.solved.length && !done(a)) {
+                const ch = CHALLENGES[a.current - 1];
+                const dc = ch ? DIFFICULTY_COLOR[ch.difficulty] : "#00FBFF";
+                return (
+                  <span
+                    key={k}
+                    title={`working on #${a.current} ${ch?.name ?? ""}`}
+                    className="relative flex-1 h-5 rounded-[3px] border flex items-center justify-center text-[9px] font-bold tabular-nums cell-working"
+                    style={{ background: `${dc}1f`, borderColor: dc, color: dc }}
+                  >
+                    {a.current}
+                  </span>
+                );
+              }
               return (
                 <span
-                  key={c.id}
-                  title={`#${c.id} ${c.name} · ${c.difficulty}${
-                    captured ? " · captured" : working ? " · working on it" : ""
-                  }`}
-                  className={`relative flex-1 h-5 rounded-[3px] border flex items-center justify-center text-[9px] font-bold tabular-nums transition-colors ${
-                    flashing ? "flag-pop" : ""
-                  } ${working ? "cell-working" : ""}`}
-                  style={
-                    captured
-                      ? { background: a.color, borderColor: a.color, color: "#00181c" }
-                      : working
-                      ? {
-                          background: `${DIFFICULTY_COLOR[c.difficulty]}1f`,
-                          borderColor: DIFFICULTY_COLOR[c.difficulty],
-                          color: DIFFICULTY_COLOR[c.difficulty],
-                        }
-                      : { background: "#00fbff08", borderColor: "#00fbff1a", color: "#00fbff33" }
-                  }
-                >
-                  {captured ? "✓" : c.id}
-                </span>
+                  key={k}
+                  title="flag not minted yet"
+                  className="relative flex-1 h-5 rounded-[3px] border"
+                  style={{ background: "#00fbff08", borderColor: "#00fbff1a" }}
+                />
               );
             })}
           </div>
@@ -764,19 +845,17 @@ function Leaderboard({
 function ChallengeBoard({
   agents,
   focused,
-  expanded,
   onOpen,
 }: {
   agents: Agent[];
   focused: Agent;
-  expanded: boolean;
   onOpen: (id: number) => void;
 }) {
   const solvedCount = (id: number) => agents.filter(a => a.solved.includes(id)).length;
   return (
-    <div className={`${expanded ? "flex-1 min-h-0" : "h-[36%]"} flex flex-col`}>
+    <div className="h-48 shrink-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#010607]">
       <SectionHead label="CHALLENGE BOARD" hint="click for details" />
-      <div className="flex-1 min-h-0 overflow-y-auto console-scroll p-2 grid grid-cols-2 gap-1.5 content-start">
+      <div className="flex-1 min-h-0 overflow-y-auto console-scroll p-2 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-1.5 content-start">
         {CHALLENGES.map(c => {
           const mine = focused.solved.includes(c.id);
           const isCurrent = focused.current === c.id;
@@ -945,20 +1024,94 @@ function ChallengeDetails({
   );
 }
 
-/* ---------------------------------------------------------------- FeedBar */
+/* -------------------------------------------------------------- ArenaStream */
 
-function FeedBar({ feed }: { feed: FeedItem[] }) {
+type StreamFilter = "all" | "chat" | "flags" | "events";
+type StreamRow =
+  | { id: number; group: "chat"; msg: ChatMsg }
+  | { id: number; group: "flags" | "events"; item: FeedItem };
+
+const STREAM_FILTERS: { id: StreamFilter; label: string }[] = [
+  { id: "all", label: "ALL" },
+  { id: "chat", label: "CHAT" },
+  { id: "flags", label: "FLAGS" },
+  { id: "events", label: "EVENTS" },
+];
+
+// Feed events and agent/director chat merged into one chronological stream, so
+// the whole arena reads back like a single timeline with a large history.
+function ArenaStream({ feed, chat, onSend }: { feed: FeedItem[]; chat: ChatMsg[]; onSend: (t: string) => void }) {
+  const [filter, setFilter] = useState<StreamFilter>("all");
+  const [draft, setDraft] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // ids come from a single monotonic counter, so sorting by id restores order.
+  const merged = useMemo<StreamRow[]>(() => {
+    const chatRows: StreamRow[] = chat.map(m => ({ id: m.id, group: "chat", msg: m }));
+    const feedRows: StreamRow[] = feed.map(item => ({
+      id: item.id,
+      group: item.type === "flag" ? "flags" : "events",
+      item,
+    }));
+    return [...chatRows, ...feedRows].sort((a, b) => a.id - b.id);
+  }, [feed, chat]);
+
+  const rows = merged.filter(r => filter === "all" || r.group === filter);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+  }, [rows.length]);
+
+  const submit = () => {
+    onSend(draft);
+    setDraft("");
+  };
+
   return (
-    <div className="w-1/2 min-w-0 bg-[#010607] flex flex-col">
-      <div className="flex items-center gap-3 px-4 h-8 border-b border-[#00FBFF]/10 shrink-0">
-        <span className="text-xs font-bold text-[#00FBFF]/60 tracking-widest">ARENA FEED</span>
-        <span className="text-[10px] text-[#00FBFF]/30">flags · skills · events</span>
+    <div className="flex-1 min-h-0 flex flex-col bg-[#010607]">
+      <div className="flex items-center gap-2 px-3 h-9 border-b border-[#00FBFF]/15 bg-[#00141733] shrink-0">
+        <span className="text-xs font-bold text-[#00FBFF] tracking-widest">ARENA</span>
+        <div className="ml-auto flex items-center gap-1">
+          {STREAM_FILTERS.map(f => (
+            <button
+              key={f.id}
+              onClick={() => setFilter(f.id)}
+              className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider transition ${
+                filter === f.id
+                  ? "bg-[#00FBFF]/15 text-[#00FBFF] border border-[#00FBFF]/40"
+                  : "text-[#00FBFF]/40 border border-transparent hover:text-[#00FBFF]"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto console-scroll px-4 py-1.5 text-xs space-y-1">
-        {feed.length === 0 && <div className="text-[#00FBFF]/30 italic">waiting for the arena to heat up…</div>}
-        {feed.map(f => (
-          <FeedRow key={f.id} item={f} />
-        ))}
+
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto console-scroll px-3 py-1.5 text-xs space-y-1">
+        {rows.length === 0 && <div className="text-[#00FBFF]/30 italic">waiting for the arena to heat up…</div>}
+        {rows.map(r =>
+          r.group === "chat" ? <ChatRow key={r.id} msg={r.msg} /> : <FeedRow key={r.id} item={r.item} />,
+        )}
+      </div>
+
+      <div className="flex items-center gap-2 px-2 py-2 border-t border-[#00FBFF]/15 shrink-0">
+        <span className="text-[10px] text-[#FFBE00] font-bold shrink-0">🎬 DIRECTOR</span>
+        <input
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === "Enter") submit();
+          }}
+          placeholder="broadcast a message to all agents…"
+          className="flex-1 min-w-0 bg-[#00181c] border border-[#00FBFF]/20 rounded px-2 py-1 text-xs text-white placeholder-[#00FBFF]/25 focus:outline-none focus:border-[#FFBE00]/60"
+        />
+        <button
+          onClick={submit}
+          className="px-2.5 py-1 rounded border border-[#FFBE00]/50 text-[#FFBE00] text-xs font-bold hover:bg-[#FFBE00]/10 transition shrink-0"
+        >
+          SEND
+        </button>
       </div>
     </div>
   );
@@ -984,51 +1137,7 @@ function FeedRow({ item }: { item: FeedItem }) {
   );
 }
 
-/* --------------------------------------------------------------- AgentChat */
-
-function AgentChat({ chat, onSend }: { chat: ChatMsg[]; onSend: (t: string) => void }) {
-  const [draft, setDraft] = useState("");
-  const scrollRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [chat]);
-  const submit = () => {
-    onSend(draft);
-    setDraft("");
-  };
-  return (
-    <div className="w-1/2 min-w-0 border-l border-[#00FBFF]/20 bg-[#04080a] flex flex-col">
-      <div className="flex items-center gap-2 px-3 h-8 border-b border-[#00FBFF]/10 shrink-0">
-        <span className="text-xs font-bold text-[#00FBFF]/60 tracking-widest">AGENT CHAT</span>
-        <span className="text-[10px] text-[#00FBFF]/30">agent ↔ agent · director broadcast</span>
-      </div>
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto console-scroll px-3 py-1.5 text-xs space-y-1">
-        {chat.length === 0 && <div className="text-[#00FBFF]/30 italic">the agents are quiet… for now.</div>}
-        {chat.map(m => (
-          <ChatRow key={m.id} msg={m} />
-        ))}
-      </div>
-      <div className="flex items-center gap-2 px-2 py-2 border-t border-[#00FBFF]/15 shrink-0">
-        <span className="text-[10px] text-[#FFBE00] font-bold shrink-0">🎬 DIRECTOR</span>
-        <input
-          value={draft}
-          onChange={e => setDraft(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === "Enter") submit();
-          }}
-          placeholder="broadcast a message to all agents…"
-          className="flex-1 min-w-0 bg-[#00181c] border border-[#00FBFF]/20 rounded px-2 py-1 text-xs text-white placeholder-[#00FBFF]/25 focus:outline-none focus:border-[#FFBE00]/60"
-        />
-        <button
-          onClick={submit}
-          className="px-2.5 py-1 rounded border border-[#FFBE00]/50 text-[#FFBE00] text-xs font-bold hover:bg-[#FFBE00]/10 transition shrink-0"
-        >
-          SEND
-        </button>
-      </div>
-    </div>
-  );
-}
+/* ---------------------------------------------------------------- ChatRow */
 
 function ChatRow({ msg }: { msg: ChatMsg }) {
   if (msg.director) {
@@ -1207,6 +1316,48 @@ function ArenaStyles() {
         }
         50% {
           box-shadow: 0 0 0 3px rgba(255, 190, 0, 0);
+        }
+      }
+      .lead-take {
+        z-index: 2;
+        animation: leadTake 1.8s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+      }
+      @keyframes leadTake {
+        0% {
+          background: rgba(255, 190, 0, 0);
+          box-shadow: 0 0 0 0 rgba(255, 190, 0, 0);
+        }
+        12% {
+          background: rgba(255, 190, 0, 0.22);
+          box-shadow: 0 0 26px 5px rgba(255, 190, 0, 0.55), inset 0 0 0 1px rgba(255, 190, 0, 0.7);
+        }
+        55% {
+          background: rgba(255, 190, 0, 0.1);
+          box-shadow: 0 0 16px 3px rgba(255, 190, 0, 0.3), inset 0 0 0 1px rgba(255, 190, 0, 0.35);
+        }
+        100% {
+          background: rgba(255, 190, 0, 0);
+          box-shadow: 0 0 0 0 rgba(255, 190, 0, 0);
+        }
+      }
+      .crown-pop {
+        animation: crownPop 1.4s cubic-bezier(0.2, 0.9, 0.3, 1.4);
+      }
+      @keyframes crownPop {
+        0% {
+          transform: scale(0.2) rotate(-25deg);
+          opacity: 0;
+        }
+        45% {
+          transform: scale(1.6) rotate(10deg);
+          opacity: 1;
+        }
+        70% {
+          transform: scale(0.92) rotate(-4deg);
+        }
+        100% {
+          transform: scale(1) rotate(0);
+          opacity: 1;
         }
       }
       .cell-working {
