@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArenaLobby } from "./Lobby";
 import {
   AGENT_COUNT,
   Agent,
@@ -85,6 +86,8 @@ export default function ArenaPage() {
   const [stageMode, setStageMode] = useState<"overview" | "focus">("overview");
   const [overviewTab, setOverviewTab] = useState<"race" | "grid" | "stats">("race");
   const [statsSort, setStatsSort] = useState<"solved" | "cost" | "eff">("solved");
+  // "lobby" = pre-game roster / connection screen, "live" = the running arena.
+  const [phase, setPhase] = useState<"lobby" | "live">("lobby");
   // Seed on the client only — buildAgents() uses Math.random(), so running it
   // during SSR would hand the client a different roster than the server rendered.
   useEffect(() => {
@@ -258,6 +261,10 @@ export default function ArenaPage() {
         <span className="animate-pulse">◆ LOADING AGENT ARENA…</span>
       </div>
     );
+  }
+
+  if (phase === "lobby") {
+    return <ArenaLobby onLaunch={() => setPhase("live")} />;
   }
 
   return (
