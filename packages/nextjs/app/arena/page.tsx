@@ -96,8 +96,7 @@ export default function ArenaPage() {
   const [clock, setClock] = useState(0);
   const [mounted, setMounted] = useState(false);
   const [stageMode, setStageMode] = useState<"overview" | "focus">("overview");
-  const [overviewTab, setOverviewTab] = useState<"race" | "grid" | "stats">("race");
-  const [statsSort, setStatsSort] = useState<"solved" | "cost" | "eff">("solved");
+  const [overviewTab, setOverviewTab] = useState<"race" | "grid">("race");
   // "lobby" = pre-game roster / connection screen, "live" = the running arena.
   const [phase, setPhase] = useState<"lobby" | "live">("lobby");
   // Seed on the client only — buildAgents() uses Math.random(), so running it
@@ -313,14 +312,7 @@ export default function ArenaPage() {
             <div className="flex-1 min-h-0 relative p-4">
               <div className="h-full flex flex-col border border-[#00FBFF]/25 rounded-lg bg-[#020a0c]/80 overflow-hidden shadow-[0_0_40px_-12px_rgba(0,251,255,0.4)]">
                 <StageTabs tab={overviewTab} onTab={setOverviewTab} />
-                <OverviewStage
-                  ranked={ranked}
-                  tab={overviewTab}
-                  statsSort={statsSort}
-                  setStatsSort={setStatsSort}
-                  onPick={goFocus}
-                  flashes={flashes}
-                />
+                <OverviewStage ranked={ranked} tab={overviewTab} onPick={goFocus} flashes={flashes} />
               </div>
             </div>
           </div>
@@ -386,7 +378,6 @@ function TopBar({ clock, totalSolved }: { clock: number; totalSolved: number }) 
 const STAGE_TABS: { id: OverviewTab; label: string }[] = [
   { id: "race", label: "🏁 RACE" },
   { id: "grid", label: "▦ MULTIVIEW" },
-  { id: "stats", label: "▤ EVAL STATS" },
 ];
 
 function StageTabs({ tab, onTab }: { tab: OverviewTab; onTab: (t: OverviewTab) => void }) {
@@ -475,21 +466,16 @@ function ConsoleRow({ line }: { line: ConsoleLine }) {
 
 /* ------------------------------------------------------------ OverviewStage */
 
-type OverviewTab = "race" | "grid" | "stats";
-type StatsSort = "solved" | "cost" | "eff";
+type OverviewTab = "race" | "grid";
 
 function OverviewStage({
   ranked,
   tab,
-  statsSort,
-  setStatsSort,
   onPick,
   flashes,
 }: {
   ranked: Agent[];
   tab: OverviewTab;
-  statsSort: StatsSort;
-  setStatsSort: (s: StatsSort) => void;
   onPick: (id: string) => void;
   flashes: string[];
 }) {
@@ -497,7 +483,6 @@ function OverviewStage({
     <div className="flex-1 min-h-0 overflow-y-auto console-scroll">
       {tab === "race" && <RaceView ranked={ranked} onPick={onPick} flashes={flashes} />}
       {tab === "grid" && <GridView ranked={ranked} onPick={onPick} />}
-      {tab === "stats" && <StatsView ranked={ranked} sort={statsSort} setSort={setStatsSort} onPick={onPick} />}
     </div>
   );
 }
@@ -696,87 +681,6 @@ function GridView({ ranked, onPick }: { ranked: Agent[]; onPick: (id: string) =>
   );
 }
 
-function StatsView({
-  ranked,
-  sort,
-  setSort,
-  onPick,
-}: {
-  ranked: Agent[];
-  sort: StatsSort;
-  setSort: (s: StatsSort) => void;
-  onPick: (id: string) => void;
-}) {
-  const eff = (a: Agent) => a.tokens / Math.max(1, a.solved.length);
-  const rows = [...ranked].sort((a, b) => {
-    if (sort === "cost") return a.cost - b.cost;
-    if (sort === "eff") return eff(a) - eff(b);
-    return b.solved.length - a.solved.length || a.cost - b.cost;
-  });
-  const Th = ({ id, label, right }: { id?: StatsSort; label: string; right?: boolean }) => (
-    <th
-      className={`px-2 py-2 font-bold text-[#00FBFF]/60 ${right ? "text-right" : "text-left"} ${
-        id ? "cursor-pointer hover:text-[#00FBFF]" : ""
-      }`}
-      onClick={id ? () => setSort(id) : undefined}
-    >
-      {label}
-      {id && sort === id ? " ▾" : ""}
-    </th>
-  );
-  return (
-    <table className="w-full text-xs border-collapse">
-      <thead className="sticky top-0 bg-[#001417] z-10">
-        <tr className="border-b border-[#00FBFF]/20">
-          <Th label="#" />
-          <Th label="AGENT" />
-          <Th label="PROGRESS" />
-          <Th label="NOW" />
-          <Th id="solved" label="SOLVED" right />
-          <Th label="TOK" right />
-          <Th id="cost" label="COST" right />
-          <Th id="eff" label="TOK/FLAG" right />
-          <Th label="1ST BLOOD" right />
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((a, i) => (
-          <tr
-            key={a.id}
-            onClick={() => onPick(a.id)}
-            className="border-b border-[#00FBFF]/5 hover:bg-[#00FBFF]/5 cursor-pointer"
-          >
-            <td className="px-2 py-1.5 text-[#00FBFF]/40 tabular-nums">{i + 1}</td>
-            <td className="px-2 py-1.5">
-              <div className="flex items-center gap-1.5">
-                <AgentBadge agent={a} />
-                <span className="text-white font-bold truncate max-w-[130px]">{a.handle}</span>
-              </div>
-            </td>
-            <td className="px-2 py-1.5">
-              <div className="flex gap-[2px]">
-                {CHALLENGES.map(c => (
-                  <span
-                    key={c.id}
-                    className="w-2 h-2 rounded-sm"
-                    style={{ background: a.solved.includes(c.id) ? a.color : "#00FBFF12" }}
-                  />
-                ))}
-              </div>
-            </td>
-            <td className="px-2 py-1.5 text-[#00FBFF]/60">{a.solved.length >= 12 ? "◆ done" : `C${a.current}`}</td>
-            <td className="px-2 py-1.5 text-right tabular-nums font-bold text-[#00ff9c]">{a.solved.length}</td>
-            <td className="px-2 py-1.5 text-right tabular-nums text-[#00FBFF]/60">{(a.tokens / 1000).toFixed(0)}k</td>
-            <td className="px-2 py-1.5 text-right tabular-nums text-[#00FBFF]/60">${a.cost.toFixed(1)}</td>
-            <td className="px-2 py-1.5 text-right tabular-nums text-[#00FBFF]/60">{(eff(a) / 1000).toFixed(0)}k</td>
-            <td className="px-2 py-1.5 text-right tabular-nums text-[#FFBE00]/70">{a.firstBlood}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
 /* ------------------------------------------------------------- Leaderboard */
 
 function Leaderboard({
@@ -813,7 +717,7 @@ function Leaderboard({
               <div className="flex-1 min-w-0">
                 <div className="text-xs font-bold text-white truncate">{a.handle}</div>
                 <div className="flex items-center gap-1.5 mt-1">
-                  {/* one square per challenge, same read as the eval-stats progress column */}
+                  {/* one square per challenge */}
                   <div className="flex gap-[2px] flex-1">
                     {CHALLENGES.map(c => {
                       const captured = a.solved.includes(c.id);
