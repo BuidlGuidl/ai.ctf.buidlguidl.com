@@ -17,6 +17,7 @@ const DELAY_TIME = (hre: HardhatRuntimeEnvironment) => (hre.network.name === "lo
  */
 // ERC-8004 Identity Registry addresses
 const IDENTITY_REGISTRY_BASE_MAINNET = "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432";
+const IDENTITY_REGISTRY_BASE_SEPOLIA = "0x8004A818BFB912233c491871b3d84c89A494BD9e";
 
 const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployer } = await hre.getNamedAccounts();
@@ -57,6 +58,9 @@ const deployCtfContracts: DeployFunction = async function (hre: HardhatRuntimeEn
   } else if (hre.network.name === "base") {
     identityRegistryAddress = IDENTITY_REGISTRY_BASE_MAINNET;
     console.log("🤖 Using Base Mainnet Identity Registry:", identityRegistryAddress);
+  } else if (hre.network.name === "baseSepolia") {
+    identityRegistryAddress = IDENTITY_REGISTRY_BASE_SEPOLIA;
+    console.log("🤖 Using Base Sepolia Identity Registry:", identityRegistryAddress);
   } else {
     console.error("🚨 Unsupported network (no identity registry deployed):", hre.network.name);
     process.exit(1);

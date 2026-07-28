@@ -1,0 +1,131 @@
+{
+  "address": "0xF7D99e54c491AAF72a19A1F503367CD5ECf18E9a",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_nftContract",
+          "type": "address"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "_password",
+          "type": "bytes32"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_password",
+          "type": "bytes32"
+        }
+      ],
+      "name": "mintFlag",
+      "outputs": [],
+      "stateMutability": "payable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "nftContract",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "stateMutability": "payable",
+      "type": "receive"
+    }
+  ],
+  "transactionHash": "0x98add8e8d34e9c59dd6343a4671f57f18a76a83f592f959f990cfc62254755f0",
+  "receipt": {
+    "to": null,
+    "from": "0x9caFA3d7A2c566A70f302E85E06feC43F2B765Ae",
+    "contractAddress": "0xF7D99e54c491AAF72a19A1F503367CD5ECf18E9a",
+    "transactionIndex": 3,
+    "gasUsed": "302703",
+    "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "blockHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "transactionHash": "0x98add8e8d34e9c59dd6343a4671f57f18a76a83f592f959f990cfc62254755f0",
+    "logs": [],
+    "blockNumber": 44740037,
+    "cumulativeGasUsed": "896480",
+    "status": 1,
+    "byzantium": true
+  },
+  "args": [
+    "0x2667573cEfDe02fb72070b49581de9713BE6f659",
+    "0xaca6526dda19750f425ade521948c7f1ad466878ef62e2692062d96333a3e267"
+  ],
+  "numDeployments": 1,
+  "solcInputHash": "cdfd3c6dadf3f2c0113dc00e91eeae6c",
+  "metadata": "{\"compiler\":{\"version\":\"0.8.20+commit.a1b79de6\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_nftContract\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"_password\",\"type\":\"bytes32\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_password\",\"type\":\"bytes32\"}],\"name\":\"mintFlag\",\"outputs\":[],\"stateMutability\":\"payable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"nftContract\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"stateMutability\":\"payable\",\"type\":\"receive\"}],\"devdoc\":{\"kind\":\"dev\",\"methods\":{},\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{},\"version\":1}},\"settings\":{\"compilationTarget\":{\"contracts/Challenge8.sol\":\"Challenge8\"},\"evmVersion\":\"paris\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\",\"useLiteralContent\":true},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[]},\"sources\":{\"contracts/Challenge8.sol\":{\"content\":\"//SPDX-License-Identifier: MIT\\npragma solidity >=0.8.0 <0.9.0;\\n\\nimport \\\"./INFTFlags.sol\\\";\\n\\ncontract Challenge8 {\\n    address public nftContract;\\n    bytes32 private password;\\n    uint256 private count;\\n\\n    constructor(address _nftContract, bytes32 _password) {\\n        nftContract = _nftContract;\\n        password = _password;\\n    }\\n\\n    modifier lock1(bytes32 _password) {\\n        bytes32 mask = ~(bytes32(uint256(0xFF) << ((31 - (count % 32)) * 8)));\\n        bytes32 newPassword = password & mask;\\n        require(newPassword == _password, \\\"Wrong password\\\");\\n        _;\\n    }\\n\\n    modifier lock2() {\\n        require(msg.sender.balance >= 2, \\\"Insufficient balance\\\");\\n        _;\\n    }\\n\\n    modifier lock3() {\\n        require(payable(msg.sender).send(1) == false, \\\"It should fail to send ether\\\");\\n        _;\\n    }\\n\\n    modifier lock4() {\\n        require(payable(msg.sender).send(2) == true, \\\"Failed to send ether\\\");\\n        _;\\n    }\\n\\n    function mintFlag(bytes32 _password) public payable lock1(_password) lock2 lock3 lock4 {\\n        require(msg.value == 2, \\\"Invalid ether amount\\\");\\n        count += 1;\\n        INFTFlags(nftContract).mint(tx.origin, 8);\\n    }\\n\\n    receive() external payable {}\\n}\\n\",\"keccak256\":\"0x799e5db4bdb6932d9ceaeabc384abaf19f952e91b8563b13c15a736adce78069\",\"license\":\"MIT\"},\"contracts/INFTFlags.sol\":{\"content\":\"//SPDX-License-Identifier: MIT\\npragma solidity >=0.8.0 <0.9.0;\\n\\ninterface INFTFlags {\\n    function mint(address _recipient, uint256 _challengeId) external;\\n}\\n\",\"keccak256\":\"0xe623eea1d08afa3f13cc5b80cc3445a673e8f7ac221ce2acc62a670402e7bf8b\",\"license\":\"MIT\"}},\"version\":1}",
+  "bytecode": "0x608060405234801561001057600080fd5b5060405161044938038061044983398101604081905261002f91610058565b600080546001600160a01b0319166001600160a01b039390931692909217909155600155610092565b6000806040838503121561006b57600080fd5b82516001600160a01b038116811461008257600080fd5b6020939093015192949293505050565b6103a8806100a16000396000f3fe60806040526004361061002d5760003560e01c8063d56d229d14610039578063dfa0c2d61461007557600080fd5b3661003457005b600080fd5b34801561004557600080fd5b50600054610059906001600160a01b031681565b6040516001600160a01b03909116815260200160405180910390f35b6100886100833660046102de565b61008a565b005b806000602060025461009c91906102f7565b6100a790601f61032f565b6100b2906008610348565b60015460ff90911b19915081168281146101045760405162461bcd60e51b815260206004820152600e60248201526d15dc9bdb99c81c185cdcdddbdc9960921b60448201526064015b60405180910390fd5b60023331101561014d5760405162461bcd60e51b8152602060048201526014602482015273496e73756666696369656e742062616c616e636560601b60448201526064016100fb565b604051339060009060019082818181858883f11593506101b3925050505760405162461bcd60e51b815260206004820152601c60248201527f49742073686f756c64206661696c20746f2073656e642065746865720000000060448201526064016100fb565b604051339060009060029082818181858883f19350505050151560011515146102155760405162461bcd60e51b81526020600482015260146024820152732330b4b632b2103a379039b2b7321032ba3432b960611b60448201526064016100fb565b3460021461025c5760405162461bcd60e51b8152602060048201526014602482015273125b9d985b1a5908195d1a195c88185b5bdd5b9d60621b60448201526064016100fb565b60016002600082825461026f919061035f565b90915550506000546040516340c10f1960e01b8152326004820152600860248201526001600160a01b03909116906340c10f1990604401600060405180830381600087803b1580156102c057600080fd5b505af11580156102d4573d6000803e3d6000fd5b5050505050505050565b6000602082840312156102f057600080fd5b5035919050565b60008261031457634e487b7160e01b600052601260045260246000fd5b500690565b634e487b7160e01b600052601160045260246000fd5b8181038181111561034257610342610319565b92915050565b808202811582820484141761034257610342610319565b808201808211156103425761034261031956fea26469706673582212206c6685cdf8d126bb5ec78429d9681ab36033a360a2c622360f191a8bd9b3b5c964736f6c63430008140033",
+  "deployedBytecode": "0x60806040526004361061002d5760003560e01c8063d56d229d14610039578063dfa0c2d61461007557600080fd5b3661003457005b600080fd5b34801561004557600080fd5b50600054610059906001600160a01b031681565b6040516001600160a01b03909116815260200160405180910390f35b6100886100833660046102de565b61008a565b005b806000602060025461009c91906102f7565b6100a790601f61032f565b6100b2906008610348565b60015460ff90911b19915081168281146101045760405162461bcd60e51b815260206004820152600e60248201526d15dc9bdb99c81c185cdcdddbdc9960921b60448201526064015b60405180910390fd5b60023331101561014d5760405162461bcd60e51b8152602060048201526014602482015273496e73756666696369656e742062616c616e636560601b60448201526064016100fb565b604051339060009060019082818181858883f11593506101b3925050505760405162461bcd60e51b815260206004820152601c60248201527f49742073686f756c64206661696c20746f2073656e642065746865720000000060448201526064016100fb565b604051339060009060029082818181858883f19350505050151560011515146102155760405162461bcd60e51b81526020600482015260146024820152732330b4b632b2103a379039b2b7321032ba3432b960611b60448201526064016100fb565b3460021461025c5760405162461bcd60e51b8152602060048201526014602482015273125b9d985b1a5908195d1a195c88185b5bdd5b9d60621b60448201526064016100fb565b60016002600082825461026f919061035f565b90915550506000546040516340c10f1960e01b8152326004820152600860248201526001600160a01b03909116906340c10f1990604401600060405180830381600087803b1580156102c057600080fd5b505af11580156102d4573d6000803e3d6000fd5b5050505050505050565b6000602082840312156102f057600080fd5b5035919050565b60008261031457634e487b7160e01b600052601260045260246000fd5b500690565b634e487b7160e01b600052601160045260246000fd5b8181038181111561034257610342610319565b92915050565b808202811582820484141761034257610342610319565b808201808211156103425761034261031956fea26469706673582212206c6685cdf8d126bb5ec78429d9681ab36033a360a2c622360f191a8bd9b3b5c964736f6c63430008140033",
+  "devdoc": {
+    "kind": "dev",
+    "methods": {},
+    "version": 1
+  },
+  "userdoc": {
+    "kind": "user",
+    "methods": {},
+    "version": 1
+  },
+  "storageLayout": {
+    "storage": [
+      {
+        "astId": 5372,
+        "contract": "contracts/Challenge8.sol:Challenge8",
+        "label": "nftContract",
+        "offset": 0,
+        "slot": "0",
+        "type": "t_address"
+      },
+      {
+        "astId": 5374,
+        "contract": "contracts/Challenge8.sol:Challenge8",
+        "label": "password",
+        "offset": 0,
+        "slot": "1",
+        "type": "t_bytes32"
+      },
+      {
+        "astId": 5376,
+        "contract": "contracts/Challenge8.sol:Challenge8",
+        "label": "count",
+        "offset": 0,
+        "slot": "2",
+        "type": "t_uint256"
+      }
+    ],
+    "types": {
+      "t_address": {
+        "encoding": "inplace",
+        "label": "address",
+        "numberOfBytes": "20"
+      },
+      "t_bytes32": {
+        "encoding": "inplace",
+        "label": "bytes32",
+        "numberOfBytes": "32"
+      },
+      "t_uint256": {
+        "encoding": "inplace",
+        "label": "uint256",
+        "numberOfBytes": "32"
+      }
+    }
+  }
+}
