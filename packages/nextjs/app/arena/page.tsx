@@ -128,7 +128,7 @@ export default function ArenaPage() {
   }, []);
   const closeLog = useCallback(() => setStageMode("overview"), []);
 
-  const focused = useMemo(() => agents.find(a => a.id === focusedId)!, [agents, focusedId]);
+  const focused = useMemo(() => agents.find(a => a.id === focusedId), [agents, focusedId]);
   const ranked = useMemo(() => rankAgents(agents), [agents]);
   const totalSolved = useMemo(() => agents.reduce((n, a) => n + a.solved.length, 0), [agents]);
   // The race track already ranks everyone, so the standalone leaderboard/toasts step aside for it.
