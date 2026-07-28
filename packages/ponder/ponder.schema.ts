@@ -1,23 +1,38 @@
-import { createSchema } from "@ponder/core";
+import { index, onchainTable, relations } from "ponder";
 
-export default createSchema((p) => ({
-  Team: p.createTable({
-    id: p.hex(),
-    name: p.string().optional(),
-    size: p.int().optional(),
-    challenges: p.many("Challenge.ownerId"),
-    points: p.int(),
-    updated: p.int(),
-    sortOrder: p.bigint(),
+// GraphQL field names come from the exported variable name, so `team` serves `team` / `teams`.
+export const team = onchainTable("team", t => ({
+  id: t.hex().primaryKey(),
+  name: t.text(),
+  size: t.integer(),
+  points: t.integer().notNull(),
+  updated: t.integer().notNull(),
+  sortOrder: t.bigint().notNull(),
+}));
+
+export const teamRelations = relations(team, ({ many }) => ({
+  challenges: many(challenge),
+}));
+
+export const challenge = onchainTable(
+  "challenge",
+  t => ({
+    id: t.bigint().primaryKey(),
+    challengeId: t.bigint().notNull(),
+    tokenURI: t.text().notNull(),
+    points: t.integer().notNull(),
+    timestamp: t.integer().notNull(),
+    ownerId: t.hex().notNull(),
   }),
-  Challenge: p.createTable({
-    id: p.bigint(),
-    challengeId: p.bigint(),
-    tokenURI: p.string(),
-    points: p.int(),
-    timestamp: p.int(),
-    ownerId: p.hex().references("Team.id"),
+  table => ({
+    // Relations don't create indexes, and every team row resolves its challenges by ownerId.
+    ownerIdx: index().on(table.ownerId),
+  }),
+);
 
-    owner: p.one("ownerId"),
+export const challengeRelations = relations(challenge, ({ one }) => ({
+  owner: one(team, {
+    fields: [challenge.ownerId],
+    references: [team.id],
   }),
 }));
