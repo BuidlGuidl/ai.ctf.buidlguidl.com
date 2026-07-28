@@ -552,6 +552,8 @@ function RaceView({ ranked, onPick, flashes }: { ranked: Agent[]; onPick: (id: s
         <span className="w-5 shrink-0" />
         <span className="w-6 shrink-0" />
         <span className="w-44 shrink-0 text-[9px] tracking-widest text-[#00FBFF]/25">AGENT · MINTS →</span>
+        <span className="w-12 shrink-0 text-right text-[9px] tracking-widest text-[#00FBFF]/25">TOK</span>
+        <span className="w-14 shrink-0 text-right text-[9px] tracking-widest text-[#00FBFF]/25">COST</span>
         <div className="flex-1 flex gap-[3px]">
           {slots.map(k => (
             <span
@@ -587,6 +589,12 @@ function RaceView({ ranked, onPick, flashes }: { ranked: Agent[]; onPick: (id: s
           </span>
           <AgentBadge agent={a} />
           <span className="w-44 truncate text-sm font-bold text-white shrink-0">{a.handle}</span>
+          <span className="w-12 text-right text-[11px] tabular-nums shrink-0 text-[#00FBFF]/55">
+            {(a.tokens / 1000).toFixed(0)}k
+          </span>
+          <span className="w-14 text-right text-[11px] tabular-nums shrink-0 text-[#FFBE00]/70">
+            ${a.cost.toFixed(2)}
+          </span>
 
           {/* each square shows the flag number minted at that step; the next
               square is the challenge being worked, the rest are flags left */}
