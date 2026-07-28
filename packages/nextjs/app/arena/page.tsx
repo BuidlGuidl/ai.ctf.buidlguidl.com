@@ -38,7 +38,6 @@ type ChatMsg = {
   text: string;
   director?: boolean;
 };
-type Toast = { id: number; type: "flag" | "skill"; title: string; sub: string; color: string };
 
 let uid = 0;
 const nid = () => ++uid;
@@ -90,7 +89,6 @@ export default function ArenaPage() {
   const [lines, setLines] = useState<ConsoleLine[]>([]);
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [chat, setChat] = useState<ChatMsg[]>([]);
-  const [toasts, setToasts] = useState<Toast[]>([]);
   const [flashes, setFlashes] = useState<string[]>([]);
   const [openChallenge, setOpenChallenge] = useState<number | null>(null);
   const [clock, setClock] = useState(0);
@@ -130,14 +128,6 @@ export default function ArenaPage() {
   const focused = useMemo(() => agents.find(a => a.id === focusedId), [agents, focusedId]);
   const ranked = useMemo(() => rankAgents(agents), [agents]);
   const totalSolved = useMemo(() => agents.reduce((n, a) => n + a.solved.length, 0), [agents]);
-  // The race track already ranks everyone, so the standalone leaderboard/toasts step aside for it.
-  const raceIsStage = overviewTab === "race";
-
-  const pushToast = useCallback((t: Omit<Toast, "id">) => {
-    const id = nid();
-    setToasts(prev => [...prev, { ...t, id }].slice(-3));
-    setTimeout(() => setToasts(prev => prev.filter(x => x.id !== id)), 5200);
-  }, []);
 
   const pushFeed = useCallback((f: Omit<FeedItem, "id">) => {
     setFeed(prev => [{ ...f, id: nid() }, ...prev].slice(0, 40));
@@ -208,7 +198,6 @@ export default function ArenaPage() {
         }),
       );
       pushFlash(`${a.id}:${flagId}`);
-      pushToast({ type: "flag", title: `🏁 ${a.handle}`, sub: `captured flag · #${ch.id} ${ch.name}`, color: a.color });
       pushFeed({
         type: "flag",
         agentId: a.id,
@@ -262,7 +251,6 @@ export default function ArenaPage() {
         const a = list[Math.floor(Math.random() * list.length)];
         if (a && a.id !== focusRef.current) {
           const skill = SKILLS[Math.floor(Math.random() * SKILLS.length)];
-          pushToast({ type: "skill", title: `${a.handle}`, sub: `loaded skill » ${skill}`, color: a.color });
           pushFeed({ type: "skill", agentId: a.id, color: a.color, text: `${a.handle} loaded skill » ${skill}` });
         }
       }
@@ -286,7 +274,7 @@ export default function ArenaPage() {
       }
     }, 950);
     return () => clearInterval(t);
-  }, [phase, pushFeed, pushToast, pushChat, pushFlash]);
+  }, [phase, pushFeed, pushChat, pushFlash]);
 
   if (!mounted || !focused) {
     return (
@@ -317,9 +305,8 @@ export default function ArenaPage() {
             </div>
           </div>
 
-          {/* RIGHT COLUMN — leaderboard + unified arena stream; the observed agent's log takes over here */}
+          {/* RIGHT COLUMN — the unified arena stream; the observed agent's log takes over here */}
           <div className="w-[400px] flex flex-col min-h-0 min-w-0">
-            {!raceIsStage && <Leaderboard ranked={ranked} focusedId={focusedId} onPick={goFocus} />}
             {stageMode === "focus" ? (
               <AgentLog focused={focused} lines={lines} onClose={closeLog} />
             ) : (
@@ -328,8 +315,19 @@ export default function ArenaPage() {
           </div>
         </div>
 
-        {/* BOTTOM — the challenge board is fixed-size, so it runs full-width along the bottom */}
-        <ChallengeBoard agents={agents} focused={focused} onOpen={setOpenChallenge} />
+        {/* BOTTOM — full-width strip under both columns. Multiview fills its cards
+            with terminals and no standings, so the race track runs along the bottom
+            there; the race stage keeps the challenge board instead. */}
+        {overviewTab === "grid" ? (
+          <div className="shrink-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#010607]">
+            <SectionHead label="RACE" hint="click to observe" />
+            <div className="max-h-[42vh] overflow-y-auto console-scroll">
+              <RaceView ranked={ranked} onPick={goFocus} flashes={flashes} compact />
+            </div>
+          </div>
+        ) : (
+          <ChallengeBoard agents={agents} focused={focused} onOpen={setOpenChallenge} />
+        )}
       </div>
 
       {openChallenge !== null && (
@@ -341,8 +339,6 @@ export default function ArenaPage() {
         />
       )}
 
-      {/* the race track already flashes every capture, so toasts would only double up there */}
-      {!raceIsStage && <Toasts toasts={toasts} />}
       <ArenaStyles />
     </div>
   );
@@ -487,8 +483,22 @@ function OverviewStage({
   );
 }
 
-function RaceView({ ranked, onPick, flashes }: { ranked: Agent[]; onPick: (id: string) => void; flashes: string[] }) {
+// `compact` is the bottom-strip variant used under multiview: same track, tighter
+// rows and no harness badge so all ten agents fit without scrolling.
+function RaceView({
+  ranked,
+  onPick,
+  flashes,
+  compact,
+}: {
+  ranked: Agent[];
+  onPick: (id: string) => void;
+  flashes: string[];
+  compact?: boolean;
+}) {
   const total = CHALLENGES.length;
+  const rowGap = compact ? "gap-2" : "gap-3";
+  const cellH = compact ? "h-4" : "h-5";
   const done = (a: Agent) => a.solved.length >= total;
   // Columns are mint-order slots, not fixed challenges — slot k holds the k-th
   // flag an agent minted, so a row reads left-to-right as its capture history.
@@ -531,12 +541,14 @@ function RaceView({ ranked, onPick, flashes }: { ranked: Agent[]; onPick: (id: s
   }, [ranked]);
   useEffect(() => () => void (leadTimer.current && clearTimeout(leadTimer.current)), []);
   return (
-    <div className="p-3 space-y-1">
+    <div className={compact ? "p-2 space-y-[2px]" : "p-3 space-y-1"}>
       {/* ruler — one column per flag minted, in capture order */}
-      <div className="flex items-center gap-3 px-2 pb-1">
+      <div className={`flex items-center ${rowGap} px-2 pb-1`}>
         <span className="w-5 shrink-0" />
-        <span className="w-6 shrink-0" />
-        <span className="w-44 shrink-0 text-[9px] tracking-widest text-[#00FBFF]/25">AGENT · MINTS →</span>
+        {!compact && <span className="w-6 shrink-0" />}
+        <span className={`${compact ? "w-40" : "w-44"} shrink-0 text-[9px] tracking-widest text-[#00FBFF]/25`}>
+          AGENT · MINTS →
+        </span>
         <span className="w-12 shrink-0 text-right text-[9px] tracking-widest text-[#00FBFF]/25">TOK</span>
         <span className="w-14 shrink-0 text-right text-[9px] tracking-widest text-[#00FBFF]/25">COST</span>
         <div className="flex-1 flex gap-[3px]">
@@ -561,7 +573,9 @@ function RaceView({ ranked, onPick, flashes }: { ranked: Agent[]; onPick: (id: s
             else rowRefs.current.delete(a.id);
           }}
           onClick={() => onPick(a.id)}
-          className={`relative w-full flex items-center gap-3 px-2 py-1.5 rounded hover:bg-[#00FBFF]/5 will-change-transform text-left group ${
+          className={`relative w-full flex items-center ${rowGap} px-2 ${
+            compact ? "py-[2px]" : "py-1.5"
+          } rounded hover:bg-[#00FBFF]/5 will-change-transform text-left group ${
             leadTaker === a.id ? "lead-take" : ""
           }`}
         >
@@ -572,8 +586,13 @@ function RaceView({ ranked, onPick, flashes }: { ranked: Agent[]; onPick: (id: s
           >
             {i === 0 ? <span className={`inline-block ${leadTaker === a.id ? "crown-pop" : ""}`}>👑</span> : i + 1}
           </span>
-          <AgentBadge agent={a} />
-          <span className="w-44 truncate text-sm font-bold text-white shrink-0">{a.handle}</span>
+          {!compact && <AgentBadge agent={a} />}
+          <span
+            className={`${compact ? "w-40 text-xs" : "w-44 text-sm"} truncate font-bold text-white shrink-0`}
+            title={`${a.harness} + ${a.model}`}
+          >
+            {a.handle}
+          </span>
           <span className="w-12 text-right text-[11px] tabular-nums shrink-0 text-[#00FBFF]/55">
             {(a.tokens / 1000).toFixed(0)}k
           </span>
@@ -593,7 +612,7 @@ function RaceView({ ranked, onPick, flashes }: { ranked: Agent[]; onPick: (id: s
                   <span
                     key={k}
                     title={`#${flagId} ${ch?.name ?? ""} · minted ${k + 1} of ${total}`}
-                    className={`relative flex-1 h-5 rounded-[3px] border flex items-center justify-center text-[9px] font-bold tabular-nums transition-colors ${
+                    className={`relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center text-[9px] font-bold tabular-nums transition-colors ${
                       flashing ? "flag-pop" : ""
                     }`}
                     style={{ background: a.color, borderColor: a.color, color: "#00181c" }}
@@ -609,7 +628,7 @@ function RaceView({ ranked, onPick, flashes }: { ranked: Agent[]; onPick: (id: s
                   <span
                     key={k}
                     title={`working on #${a.current} ${ch?.name ?? ""}`}
-                    className="relative flex-1 h-5 rounded-[3px] border flex items-center justify-center text-[9px] font-bold tabular-nums cell-working"
+                    className={`relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center text-[9px] font-bold tabular-nums cell-working`}
                     style={{ background: `${dc}1f`, borderColor: dc, color: dc }}
                   >
                     {a.current}
@@ -620,7 +639,7 @@ function RaceView({ ranked, onPick, flashes }: { ranked: Agent[]; onPick: (id: s
                 <span
                   key={k}
                   title="flag not minted yet"
-                  className="relative flex-1 h-5 rounded-[3px] border"
+                  className={`relative flex-1 ${cellH} rounded-[3px] border`}
                   style={{ background: "#00fbff08", borderColor: "#00fbff1a" }}
                 />
               );
@@ -677,77 +696,6 @@ function GridView({ ranked, onPick }: { ranked: Agent[]; onPick: (id: string) =>
           </button>
         );
       })}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------- Leaderboard */
-
-function Leaderboard({
-  ranked,
-  focusedId,
-  onPick,
-}: {
-  ranked: Agent[];
-  focusedId: string;
-  onPick: (id: string) => void;
-}) {
-  return (
-    <div className="flex-1 min-h-0 flex flex-col border-b border-[#00FBFF]/20">
-      <SectionHead label="LEADERBOARD" hint="click to observe" />
-      <div className="flex-1 min-h-0 overflow-y-auto console-scroll">
-        {ranked.map((a, i) => {
-          const active = a.id === focusedId;
-          return (
-            <button
-              key={a.id}
-              onClick={() => onPick(a.id)}
-              className={`w-full flex items-center gap-2 px-3 py-2 text-left border-b border-[#00FBFF]/5 transition ${
-                active ? "bg-[#00FBFF]/10" : "hover:bg-[#00FBFF]/5"
-              }`}
-            >
-              <span
-                className={`w-6 text-center text-sm font-bold tabular-nums ${
-                  i === 0 ? "text-[#FFBE00]" : i < 3 ? "text-[#00ff9c]" : "text-[#00FBFF]/40"
-                }`}
-              >
-                {i + 1}
-              </span>
-              <AgentBadge agent={a} />
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-bold text-white truncate">{a.handle}</div>
-                <div className="flex items-center gap-1.5 mt-1">
-                  {/* one square per challenge */}
-                  <div className="flex gap-[2px] flex-1">
-                    {CHALLENGES.map(c => {
-                      const captured = a.solved.includes(c.id);
-                      const working = !captured && a.current === c.id;
-                      return (
-                        <span
-                          key={c.id}
-                          title={`#${c.id} ${c.name}${captured ? " · captured" : working ? " · working on it" : ""}`}
-                          className="flex-1 h-2 rounded-sm"
-                          style={{
-                            background: captured
-                              ? a.color
-                              : working
-                              ? `${DIFFICULTY_COLOR[c.difficulty]}66`
-                              : "#00FBFF12",
-                          }}
-                        />
-                      );
-                    })}
-                  </div>
-                  <span className="text-[10px] text-[#00FBFF]/50 tabular-nums w-8 text-right shrink-0">
-                    {a.solved.length}/{CHALLENGES.length}
-                  </span>
-                </div>
-              </div>
-              <StatusDot status={a.status} />
-            </button>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -1091,32 +1039,6 @@ function MentionText({ text }: { text: string }) {
   );
 }
 
-/* ---------------------------------------------------------------- Toasts */
-
-function Toasts({ toasts }: { toasts: Toast[] }) {
-  return (
-    <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[80] flex flex-col gap-2 items-center pointer-events-none">
-      {toasts.map(t => (
-        <div
-          key={t.id}
-          className="toast-in min-w-[280px] px-4 py-3 rounded-lg border bg-[#020a0c]/95 shadow-2xl backdrop-blur"
-          style={{ borderColor: t.color }}
-        >
-          <div className="flex items-center gap-2">
-            <span className="text-lg" style={{ color: t.type === "flag" ? "#00ff9c" : "#c084fc" }}>
-              {t.type === "flag" ? "🏁" : "⚡"}
-            </span>
-            <span className="font-bold text-white text-sm">{t.title}</span>
-          </div>
-          <div className="text-xs mt-1" style={{ color: t.color }}>
-            {t.sub}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 /* ----------------------------------------------------------------- Shared */
 
 function AgentBadge({ agent }: { agent: Agent }) {
@@ -1129,19 +1051,6 @@ function AgentBadge({ agent }: { agent: Agent }) {
       {HARNESS_GLYPH[agent.harness] || "●"}
     </span>
   );
-}
-
-function StatusDot({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    working: "#00FBFF",
-    thinking: "#c084fc",
-    exploiting: "#00ff9c",
-    stuck: "#FF5861",
-    submitting: "#FFBE00",
-    idle: "#666",
-  };
-  const c = map[status] || "#00FBFF";
-  return <span className="w-2 h-2 rounded-full shrink-0 animate-pulse" style={{ background: c }} title={status} />;
 }
 
 function SectionHead({ label, hint }: { label: string; hint?: string }) {
