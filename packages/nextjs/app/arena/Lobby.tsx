@@ -94,7 +94,11 @@ export function ArenaLobby({ agents, onLaunch }: { agents: Agent[]; onLaunch: ()
 
   const addresses = useMemo(() => agents.map(a => a.address), [agents]);
   const fundingActive = phase === "funding" || phase === "ready" || phase === "launching";
-  const { balances, isError: balancesUnreachable } = useAgentBalances(addresses, fundingActive);
+  const {
+    balances,
+    isError: balancesUnreachable,
+    refetch: refetchBalances,
+  } = useAgentBalances(addresses, fundingActive);
 
   const required = useMemo(() => {
     try {
@@ -104,8 +108,6 @@ export function ArenaLobby({ agents, onLaunch }: { agents: Agent[]; onLaunch: ()
     }
   }, [amount]);
 
-  const balancesRef = useRef(balances);
-  balancesRef.current = balances;
   const requiredRef = useRef(required);
   requiredRef.current = required;
 
@@ -120,14 +122,27 @@ export function ArenaLobby({ agents, onLaunch }: { agents: Agent[]; onLaunch: ()
     if (!target) return;
     setFunding(true);
     try {
+      // Read balances before deciding what to send. The poll only refreshes every
+      // 2s and the button re-enables the moment a run ends, so resuming inside
+      // that window would see stale zeroes and double-send to funded agents.
+      const fresh = await refetchBalances();
+      if (fresh.isError || !fresh.data) {
+        pushLog("cannot read agent balances — is the local chain up?", RED);
+        return;
+      }
+      const current = fresh.data;
       for (const a of agents) {
         // Top up the shortfall rather than the full amount, so resuming after a
         // failure — or raising the target mid-run — never overshoots.
-        const shortfall = target - (balancesRef.current[a.address] ?? 0n);
+        const shortfall = target - (current[a.address] ?? 0n);
         if (shortfall <= 0n) continue;
         pushLog(`funding ${a.model} · ${shortAddress(a.address)}…`, YELLOW);
         try {
-          await transactor({ to: a.address, value: shortfall });
+          // useTransactor resolves undefined (without throwing) when it has no
+          // wallet client — reporting that as funded would log ten green ticks
+          // for zero ETH moved.
+          const hash = await transactor({ to: a.address, value: shortfall });
+          if (!hash) throw new Error("no transaction hash");
           pushLog(`${a.model} funded ✓`, GREEN);
         } catch {
           // A rejection means the director stepped away from the wallet — stop
@@ -139,7 +154,7 @@ export function ArenaLobby({ agents, onLaunch }: { agents: Agent[]; onLaunch: ()
     } finally {
       setFunding(false);
     }
-  }, [agents, transactor, pushLog]);
+  }, [agents, transactor, pushLog, refetchBalances]);
 
   const skipFunding = useCallback(() => {
     setPhase("ready");
@@ -485,15 +500,18 @@ function FundingBoard({
         </div>
       )}
 
-      {/* Funding is impossible off a local chain, so the skip escape must be
-          reachable whether or not a wallet is connected — otherwise the lobby
-          dead-ends here and the match can never start. */}
-      {!isLocalChain && (
+      {/* The skip escape has to appear whenever funding cannot complete, whether
+          or not a wallet is connected: off a local chain it is impossible by
+          design, and with the node unreachable the balances never reach the
+          target, so without this the lobby dead-ends and the match never starts. */}
+      {(!isLocalChain || balancesUnreachable) && (
         <div className="mb-3 flex flex-wrap items-center gap-3 px-3 py-2 rounded border border-[#00FBFF]/25 bg-[#00FBFF]/5 text-xs text-[#00FBFF]/60">
           <span>
-            {isConnected
+            {!isLocalChain && isConnected
               ? "funding is only available on a local chain — these wallets are generated per run and their keys are discarded, so funds sent on a real network would be unrecoverable"
-              : "connect a wallet on a local chain to fund the agent wallets"}
+              : !isLocalChain
+              ? "connect a wallet on a local chain to fund the agent wallets"
+              : "the local chain is unreachable, so funding cannot complete — start a node with `yarn chain` or skip"}
           </span>
           {!locked && (
             <button

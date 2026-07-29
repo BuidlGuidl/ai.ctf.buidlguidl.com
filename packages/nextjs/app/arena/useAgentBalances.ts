@@ -17,7 +17,7 @@ export function useAgentBalances(addresses: Address[], enabled = true) {
   // Errors are not swallowed into a 0n balance: an unreachable node would then be
   // indistinguishable from ten genuinely empty wallets, leaving the director
   // staring at a board that never moves.
-  const { data, isError } = useQuery({
+  const { data, isError, refetch } = useQuery({
     queryKey: ["arenaAgentBalances", addresses],
     enabled: enabled && addresses.length > 0,
     refetchInterval: 2000,
@@ -28,7 +28,9 @@ export function useAgentBalances(addresses: Address[], enabled = true) {
     },
   });
 
-  return { balances: data ?? {}, isError };
+  // `refetch` is exposed so a sender can read balances on demand rather than
+  // trusting whatever the 2s poll last wrote — see fundAll in Lobby.tsx.
+  return { balances: data ?? {}, isError, refetch };
 }
 
 export function fundingStatus(balance: bigint | undefined, required: bigint): FundingStatus {

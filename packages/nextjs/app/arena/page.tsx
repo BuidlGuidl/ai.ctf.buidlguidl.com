@@ -5,27 +5,30 @@ import { ArenaLobby } from "./Lobby";
 import {
   AGENT_COUNT,
   Agent,
+  AgentStatus,
   CHALLENGES,
   CHAT_LINES,
   CHAT_OPENERS_DIRECTED,
   CHAT_REPLIES,
   Challenge,
+  ConsoleEntry,
+  ConsoleEvent,
   DIFFICULTY_COLOR,
   DIRECTOR_REACTIONS,
   HARNESS_GLYPH,
   SKILLS,
   buildAgents,
-  makeLine,
+  makeEvent,
+  makeToolResult,
   rollPreview,
   seedConsole,
 } from "./mockData";
 
 export const dynamic = "force-dynamic";
 
-type ConsoleLine = { kind: string; text: string; id: number };
 type FeedItem = {
   id: number;
-  type: "flag" | "skill" | "chat" | "join" | "stuck";
+  type: "flag" | "skill" | "blocked" | "resumed" | "done";
   agentId: string;
   color: string;
   text: string;
@@ -61,6 +64,27 @@ function genAgentChat(list: Agent[], last: Agent | null): { msg: Omit<ChatMsg, "
   return wrap(pick(CHAT_LINES));
 }
 
+// Fold one console event into the observed agent's log. A tool result attaches
+// to the LATEST unresolved call with the same id rather than the first, because
+// harness call ids reset per process — first-match pairing could hand a dangling
+// call from a crashed turn someone else's result. An unmatched or duplicate
+// result stays a standalone row instead of being dropped.
+function ingestConsole(entries: ConsoleEntry[], event: ConsoleEvent, id: number): ConsoleEntry[] {
+  if (event.kind === "tool-result") {
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const entry = entries[i];
+      if (entry.kind === "tool" && entry.toolCallId === event.toolCallId && !entry.result) {
+        const next = [...entries];
+        next[i] = { ...entry, result: { ok: event.ok, detail: event.text } };
+        return next;
+      }
+    }
+    const orphan: ConsoleEntry = { id, kind: "tool-result", text: event.text, toolCallId: event.toolCallId };
+    return [...entries, orphan].slice(-70);
+  }
+  return [...entries, { ...event, id }].slice(-70);
+}
+
 const fmtClock = (s: number) => {
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
@@ -86,7 +110,7 @@ const nextTarget = (solved: number[]): number => {
 export default function ArenaPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [focusedId, setFocusedId] = useState<string>("agent-0");
-  const [lines, setLines] = useState<ConsoleLine[]>([]);
+  const [lines, setLines] = useState<ConsoleEntry[]>([]);
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [chat, setChat] = useState<ChatMsg[]>([]);
   const [flashes, setFlashes] = useState<string[]>([]);
@@ -108,6 +132,8 @@ export default function ArenaPage() {
   const focusRef = useRef(focusedId);
   const clockRef = useRef(clock);
   const lastSpeakerRef = useRef<Agent | null>(null);
+  // Tool calls the observed agent is still waiting on, oldest first.
+  const pendingCallsRef = useRef<string[]>([]);
   agentsRef.current = agents;
   focusRef.current = focusedId;
   clockRef.current = clock;
@@ -165,6 +191,7 @@ export default function ArenaPage() {
   useEffect(() => {
     const a = agentsRef.current.find(x => x.id === focusedId);
     if (!a) return;
+    pendingCallsRef.current = [];
     setLines(seedConsole(a).map(l => ({ ...l, id: nid() })));
   }, [focusedId]);
 
@@ -192,7 +219,10 @@ export default function ArenaPage() {
             ...x,
             solved,
             current: finished ? x.current : nextTarget(solved),
-            status: finished ? "idle" : "exploiting",
+            // Callers pick from the tick's opening snapshot, so an agent blocked
+            // earlier in the same tick can still land here — clearing it would
+            // leave a blocked row in the feed that never resolves.
+            status: finished ? "done" : x.status === "blocked" ? "blocked" : "working",
             firstBlood: x.solved.length === 0 ? fmtClock(clockRef.current) : x.firstBlood,
           };
         }),
@@ -204,7 +234,13 @@ export default function ArenaPage() {
         color: a.color,
         text: `${a.handle} captured Challenge ${flagId} · ${ch.name}`,
       });
+      if (a.solved.length + 1 >= CHALLENGES.length) {
+        pushFeed({ type: "done", agentId: a.id, color: a.color, text: `${a.handle} cleared the board and exited` });
+      }
     };
+
+    const setStatus = (id: string, status: AgentStatus) =>
+      setAgents(prev => prev.map(x => (x.id === id ? { ...x, status } : x)));
 
     let tick = 0;
     const t = setInterval(() => {
@@ -213,26 +249,61 @@ export default function ArenaPage() {
 
       // WARM-UP — flag #1 is the gate, so clear it for everyone in a quick burst
       // before the any-order race really gets going.
-      const needFirst = list.filter(a => a.status !== "idle" && !a.solved.includes(1));
+      const needFirst = list.filter(a => a.status === "working" && !a.solved.includes(1));
       if (needFirst.length) {
         needFirst.slice(0, 4).forEach(a => mint(a, 1));
       }
 
-      // stream a console line for the focused agent
+      // BLOCKED — the agent is sitting on a permission prompt. The arena runs a
+      // dontAsk policy, so this should never fire: when it does, something broke
+      // on the harness side and the board has to say so.
+      if (tick % 17 === 0 && Math.random() < 0.3) {
+        const stuck = pick(list.filter(a => a.status === "working"));
+        if (stuck) {
+          setStatus(stuck.id, "blocked");
+          pushFeed({
+            type: "blocked",
+            agentId: stuck.id,
+            color: stuck.color,
+            text: `${stuck.handle} is blocked on a permission prompt`,
+          });
+        }
+      }
+      list
+        .filter(a => a.status === "blocked" && Math.random() < 0.25)
+        .forEach(a => {
+          setStatus(a.id, "working");
+          pushFeed({ type: "resumed", agentId: a.id, color: a.color, text: `${a.handle} unblocked, back to work` });
+        });
+
+      // stream console events for the focused agent, pairing tool results back
+      // onto their call. Ids are minted out here so a StrictMode double-invoke of
+      // the updater can't consume a pending call twice.
       const foc = list.find(a => a.id === focusRef.current);
-      if (foc) {
+      if (foc && foc.status === "working") {
         const tag = CHALLENGES[foc.current - 1]?.tag || "default";
-        const line = makeLine(foc, tag);
-        setLines(prev => [...prev, { ...line, id: nid() }].slice(-70));
-        if (line.kind === "skill") {
-          pushFeed({ type: "skill", agentId: foc.id, color: foc.color, text: `${foc.handle} ${line.text}` });
+        const event = makeEvent(foc, tag);
+        const batch: { event: ConsoleEvent; id: number }[] = [{ event, id: nid() }];
+        if (event.kind === "tool") pendingCallsRef.current.push(event.toolCallId);
+
+        // Settle an outstanding call — but not always, so some rows sit on ⟳ for
+        // a beat the way a real tool does.
+        const pending = pendingCallsRef.current;
+        if (pending.length && (pending.length >= 3 || Math.random() < 0.6)) {
+          const result = makeToolResult(pending.shift() as string);
+          if (result) batch.push({ event: result, id: nid() });
+        }
+
+        setLines(prev => batch.reduce((acc, b) => ingestConsole(acc, b.event, b.id), prev));
+        if (event.kind === "skill") {
+          pushFeed({ type: "skill", agentId: foc.id, color: foc.color, text: `${foc.handle} ${event.text}` });
         }
       }
 
-      // token / cost burn + rolling mini-terminal preview for busy agents
+      // token / cost burn + rolling mini-terminal preview for working agents
       setAgents(prev =>
         prev.map(a =>
-          a.status === "idle"
+          a.status !== "working"
             ? a
             : {
                 ...a,
@@ -267,7 +338,7 @@ export default function ArenaPage() {
       // whatever they're on is what gets captured.
       if (tick % 6 === 0) {
         const candidates = list.filter(
-          a => a.solved.includes(1) && a.solved.length < CHALLENGES.length && a.status !== "idle",
+          a => a.solved.includes(1) && a.solved.length < CHALLENGES.length && a.status === "working",
         );
         const a = candidates[Math.floor(Math.random() * candidates.length)];
         if (a) mint(a, a.current);
@@ -403,7 +474,7 @@ function StageTabs({ tab, onTab }: { tab: OverviewTab; onTab: (t: OverviewTab) =
 
 // The observer console for one agent — lives in the right column so the wide
 // shot behind it keeps running.
-function AgentLog({ focused, lines, onClose }: { focused: Agent; lines: ConsoleLine[]; onClose: () => void }) {
+function AgentLog({ focused, lines, onClose }: { focused: Agent; lines: ConsoleEntry[]; onClose: () => void }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -415,9 +486,11 @@ function AgentLog({ focused, lines, onClose }: { focused: Agent; lines: ConsoleL
     <div className="flex-1 min-h-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#020a0c]">
       <div className="flex items-center gap-2 px-3 h-9 border-b border-[#00FBFF]/15 bg-[#00141733] shrink-0 text-xs">
         <AgentBadge agent={focused} />
-        <span className="text-sm font-bold text-white truncate">{focused.handle}</span>
+        <span className="flex-1 min-w-0 text-sm font-bold text-white truncate">{focused.handle}</span>
+        <StatusChip status={focused.status} />
         <span
-          className="px-1.5 py-0.5 rounded font-bold shrink-0 text-[10px]"
+          className="px-1.5 py-0.5 rounded font-bold shrink-0 text-[10px] max-w-[110px] truncate"
+          title={`#${ch.id} ${ch.name}`}
           style={{ color: DIFFICULTY_COLOR[ch.difficulty], border: `1px solid ${DIFFICULTY_COLOR[ch.difficulty]}55` }}
         >
           #{ch.id} {ch.name}
@@ -447,17 +520,38 @@ function AgentLog({ focused, lines, onClose }: { focused: Agent; lines: ConsoleL
   );
 }
 
-function ConsoleRow({ line }: { line: ConsoleLine }) {
+// A tool is one row that starts running and settles to ok/fail, keeping both the
+// command and its output — the call and the result are separate events upstream,
+// paired here by `toolCallId`.
+function ConsoleRow({ line }: { line: ConsoleEntry }) {
   if (line.kind === "think") return <div className="text-[#7fd8dd] italic">· {line.text}</div>;
-  if (line.kind === "tool")
-    return (
-      <div className="text-[#00FBFF]">
-        <span className="text-[#00ff9c]">$</span> {line.text}
-      </div>
-    );
   if (line.kind === "skill") return <div className="text-[#c084fc] font-bold">⚡ {line.text}</div>;
   if (line.kind === "flag") return <div className="text-[#00ff9c] font-bold">🏁 {line.text}</div>;
-  return <div className="text-[#00FBFF]/55 pl-3">{line.text}</div>;
+  if (line.kind === "tool") {
+    const state = !line.result ? "running" : line.result.ok ? "ok" : "fail";
+    const color = state === "running" ? "#FFBE00" : state === "ok" ? "#00ff9c" : "#FF5861";
+    return (
+      <div>
+        <div className="text-[#00FBFF]">
+          <span
+            className={state === "running" ? "animate-pulse" : ""}
+            style={{ color }}
+            title={`${line.tool} ${state}`}
+          >
+            {state === "running" ? "⟳" : state === "ok" ? "✓" : "✗"}
+          </span>{" "}
+          <span className="text-[#00ff9c]">$</span> {line.text}
+        </div>
+        {line.result && (
+          <div className={`pl-4 break-all ${state === "fail" ? "text-[#FF5861]/70" : "text-[#00FBFF]/55"}`}>
+            → {line.result.detail}
+          </div>
+        )}
+      </div>
+    );
+  }
+  // A result with no matching call — kept rather than dropped, same as upstream.
+  return <div className="text-[#00FBFF]/55 pl-4 break-all">→ {line.text}</div>;
 }
 
 /* ------------------------------------------------------------ OverviewStage */
@@ -545,6 +639,7 @@ function RaceView({
       {/* ruler — one column per flag minted, in capture order */}
       <div className={`flex items-center ${rowGap} px-2 pb-1`}>
         <span className="w-5 shrink-0" />
+        <span className="w-3 shrink-0" />
         {!compact && <span className="w-6 shrink-0" />}
         <span className={`${compact ? "w-40" : "w-44"} shrink-0 text-[9px] tracking-widest text-[#00FBFF]/25`}>
           AGENT · MINTS →
@@ -586,6 +681,7 @@ function RaceView({
           >
             {i === 0 ? <span className={`inline-block ${leadTaker === a.id ? "crown-pop" : ""}`}>👑</span> : i + 1}
           </span>
+          <StatusDot status={a.status} />
           {!compact && <AgentBadge agent={a} />}
           <span
             className={`${compact ? "w-40 text-xs" : "w-44 text-sm"} truncate font-bold text-white shrink-0`}
@@ -627,8 +723,14 @@ function RaceView({
                 return (
                   <span
                     key={k}
-                    title={`working on #${a.current} ${ch?.name ?? ""}`}
-                    className={`relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center text-[9px] font-bold tabular-nums cell-working`}
+                    title={
+                      a.status === "working"
+                        ? `working on #${a.current} ${ch?.name ?? ""}`
+                        : `#${a.current} ${ch?.name ?? ""} — ${STATUS_STYLE[a.status].label}`
+                    }
+                    className={`relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center text-[9px] font-bold tabular-nums ${
+                      a.status === "working" ? "cell-working" : "opacity-40"
+                    }`}
                     style={{ background: `${dc}1f`, borderColor: dc, color: dc }}
                   >
                     {a.current}
@@ -664,11 +766,14 @@ function GridView({ ranked, onPick }: { ranked: Agent[]; onPick: (id: string) =>
           <button
             key={a.id}
             onClick={() => onPick(a.id)}
-            className="min-h-0 flex flex-col text-left rounded border border-[#00FBFF]/15 bg-[#00090b] hover:border-[#00FBFF]/50 transition overflow-hidden group"
+            className={`min-h-0 flex flex-col text-left rounded border bg-[#00090b] hover:border-[#00FBFF]/50 transition overflow-hidden group ${
+              a.status === "blocked" ? "border-[#FFBE00]/60" : "border-[#00FBFF]/15"
+            }`}
           >
             <div className="flex items-center gap-1.5 px-2 h-8 shrink-0 border-b border-[#00FBFF]/10 bg-[#001417]">
               <AgentBadge agent={a} />
               <span className="text-[13px] font-bold text-white truncate flex-1">{a.handle}</span>
+              <StatusDot status={a.status} />
             </div>
             <div className="flex items-center gap-2 px-2 h-6 shrink-0 text-[11px] border-b border-[#00FBFF]/[0.07] bg-[#000d0f]">
               <span className="truncate" style={{ color: DIFFICULTY_COLOR[ch.difficulty] }}>
@@ -773,7 +878,9 @@ function ChallengeDetails({
   }, [onClose]);
 
   const cleared = agents.filter(a => a.solved.includes(challenge.id));
-  const onIt = agents.filter(a => !a.solved.includes(challenge.id) && a.current === challenge.id);
+  const onIt = agents.filter(
+    a => !a.solved.includes(challenge.id) && a.current === challenge.id && a.status === "working",
+  );
   const dc = DIFFICULTY_COLOR[challenge.difficulty];
 
   const AgentChips = ({ list, empty }: { list: Agent[]; empty: string }) =>
@@ -918,9 +1025,13 @@ function ArenaStream({ feed, chat, onSend }: { feed: FeedItem[]; chat: ChatMsg[]
 
   const rows = merged.filter(r => filter === "all" || r.group === filter);
 
+  // Follow on the newest row's id, not the row count: feed and chat are capped
+  // (40 / 60), so once both saturate the count stops changing while rows keep
+  // arriving — keying on length would strand the viewport for the rest of the run.
+  const newestRowId = rows.length ? rows[rows.length - 1].id : 0;
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [rows.length]);
+  }, [newestRowId]);
 
   const submit = () => {
     onSend(draft);
@@ -977,16 +1088,16 @@ function ArenaStream({ feed, chat, onSend }: { feed: FeedItem[]; chat: ChatMsg[]
   );
 }
 
+const FEED_STYLE: Record<FeedItem["type"], { icon: string; cls: string }> = {
+  flag: { icon: "🏁", cls: "text-[#00ff9c] font-bold" },
+  skill: { icon: "⚡", cls: "text-[#c084fc]" },
+  blocked: { icon: "⚠", cls: "text-[#FFBE00] font-bold" },
+  resumed: { icon: "▶", cls: "text-[#00FBFF]/70" },
+  done: { icon: "◆", cls: "text-[#7fd8dd] font-bold" },
+};
+
 function FeedRow({ item }: { item: FeedItem }) {
-  const icon = item.type === "flag" ? "🏁" : item.type === "skill" ? "⚡" : item.type === "stuck" ? "⚠" : "💬";
-  const cls =
-    item.type === "flag"
-      ? "text-[#00ff9c] font-bold"
-      : item.type === "skill"
-      ? "text-[#c084fc]"
-      : item.type === "stuck"
-      ? "text-[#FFBE00]"
-      : "text-[#00FBFF]/70";
+  const { icon, cls } = FEED_STYLE[item.type] ?? { icon: "💬", cls: "text-[#00FBFF]/70" };
   return (
     <div className="flex items-start gap-2 feed-in">
       <span className="w-2 h-2 mt-1 rounded-sm shrink-0" style={{ background: item.color }} />
@@ -1040,6 +1151,48 @@ function MentionText({ text }: { text: string }) {
 }
 
 /* ----------------------------------------------------------------- Shared */
+
+// `blocked` and `done` are the two the director has to be able to spot without
+// opening a close-up, so both get a glyph and a colour of their own.
+const STATUS_STYLE: Record<AgentStatus, { glyph: string; color: string; label: string }> = {
+  working: { glyph: "▶", color: "#00ff9c", label: "working" },
+  idle: { glyph: "•", color: "#3d7c80", label: "idle — alive, nothing in flight" },
+  blocked: { glyph: "⚠", color: "#FFBE00", label: "blocked — waiting on a permission prompt" },
+  done: { glyph: "◆", color: "#7fd8dd", label: "done — the arena consumed its exit" },
+};
+
+function StatusDot({ status }: { status: AgentStatus }) {
+  const s = STATUS_STYLE[status];
+  return (
+    <span
+      title={s.label}
+      className={`w-3 shrink-0 text-center text-[10px] leading-none ${status === "blocked" ? "blocked-pulse" : ""}`}
+      style={{ color: s.color }}
+    >
+      {s.glyph}
+    </span>
+  );
+}
+
+// `working` and `idle` are the ambient states, so the glyph carries them and the
+// header keeps its width for the handle. The two that mean something happened
+// get the word spelled out.
+function StatusChip({ status }: { status: AgentStatus }) {
+  const s = STATUS_STYLE[status];
+  const loud = status === "blocked" || status === "done";
+  return (
+    <span
+      title={s.label}
+      className={`px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider shrink-0 ${
+        status === "blocked" ? "blocked-pulse" : ""
+      }`}
+      style={{ color: s.color, border: `1px solid ${s.color}55`, background: `${s.color}12` }}
+    >
+      {s.glyph}
+      {loud && ` ${status}`}
+    </span>
+  );
+}
 
 function AgentBadge({ agent }: { agent: Agent }) {
   return (
@@ -1179,6 +1332,18 @@ function ArenaStyles() {
         100% {
           transform: scale(1) rotate(0);
           opacity: 1;
+        }
+      }
+      .blocked-pulse {
+        animation: blockedPulse 1.4s ease-in-out infinite;
+      }
+      @keyframes blockedPulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.35;
         }
       }
       .cell-working {

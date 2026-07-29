@@ -19,7 +19,11 @@ export interface AgentModel {
   short: string; // 2-3 char monogram
 }
 
-export type AgentStatus = "working" | "thinking" | "exploiting" | "stuck" | "submitting" | "idle";
+// The four statuses the backend can actually observe (EntrantStatus in the
+// arena contract): `blocked` is an agent sitting on a permission prompt, `done`
+// is the arena having consumed its exit. Anything richer — thinking, exploiting,
+// submitting — has no honest source, so the UI derives it from events instead.
+export type AgentStatus = "working" | "idle" | "blocked" | "done";
 
 export interface Agent {
   id: string;
@@ -269,9 +273,27 @@ export const DIFFICULTY_COLOR: Record<Difficulty, string> = {
   insane: "#FF5861",
 };
 
-// ---- Console line generators (observer mode) --------------------------------
+// ---- Console event generators (observer mode) -------------------------------
+//
+// Shaped like the backend's arena stream: a tool call and its result arrive as
+// two separate events tied by `toolCallId`, and the console pairs them back into
+// a single entry that goes running → ok/fail.
 
-type Line = { kind: "think" | "tool" | "output" | "skill" | "flag" | "chat"; text: string };
+export type ConsoleEvent =
+  | { kind: "think" | "skill" | "flag" | "message"; text: string }
+  | { kind: "tool"; tool: string; text: string; toolCallId: string }
+  | { kind: "tool-result"; toolCallId: string; ok: boolean; text: string };
+
+export interface ConsoleEntry {
+  id: number;
+  kind: ConsoleEvent["kind"];
+  text: string;
+  tool?: string;
+  toolCallId?: string;
+  result?: { ok: boolean; detail: string };
+}
+
+const pick = <T>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
 
 const THINK: Record<string, string[]> = {
   default: [
@@ -306,68 +328,159 @@ const THINK: Record<string, string[]> = {
   assembly: ["mload reads 32 bytes from that offset, not the length", "counting words, not bytes — that's the trick"],
 };
 
-const TOOL = [
-  "cast call 0x9f..2a 'flag()(uint256)'",
-  "forge test --match-test testExploit -vvvv",
-  "cast storage 0x9f..2a 2",
-  "cast send 0x9f..2a 'attack()' --private-key $PK",
-  "cast sig 'registerAgent(uint256)'",
-  "cast rpc eth_getStorageAt 0x9f..2a 0x1",
-  "python3 build_merkle_proof.py --leaf $ADDR",
-  "cast abi-encode 'f(address,uint256)' $ADDR 1",
-  "forge script Exploit --broadcast",
-];
-
-const OUTPUT = [
-  "→ 0x0000000000000000000000000000000000000000000000000000000000000000",
-  "→ [PASS] testExploit() (gas: 84213)",
-  "→ tx 0x4c...e1 mined in block 18,442,910",
-  "→ revert: Already registered",
-  "→ balance drained: 12.4 ETH",
-  "→ proof verified ✓",
-  "→ selector = 0x7a2b0f11",
-];
-
-export function makeLine(agent: Agent, challengeTag: string): Line {
-  const roll = Math.random();
-  if (roll < 0.08) {
-    return { kind: "skill", text: `loaded skill » ${SKILLS[Math.floor(Math.random() * SKILLS.length)]}` };
-  }
-  if (roll < 0.42) {
-    const pool = THINK[challengeTag] || THINK.default;
-    return { kind: "think", text: pool[Math.floor(Math.random() * pool.length)] };
-  }
-  if (roll < 0.72) {
-    return { kind: "tool", text: TOOL[Math.floor(Math.random() * TOOL.length)] };
-  }
-  return { kind: "output", text: OUTPUT[Math.floor(Math.random() * OUTPUT.length)] };
+// Each call carries the output it would produce, so a paired entry reads as one
+// coherent command instead of a command with someone else's output under it.
+interface ToolCall {
+  tool: string;
+  detail: string;
+  ok: string;
+  fail: string;
 }
 
-export function previewLine(tag: string): string {
-  const r = Math.random();
-  if (r < 0.4) {
-    const pool = THINK[tag] || THINK.default;
-    return "· " + pool[Math.floor(Math.random() * pool.length)];
+const TOOL_CALLS: ToolCall[] = [
+  {
+    tool: "cast",
+    detail: "cast call 0x9f..2a 'flag()(uint256)'",
+    ok: "0x0000000000000000000000000000000000000000000000000000000000000000",
+    fail: "server returned an error response: execution reverted",
+  },
+  {
+    tool: "forge",
+    detail: "forge test --match-test testExploit -vvvv",
+    ok: "[PASS] testExploit() (gas: 84213)",
+    fail: "[FAIL. Reason: assertion failed] testExploit()",
+  },
+  {
+    tool: "cast",
+    detail: "cast storage 0x9f..2a 2",
+    ok: "0x000000000000000000000000000000000000000000000000000000000000002a",
+    fail: "error: slot 2 is empty",
+  },
+  {
+    tool: "cast",
+    detail: "cast send 0x9f..2a 'attack()' --private-key $PK",
+    ok: "tx 0x4c...e1 mined in block 18,442,910",
+    fail: "revert: Already registered",
+  },
+  {
+    tool: "cast",
+    detail: "cast sig 'registerAgent(uint256)'",
+    ok: "selector = 0x7a2b0f11",
+    fail: "error: unable to parse signature",
+  },
+  {
+    tool: "cast",
+    detail: "cast rpc eth_getStorageAt 0x9f..2a 0x1",
+    ok: "0x0000000000000000000000000000000000000000000000000000000000000001",
+    fail: "rpc error: -32005 rate limit exceeded",
+  },
+  {
+    tool: "bash",
+    detail: "python3 build_merkle_proof.py --leaf $ADDR",
+    ok: "proof verified ✓",
+    fail: "Traceback: leaf not in tree",
+  },
+  {
+    tool: "bash",
+    detail: "cast abi-encode 'f(address,uint256)' $ADDR 1",
+    ok: "0x000000000000000000000000dead..beef0000000000000000000000000000001",
+    fail: "error: invalid type f",
+  },
+  {
+    tool: "forge",
+    detail: "forge script Exploit --broadcast",
+    ok: "balance drained: 12.4 ETH",
+    fail: "script failed: EvmError: Revert",
+  },
+];
+
+const CALL_BY_DETAIL = new Map(TOOL_CALLS.map(c => [c.detail, c]));
+
+// Calls awaiting a result. The mock hands out an id the way a harness does, then
+// looks the call back up when the result event is generated a few ticks later.
+const PENDING_CALLS = new Map<string, ToolCall>();
+let callSeq = 0;
+
+const OK_RATE = 0.78;
+
+function openCall(): ConsoleEvent {
+  const call = pick(TOOL_CALLS);
+  const toolCallId = `mock-${++callSeq}`;
+  PENDING_CALLS.set(toolCallId, call);
+  // A call nobody ever resolves would leak; the console only keeps a short
+  // window anyway, so drop the oldest once the map outgrows it.
+  if (PENDING_CALLS.size > 64) PENDING_CALLS.delete(PENDING_CALLS.keys().next().value as string);
+  return { kind: "tool", tool: call.tool, text: call.detail, toolCallId };
+}
+
+export function makeEvent(agent: Agent, challengeTag: string): ConsoleEvent {
+  const roll = Math.random();
+  if (roll < 0.08) {
+    return { kind: "skill", text: `loaded skill » ${pick(SKILLS)}` };
   }
-  if (r < 0.75) return "$ " + TOOL[Math.floor(Math.random() * TOOL.length)];
-  return OUTPUT[Math.floor(Math.random() * OUTPUT.length)];
+  if (roll < 0.45) {
+    return { kind: "think", text: pick(THINK[challengeTag] || THINK.default) };
+  }
+  return openCall();
+}
+
+export function makeToolResult(toolCallId: string): ConsoleEvent | null {
+  const call = PENDING_CALLS.get(toolCallId);
+  if (!call) return null;
+  PENDING_CALLS.delete(toolCallId);
+  const ok = Math.random() < OK_RATE;
+  return { kind: "tool-result", toolCallId, ok, text: ok ? call.ok : call.fail };
 }
 
 // How many lines each multiview card keeps on screen.
 export const PREVIEW_LINES = 10;
 
-export function seedPreview(tag: string): string[] {
-  return Array.from({ length: PREVIEW_LINES }, () => previewLine(tag));
+const RUNNING_PREFIX = "⟳ $ ";
+
+function previewLine(tag: string): string {
+  if (Math.random() < 0.45) return "· " + pick(THINK[tag] || THINK.default);
+  return RUNNING_PREFIX + pick(TOOL_CALLS).detail;
 }
 
+// The multiview cards are ten truncated lines of decoration, so they carry the
+// pairing at low fidelity: a command lands as ⟳ and the next roll settles it to
+// ✓/✗ and prints its output.
 export function rollPreview(prev: string[], tag: string): string[] {
-  return [...prev, previewLine(tag)].slice(-PREVIEW_LINES);
+  const next: string[] = [];
+  for (const line of prev) {
+    if (!line.startsWith(RUNNING_PREFIX)) {
+      next.push(line);
+      continue;
+    }
+    const detail = line.slice(RUNNING_PREFIX.length);
+    const call = CALL_BY_DETAIL.get(detail);
+    const ok = Math.random() < OK_RATE;
+    next.push((ok ? "✓ $ " : "✗ $ ") + detail);
+    if (call) next.push("  " + (ok ? call.ok : call.fail));
+  }
+  next.push(previewLine(tag));
+  return next.slice(-PREVIEW_LINES);
 }
 
-export function seedConsole(agent: Agent): { kind: string; text: string }[] {
+export function seedPreview(tag: string): string[] {
+  let buf: string[] = [];
+  for (let i = 0; i < PREVIEW_LINES; i++) buf = rollPreview(buf, tag);
+  return buf;
+}
+
+// Backfill: every seeded call is already resolved, so the running state only
+// shows up on tools the live stream is actually waiting on.
+export function seedConsole(agent: Agent): Omit<ConsoleEntry, "id">[] {
   const tag = CHALLENGES[agent.current - 1]?.tag || "default";
-  const n = 14;
-  return Array.from({ length: n }, () => makeLine(agent, tag));
+  return Array.from({ length: 14 }, () => {
+    const event = makeEvent(agent, tag);
+    if (event.kind !== "tool") return event;
+    const result = makeToolResult(event.toolCallId);
+    return {
+      ...event,
+      result: result?.kind === "tool-result" ? { ok: result.ok, detail: result.text } : undefined,
+    };
+  });
 }
 
 export const CHAT_LINES = [
