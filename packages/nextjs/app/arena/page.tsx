@@ -285,7 +285,7 @@ export default function ArenaPage() {
   }
 
   if (phase === "lobby") {
-    return <ArenaLobby onLaunch={startMatch} />;
+    return <ArenaLobby agents={agents} onLaunch={startMatch} />;
   }
 
   return (

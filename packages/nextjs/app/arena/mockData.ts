@@ -1,5 +1,7 @@
 // Mock data + generators for the Agent Arena broadcast mockup.
 // Everything here is fake and only meant to drive the streaming-layout simulation.
+import { Address } from "viem";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 
 export type Difficulty = "easy" | "medium" | "hard" | "insane";
 
@@ -27,6 +29,7 @@ export interface Agent {
   vendor: string;
   color: string;
   short: string;
+  address: Address; // wallet the director funds before the match starts
   solved: number[]; // challenge ids
   current: number; // challenge id being worked on
   status: AgentStatus;
@@ -199,6 +202,9 @@ const SEEDS: Seed[] = [
 
 export const AGENT_COUNT = SEEDS.length;
 
+// How much ETH each agent needs before the match can start.
+export const FUNDING_AMOUNT_ETH = "0.05";
+
 function slug(harness: string, model: string) {
   return (harness.split(" ")[0] + "-" + model)
     .toLowerCase()
@@ -208,24 +214,31 @@ function slug(harness: string, model: string) {
 
 // Everyone starts at the line: no flags, all on challenge #1, waiting for the
 // match to begin. Progress only accrues once the arena goes live.
+//
+// Each agent gets a fresh wallet per run. Only the address is kept — nothing
+// signs as an agent, they only receive, which is why discarding the key is fine
+// (and why the lobby refuses to send funds off a local chain).
 export function buildAgents(): Agent[] {
-  return SEEDS.map((s, i) => ({
-    id: `agent-${i}`,
-    handle: slug(s.harness, s.model),
-    harness: s.harness,
-    model: s.model,
-    vendor: s.v.vendor,
-    color: AGENT_COLORS[i % AGENT_COLORS.length],
-    short: s.v.short,
-    solved: [],
-    current: 1,
-    status: "idle",
-    tokens: 0,
-    cost: 0,
-    lastAction: "waiting for match start",
-    preview: seedPreview(CHALLENGES[0]?.tag || "default"),
-    firstBlood: "—",
-  }));
+  return SEEDS.map(
+    (s, i): Agent => ({
+      id: `agent-${i}`,
+      handle: slug(s.harness, s.model),
+      harness: s.harness,
+      model: s.model,
+      vendor: s.v.vendor,
+      color: AGENT_COLORS[i % AGENT_COLORS.length],
+      short: s.v.short,
+      address: privateKeyToAccount(generatePrivateKey()).address,
+      solved: [],
+      current: 1,
+      status: "idle",
+      tokens: 0,
+      cost: 0,
+      lastAction: "waiting for match start",
+      preview: seedPreview(CHALLENGES[0]?.tag || "default"),
+      firstBlood: "—",
+    }),
+  );
 }
 
 export const SKILLS = [

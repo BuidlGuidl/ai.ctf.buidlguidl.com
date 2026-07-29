@@ -1,19 +1,30 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Agent, CHALLENGES, HARNESS_GLYPH, buildAgents } from "./mockData";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Agent, CHALLENGES, FUNDING_AMOUNT_ETH, HARNESS_GLYPH } from "./mockData";
+import { fundingStatus, useAgentBalances } from "./useAgentBalances";
+import { useConnectModal } from "@rainbow-me/rainbowkit";
+import { formatEther, parseEther } from "viem";
+import { hardhat } from "viem/chains";
+import { useAccount } from "wagmi";
+import { useTransactor } from "~~/hooks/scaffold-eth";
 
-// Pre-game lobby for the Agent Arena. Everything the director sees here — the
-// roster filling up, the "connecting" blips, the countdown — is a fake
-// multiplayer-lobby simulation. The ONLY real side effect is the spin-up order
-// fired from START MATCH (see the TODO in launchMatch).
+// Pre-game lobby for the Agent Arena. The roster filling up, the "connecting"
+// blips and the countdown are a fake multiplayer-lobby simulation, but the
+// funding stage is real: every agent carries a freshly generated wallet and the
+// match cannot start until all of them hold enough ETH.
 
-type Phase = "idle" | "connecting" | "ready" | "launching";
+type Phase = "idle" | "connecting" | "funding" | "ready" | "launching";
 type SlotState = "waiting" | "joining" | "ready";
 
 const CY = "#00FBFF";
 const GREEN = "#00ff9c";
 const YELLOW = "#FFBE00";
+const RED = "#FF5861";
+
+function shortAddress(address: string) {
+  return `${address.slice(0, 6)}…${address.slice(-4)}`;
+}
 
 function tone(ctx: AudioContext, freq: number, dur = 0.09, type: OscillatorType = "square", gain = 0.05) {
   const o = ctx.createOscillator();
@@ -38,13 +49,14 @@ function shuffle<T>(a: T[]): T[] {
   return r;
 }
 
-export function ArenaLobby({ onLaunch }: { onLaunch: () => void }) {
-  const [agents, setAgents] = useState<Agent[]>([]);
+export function ArenaLobby({ agents, onLaunch }: { agents: Agent[]; onLaunch: () => void }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [slots, setSlots] = useState<Record<string, SlotState>>({});
   const [log, setLog] = useState<{ id: number; text: string; color: string }[]>([]);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [muted, setMuted] = useState(false);
+  const [amount, setAmount] = useState(FUNDING_AMOUNT_ETH);
+  const [funding, setFunding] = useState(false);
 
   const audioRef = useRef<AudioContext | null>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -52,7 +64,6 @@ export function ArenaLobby({ onLaunch }: { onLaunch: () => void }) {
   mutedRef.current = muted;
   const logId = useRef(0);
 
-  useEffect(() => setAgents(buildAgents()), []);
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
   const beep = useCallback((freq: number, dur?: number, type?: OscillatorType, gain?: number) => {
@@ -66,6 +77,84 @@ export function ArenaLobby({ onLaunch }: { onLaunch: () => void }) {
   }, []);
 
   const readyCount = Object.values(slots).filter(s => s === "ready").length;
+
+  // ---- funding -------------------------------------------------------------
+  // Sending is deliberately restricted to a local chain: these wallets are
+  // generated per run and their keys are thrown away, so anything sent on a real
+  // network would be unrecoverable.
+  const { chain, isConnected } = useAccount();
+  const { openConnectModal } = useConnectModal();
+  // `chain` (not `chainId`) on purpose: wagmi only resolves it for chains present
+  // in wagmiConfig, so this is false unless scaffold.config targets a local chain.
+  // That is the gate we want — useTransactor would throw ChainNotConfiguredError
+  // on an unregistered chain, so failing closed here keeps funding unreachable
+  // exactly when it could not work anyway.
+  const isLocalChain = chain?.id === hardhat.id;
+  const transactor = useTransactor();
+
+  const addresses = useMemo(() => agents.map(a => a.address), [agents]);
+  const fundingActive = phase === "funding" || phase === "ready" || phase === "launching";
+  const { balances, isError: balancesUnreachable } = useAgentBalances(addresses, fundingActive);
+
+  const required = useMemo(() => {
+    try {
+      return parseEther(amount || "0");
+    } catch {
+      return 0n;
+    }
+  }, [amount]);
+
+  const balancesRef = useRef(balances);
+  balancesRef.current = balances;
+  const requiredRef = useRef(required);
+  requiredRef.current = required;
+
+  const fundedCount = agents.filter(a => required > 0n && (balances[a.address] ?? 0n) >= required).length;
+  const allFunded = agents.length > 0 && fundedCount === agents.length;
+
+  const progressCount = fundingActive ? fundedCount : readyCount;
+  const progressDone = agents.length > 0 && progressCount === agents.length;
+
+  const fundAll = useCallback(async () => {
+    const target = requiredRef.current;
+    if (!target) return;
+    setFunding(true);
+    try {
+      for (const a of agents) {
+        // Top up the shortfall rather than the full amount, so resuming after a
+        // failure — or raising the target mid-run — never overshoots.
+        const shortfall = target - (balancesRef.current[a.address] ?? 0n);
+        if (shortfall <= 0n) continue;
+        pushLog(`funding ${a.model} · ${shortAddress(a.address)}…`, YELLOW);
+        try {
+          await transactor({ to: a.address, value: shortfall });
+          pushLog(`${a.model} funded ✓`, GREEN);
+        } catch {
+          // A rejection means the director stepped away from the wallet — stop
+          // rather than firing the remaining confirmations at them.
+          pushLog(`funding ${a.model} failed — press FUND AGENTS to resume`, RED);
+          break;
+        }
+      }
+    } finally {
+      setFunding(false);
+    }
+  }, [agents, transactor, pushLog]);
+
+  const skipFunding = useCallback(() => {
+    setPhase("ready");
+    pushLog("funding skipped — demo mode, agents are unfunded", YELLOW);
+  }, [pushLog]);
+
+  // All wallets topped up: the match unlocks.
+  useEffect(() => {
+    if (phase !== "funding" || !allFunded) return;
+    setPhase("ready");
+    pushLog("all agents funded — ready to start", GREEN);
+    [523, 659, 784, 1046].forEach((f, i) =>
+      timers.current.push(setTimeout(() => beep(f, 0.16, "triangle", 0.06), i * 90)),
+    );
+  }, [phase, allFunded, beep, pushLog]);
 
   // First button. Resumes/creates the AudioContext (needs a user gesture) and
   // kicks off the fake connection sequence — agents trickle in one by one.
@@ -103,11 +192,9 @@ export function ArenaLobby({ onLaunch }: { onLaunch: () => void }) {
 
     timers.current.push(
       setTimeout(() => {
-        setPhase("ready");
-        pushLog("all agents connected — awaiting start", GREEN);
-        [523, 659, 784, 1046].forEach((f, i) =>
-          timers.current.push(setTimeout(() => beep(f, 0.16, "triangle", 0.06), i * 90)),
-        );
+        setPhase("funding");
+        pushLog("all agents connected — awaiting funding", GREEN);
+        beep(784, 0.14, "triangle", 0.06);
       }, t + 1400),
     );
   }, [agents, beep, pushLog]);
@@ -153,7 +240,15 @@ export function ArenaLobby({ onLaunch }: { onLaunch: () => void }) {
             className="w-2.5 h-2.5 rounded-full"
             style={{ background: phase === "idle" ? "#3a4a4d" : phase === "ready" ? GREEN : YELLOW }}
           />
-          {phase === "idle" ? "STANDBY" : phase === "ready" ? "READY" : phase === "launching" ? "LAUNCHING" : "LOBBY"}
+          {phase === "idle"
+            ? "STANDBY"
+            : phase === "ready"
+            ? "READY"
+            : phase === "launching"
+            ? "LAUNCHING"
+            : phase === "funding"
+            ? "FUNDING"
+            : "LOBBY"}
         </span>
         <div className="font-dotGothic text-xl md:text-2xl tracking-wide lobby-title-glow">
           BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · AGENT ARENA
@@ -178,8 +273,10 @@ export function ArenaLobby({ onLaunch }: { onLaunch: () => void }) {
             <div className="font-dotGothic text-3xl md:text-4xl tracking-widest lobby-title-glow">
               {phase === "idle"
                 ? "GAME NOT STARTED"
+                : phase === "funding"
+                ? "WAITING FOR FUNDING"
                 : phase === "ready"
-                ? "ALL AGENTS CONNECTED"
+                ? "ALL AGENTS FUNDED"
                 : phase === "launching"
                 ? "SPINNING UP ARENA"
                 : "WAITING FOR AGENTS"}
@@ -187,6 +284,12 @@ export function ArenaLobby({ onLaunch }: { onLaunch: () => void }) {
             <div className="mt-2 text-sm text-[#00FBFF]/55 tracking-wide">
               {phase === "idle" ? null : phase === "launching" ? (
                 <span className="text-[#FFBE00] animate-pulse">provisioning agent environments…</span>
+              ) : fundingActive ? (
+                <span>
+                  <span className="text-[#00FBFF] font-bold tabular-nums">{fundedCount}</span>
+                  <span className="text-[#00FBFF]/40"> / {agents.length}</span> agents funded
+                  {phase === "funding" && <span className="lobby-blink"> · waiting…</span>}
+                </span>
               ) : (
                 <span>
                   <span className="text-[#00FBFF] font-bold tabular-nums">{readyCount}</span>
@@ -207,31 +310,53 @@ export function ArenaLobby({ onLaunch }: { onLaunch: () => void }) {
             </button>
           )}
 
-          {/* progress bar */}
+          {/* progress bar — connections while agents join, funding once they have */}
           <div className="w-full max-w-3xl h-1.5 rounded-full bg-[#00FBFF]/10 overflow-hidden mb-8">
             <div
               className="h-full rounded-full transition-all duration-500"
               style={{
-                width: `${agents.length ? (readyCount / agents.length) * 100 : 0}%`,
-                background: readyCount === agents.length && agents.length ? GREEN : CY,
-                boxShadow: `0 0 12px ${readyCount === agents.length && agents.length ? GREEN : CY}`,
+                width: `${agents.length ? (progressCount / agents.length) * 100 : 0}%`,
+                background: progressDone ? GREEN : CY,
+                boxShadow: `0 0 12px ${progressDone ? GREEN : CY}`,
               }}
             />
           </div>
 
-          {/* roster grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 w-full max-w-4xl">
-            {agents.map((a, i) => {
-              const st: SlotState = slots[a.id] || "waiting";
-              return <Slot key={a.id} agent={a} state={st} idle={phase === "idle"} index={i} />;
-            })}
-          </div>
+          {fundingActive ? (
+            <FundingBoard
+              agents={agents}
+              balances={balances}
+              required={required}
+              amount={amount}
+              onAmountChange={setAmount}
+              onFund={fundAll}
+              onSkip={skipFunding}
+              onConnect={openConnectModal}
+              funding={funding}
+              isConnected={isConnected}
+              isLocalChain={isLocalChain}
+              balancesUnreachable={balancesUnreachable}
+              locked={phase !== "funding"}
+            />
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 w-full max-w-4xl">
+              {agents.map((a, i) => {
+                const st: SlotState = slots[a.id] || "waiting";
+                return <Slot key={a.id} agent={a} state={st} idle={phase === "idle"} index={i} />;
+              })}
+            </div>
+          )}
 
           {/* primary action */}
           <div className="mt-10 h-16 flex items-center justify-center">
             {phase === "connecting" && (
               <div className="text-[#00FBFF]/50 text-sm tracking-widest font-dotGothic lobby-blink">
                 ● ● ● CONNECTING AGENTS ● ● ●
+              </div>
+            )}
+            {phase === "funding" && (
+              <div className="text-[#FFBE00]/70 text-sm tracking-widest font-dotGothic lobby-blink">
+                ● ● ● WAITING FOR FUNDING ● ● ●
               </div>
             )}
             {phase === "ready" && (
@@ -258,6 +383,11 @@ export function ArenaLobby({ onLaunch }: { onLaunch: () => void }) {
               START MATCH provisions the agent environments and begins the CTF clock
             </div>
           )}
+          {phase === "funding" && (
+            <div className="mt-3 text-[11px] text-[#00FBFF]/40 tracking-wide">
+              every agent wallet must hold {amount || "0"} ETH before the match can start
+            </div>
+          )}
         </div>
 
         {/* netcode log */}
@@ -278,6 +408,171 @@ export function ArenaLobby({ onLaunch }: { onLaunch: () => void }) {
       </div>
 
       <LobbyStyles />
+    </div>
+  );
+}
+
+function FundingBoard({
+  agents,
+  balances,
+  required,
+  amount,
+  onAmountChange,
+  onFund,
+  onSkip,
+  onConnect,
+  funding,
+  isConnected,
+  isLocalChain,
+  balancesUnreachable,
+  locked,
+}: {
+  agents: Agent[];
+  balances: Record<string, bigint>;
+  required: bigint;
+  amount: string;
+  onAmountChange: (v: string) => void;
+  onFund: () => void;
+  onSkip: () => void;
+  onConnect?: () => void;
+  funding: boolean;
+  isConnected: boolean;
+  isLocalChain: boolean;
+  balancesUnreachable: boolean;
+  locked: boolean;
+}) {
+  return (
+    <div className="w-full max-w-4xl">
+      <div className="flex flex-wrap items-center gap-3 mb-3">
+        <span className="text-xs font-bold tracking-widest text-[#00FBFF]/60">▤ AGENT WALLETS</span>
+        <div className="ml-auto flex items-center gap-2">
+          <label className="flex items-center gap-1.5 text-xs text-[#00FBFF]/50">
+            <span className="tracking-widest">EACH</span>
+            <input
+              value={amount}
+              onChange={e => onAmountChange(e.target.value)}
+              disabled={funding || locked}
+              className="w-24 px-2 py-1 bg-black/60 border border-[#00FBFF]/30 rounded text-right text-[#00FBFF] tabular-nums focus:outline-none focus:border-[#00FBFF]/70 disabled:opacity-40"
+            />
+            <span className="text-[#00FBFF]/40">ETH</span>
+          </label>
+          {isConnected ? (
+            <button
+              onClick={onFund}
+              disabled={funding || locked || !isLocalChain || required === 0n}
+              className="px-4 py-1.5 rounded border-2 font-dotGothic text-sm tracking-widest transition disabled:opacity-30 disabled:cursor-not-allowed"
+              style={{ borderColor: YELLOW, color: YELLOW }}
+            >
+              {funding ? "SENDING…" : "▶ FUND AGENTS"}
+            </button>
+          ) : (
+            // The arena covers the site header, so this is the only way in.
+            <button
+              onClick={onConnect}
+              disabled={locked}
+              className="px-4 py-1.5 rounded border-2 font-dotGothic text-sm tracking-widest transition disabled:opacity-30"
+              style={{ borderColor: CY, color: CY }}
+            >
+              ▶ CONNECT WALLET
+            </button>
+          )}
+        </div>
+      </div>
+
+      {balancesUnreachable && (
+        <div className="mb-3 px-3 py-2 rounded border border-[#FF5861]/40 bg-[#FF5861]/10 text-xs text-[#FF5861]">
+          cannot reach the local chain — balances below are stale, start a node with `yarn chain`
+        </div>
+      )}
+
+      {/* Funding is impossible off a local chain, so the skip escape must be
+          reachable whether or not a wallet is connected — otherwise the lobby
+          dead-ends here and the match can never start. */}
+      {!isLocalChain && (
+        <div className="mb-3 flex flex-wrap items-center gap-3 px-3 py-2 rounded border border-[#00FBFF]/25 bg-[#00FBFF]/5 text-xs text-[#00FBFF]/60">
+          <span>
+            {isConnected
+              ? "funding is only available on a local chain — these wallets are generated per run and their keys are discarded, so funds sent on a real network would be unrecoverable"
+              : "connect a wallet on a local chain to fund the agent wallets"}
+          </span>
+          {!locked && (
+            <button
+              onClick={onSkip}
+              className="ml-auto shrink-0 px-3 py-1 rounded border border-[#00FBFF]/40 tracking-widest hover:bg-[#00FBFF]/15 transition"
+            >
+              SKIP FUNDING (DEMO)
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="rounded-lg border border-[#00FBFF]/20 bg-[#00090b]/60 divide-y divide-[#00FBFF]/10 max-h-[46vh] overflow-y-auto">
+        {agents.map((a, i) => (
+          <FundingRow key={a.id} agent={a} index={i} balance={balances[a.address]} required={required} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FundingRow({
+  agent,
+  index,
+  balance,
+  required,
+}: {
+  agent: Agent;
+  index: number;
+  balance: bigint | undefined;
+  required: bigint;
+}) {
+  const [copied, setCopied] = useState(false);
+  const status = fundingStatus(balance, required);
+  const glyph = HARNESS_GLYPH[agent.harness] || "●";
+
+  const copy = useCallback(() => {
+    navigator.clipboard?.writeText(agent.address);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1200);
+  }, [agent.address]);
+
+  return (
+    <div className="flex items-center gap-3 px-3 py-2 text-xs">
+      <span className="w-6 shrink-0 text-[10px] text-[#00FBFF]/30 tabular-nums">P{index + 1}</span>
+
+      <span
+        className="w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-sm"
+        style={{ border: `1px solid ${agent.color}`, background: `${agent.color}22`, color: agent.color }}
+      >
+        {glyph}
+      </span>
+
+      <span className="w-40 shrink-0 truncate font-bold" style={{ color: agent.color }}>
+        {agent.model}
+      </span>
+
+      <button
+        onClick={copy}
+        title="copy address"
+        className="hidden sm:flex items-center gap-1.5 text-[#00FBFF]/45 hover:text-[#00FBFF] transition"
+      >
+        <span className="tabular-nums">{shortAddress(agent.address)}</span>
+        <span className="text-[10px]">{copied ? "✓" : "⧉"}</span>
+      </button>
+
+      <span className="ml-auto tabular-nums text-[#00FBFF]/70">{formatEther(balance ?? 0n)} ETH</span>
+
+      <span className="w-40 shrink-0 text-right text-[10px] font-bold tracking-widest">
+        {status === "funded" ? (
+          <span style={{ color: GREEN }}>FUNDED ✓</span>
+        ) : status === "partial" ? (
+          <span style={{ color: YELLOW }}>PARTIAL</span>
+        ) : (
+          <span className="lobby-blink" style={{ color: YELLOW }}>
+            WAITING FOR FUNDING
+          </span>
+        )}
+      </span>
     </div>
   );
 }
