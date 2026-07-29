@@ -41,3 +41,9 @@ jobs:
 
       - name: Check typings on nextjs
         run: yarn next:check-types
+
+      - name: Run ponder lint
+        run: yarn ponder:lint --max-warnings=0
+
+      - name: Check typings on ponder
+        run: yarn ponder:typecheck
