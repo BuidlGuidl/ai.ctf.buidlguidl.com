@@ -1,11 +1,14 @@
-import { ponder } from "@/generated";
+import { ponder } from "ponder:registry";
+import { challenge, team } from "ponder:schema";
+
+const POINTS_PER_CHALLENGE = 100;
+
+// Points dominate the ordering; the timestamp only breaks ties, earliest first.
+const sortOrderFor = (points: number, blockTimestamp: bigint) => 100000000000n * BigInt(points) - blockTimestamp;
 
 ponder.on("NFTFlags:FlagMinted", async ({ event, context }) => {
   const { client } = context;
-  const { Challenge, Team } = context.db;
   const { NFTFlags } = context.contracts;
-
-  const pointsPerChallenge = 100;
 
   const tokenUri = await client.readContract({
     abi: NFTFlags.abi,
@@ -14,33 +17,26 @@ ponder.on("NFTFlags:FlagMinted", async ({ event, context }) => {
     args: [event.args.tokenId],
   });
 
-  await Team.upsert({
-    id: event.args.minter,
-    create: {
-      points: pointsPerChallenge,
-      sortOrder:
-        100000000000n * BigInt(pointsPerChallenge) -
-        BigInt(event.block.timestamp),
+  await context.db
+    .insert(team)
+    .values({
+      id: event.args.minter,
+      points: POINTS_PER_CHALLENGE,
+      sortOrder: sortOrderFor(POINTS_PER_CHALLENGE, event.block.timestamp),
       updated: Number(event.block.timestamp),
-    },
-    update: ({ current }) => ({
-      points: current.points + pointsPerChallenge,
-      sortOrder:
-        100000000000n * BigInt(current.points + pointsPerChallenge) -
-        BigInt(event.block.timestamp),
+    })
+    .onConflictDoUpdate(row => ({
+      points: row.points + POINTS_PER_CHALLENGE,
+      sortOrder: sortOrderFor(row.points + POINTS_PER_CHALLENGE, event.block.timestamp),
       updated: Number(event.block.timestamp),
-    }),
-  });
+    }));
 
-  // Create a new NFTFlag
-  await Challenge.create({
+  await context.db.insert(challenge).values({
     id: event.args.tokenId,
-    data: {
-      challengeId: event.args.challengeId,
-      tokenURI: tokenUri,
-      timestamp: Number(event.block.timestamp),
-      ownerId: event.args.minter,
-      points: pointsPerChallenge,
-    },
+    challengeId: event.args.challengeId,
+    tokenURI: tokenUri,
+    timestamp: Number(event.block.timestamp),
+    ownerId: event.args.minter,
+    points: POINTS_PER_CHALLENGE,
   });
 });

@@ -36,6 +36,7 @@
     "ponder:dev": "yarn workspace @se-2/ponder dev",
     "ponder:start": "yarn workspace @se-2/ponder start",
     "ponder:codegen": "yarn workspace @se-2/ponder codegen",
+    "ponder:db": "yarn workspace @se-2/ponder db",
     "ponder:serve": "yarn workspace @se-2/ponder serve",
     "ponder:lint": "yarn workspace @se-2/ponder lint",
     "ponder:typecheck": "yarn workspace @se-2/ponder typecheck"

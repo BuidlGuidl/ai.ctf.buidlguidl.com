@@ -19,7 +19,13 @@
     "target": "ES2022",
 
     // Skip type checking for node modules
-    "skipLibCheck": true
+    "skipLibCheck": true,
+
+    // deployedContracts.ts and scaffold.config.ts are authored for the nextjs package
+    // and import through its `~~` alias.
+    "paths": {
+      "~~/*": ["../nextjs/*"]
+    }
   },
   "include": ["./**/*.ts"],
   "exclude": ["node_modules"]
