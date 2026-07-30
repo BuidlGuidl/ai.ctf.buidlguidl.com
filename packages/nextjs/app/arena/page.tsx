@@ -23,6 +23,9 @@ import {
   rollPreview,
   seedConsole,
 } from "./mockData";
+import { BlockieAvatar } from "~~/components/scaffold-eth";
+import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
+import { getBlockExplorerAddressLink } from "~~/utils/scaffold-eth";
 
 export const dynamic = "force-dynamic";
 
@@ -640,7 +643,7 @@ function RaceView({
       <div className={`flex items-center ${rowGap} px-2 pb-1`}>
         <span className="w-5 shrink-0" />
         <span className="w-3 shrink-0" />
-        {!compact && <span className="w-6 shrink-0" />}
+        <span className={`${compact ? "w-5" : "w-6"} shrink-0`} />
         <span className={`${compact ? "w-40" : "w-44"} shrink-0 text-[9px] tracking-widest text-[#00FBFF]/25`}>
           AGENT · MINTS →
         </span>
@@ -661,18 +664,28 @@ function RaceView({
       </div>
 
       {ranked.map((a, i) => (
-        <button
+        // A div, not a button: the row holds the explorer link on the blockie and
+        // an anchor inside a button is invalid markup.
+        <div
           key={a.id}
           ref={el => {
             if (el) rowRefs.current.set(a.id, el);
             else rowRefs.current.delete(a.id);
           }}
+          role="button"
+          tabIndex={0}
           onClick={() => onPick(a.id)}
+          onKeyDown={e => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onPick(a.id);
+            }
+          }}
           className={`relative w-full flex items-center ${rowGap} px-2 ${
             compact ? "py-[2px]" : "py-1.5"
           } rounded hover:bg-[#00FBFF]/5 will-change-transform text-left group ${
             leadTaker === a.id ? "lead-take" : ""
-          }`}
+          } cursor-pointer`}
         >
           <span
             className={`w-5 text-center text-xs font-bold tabular-nums shrink-0 ${
@@ -682,7 +695,7 @@ function RaceView({
             {i === 0 ? <span className={`inline-block ${leadTaker === a.id ? "crown-pop" : ""}`}>👑</span> : i + 1}
           </span>
           <StatusDot status={a.status} />
-          {!compact && <AgentBadge agent={a} />}
+          <AgentBlockieLink agent={a} compact={compact} />
           <span
             className={`${compact ? "w-40 text-xs" : "w-44 text-sm"} truncate font-bold text-white shrink-0`}
             title={`${a.harness} + ${a.model}`}
@@ -751,7 +764,7 @@ function RaceView({
           <span className="w-10 text-right text-xs tabular-nums shrink-0 text-[#00FBFF]/70">
             {done(a) ? <span className="text-[#00ff9c] font-bold">◆ {a.solved.length}</span> : a.solved.length}
           </span>
-        </button>
+        </div>
       ))}
     </div>
   );
@@ -1191,6 +1204,25 @@ function StatusChip({ status }: { status: AgentStatus }) {
       {s.glyph}
       {loud && ` ${status}`}
     </span>
+  );
+}
+
+// Race-track badge: the agent wallet's blockie, linking out to the explorer.
+// It lives inside a clickable row, so the click must not also focus the agent.
+function AgentBlockieLink({ agent, compact }: { agent: Agent; compact?: boolean }) {
+  const { targetNetwork } = useTargetNetwork();
+  return (
+    <a
+      href={getBlockExplorerAddressLink(targetNetwork, agent.address)}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={e => e.stopPropagation()}
+      title={`${agent.harness} + ${agent.model} · ${agent.address}`}
+      className={`${compact ? "w-5 h-5" : "w-6 h-6"} shrink-0 rounded overflow-hidden hover:opacity-80 transition`}
+      style={{ border: `1px solid ${agent.color}55` }}
+    >
+      <BlockieAvatar address={agent.address} ensImage={null} size={compact ? 20 : 24} />
+    </a>
   );
 }
 

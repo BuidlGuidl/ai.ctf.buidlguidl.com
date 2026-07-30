@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Agent, CHALLENGES, FUNDING_AMOUNT_ETH, HARNESS_GLYPH } from "./mockData";
+import { Agent, CHALLENGES, FUNDING_AMOUNT_ETH } from "./mockData";
 import { fundingStatus, useAgentBalances } from "./useAgentBalances";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { formatEther, parseEther } from "viem";
 import { hardhat } from "viem/chains";
 import { useAccount } from "wagmi";
+import { Address, BlockieAvatar } from "~~/components/scaffold-eth";
 import { useTransactor } from "~~/hooks/scaffold-eth";
 
 // Pre-game lobby for the Agent Arena. The roster filling up, the "connecting"
@@ -544,39 +545,23 @@ function FundingRow({
   balance: bigint | undefined;
   required: bigint;
 }) {
-  const [copied, setCopied] = useState(false);
   const status = fundingStatus(balance, required);
-  const glyph = HARNESS_GLYPH[agent.harness] || "●";
-
-  const copy = useCallback(() => {
-    navigator.clipboard?.writeText(agent.address);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1200);
-  }, [agent.address]);
 
   return (
     <div className="flex items-center gap-3 px-3 py-2 text-xs">
       <span className="w-6 shrink-0 text-[10px] text-[#00FBFF]/30 tabular-nums">P{index + 1}</span>
 
-      <span
-        className="w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-sm"
-        style={{ border: `1px solid ${agent.color}`, background: `${agent.color}22`, color: agent.color }}
-      >
-        {glyph}
+      <span className="w-6 h-6 shrink-0 rounded-full overflow-hidden" style={{ border: `1px solid ${agent.color}` }}>
+        <BlockieAvatar address={agent.address} ensImage={null} size={24} />
       </span>
 
       <span className="w-40 shrink-0 truncate font-bold" style={{ color: agent.color }}>
         {agent.model}
       </span>
 
-      <button
-        onClick={copy}
-        title="copy address"
-        className="hidden sm:flex items-center gap-1.5 text-[#00FBFF]/45 hover:text-[#00FBFF] transition"
-      >
-        <span className="tabular-nums">{shortAddress(agent.address)}</span>
-        <span className="text-[10px]">{copied ? "✓" : "⧉"}</span>
-      </button>
+      <span className="hidden sm:flex items-center text-[#00FBFF]/70">
+        <Address address={agent.address} hideBlockie openLinkInNewTab size="xs" />
+      </span>
 
       <span className="ml-auto tabular-nums text-[#00FBFF]/70">{formatEther(balance ?? 0n)} ETH</span>
 
@@ -598,7 +583,6 @@ function FundingRow({
 function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; idle: boolean; index: number }) {
   const ready = state === "ready";
   const joining = state === "joining";
-  const glyph = HARNESS_GLYPH[agent.harness] || "●";
   const active = ready || joining;
 
   return (
@@ -616,9 +600,9 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
       {/* slot number */}
       <span className="absolute top-1.5 left-2 text-[10px] text-[#00FBFF]/30 tabular-nums">P{index + 1}</span>
 
-      {/* avatar — harness glyph + agent color, matching AgentBadge in the arena */}
+      {/* avatar — blockie of the agent wallet, ringed in the agent color */}
       <div
-        className={`relative w-14 h-14 rounded-full flex items-center justify-center font-bold text-2xl ${
+        className={`relative w-14 h-14 rounded-full overflow-hidden flex items-center justify-center font-bold text-2xl ${
           joining ? "lobby-pulse" : ""
         }`}
         style={{
@@ -627,7 +611,7 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
           color: active ? agent.color : "#4e6a69",
         }}
       >
-        {active ? glyph : "?"}
+        {active ? <BlockieAvatar address={agent.address} ensImage={null} size={52} /> : "?"}
       </div>
 
       {/* identity */}
