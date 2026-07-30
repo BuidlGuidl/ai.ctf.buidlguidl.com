@@ -1,14 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FundingMode, MULTICALL3_ABI, MULTICALL3_ADDRESS, fundingMode, localTestClient } from "./funding";
 import { Agent, CHALLENGES, FUNDING_AMOUNT_ETH } from "./mockData";
 import { fundingStatus, useAgentBalances } from "./useAgentBalances";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
-import { formatEther, parseEther } from "viem";
-import { hardhat } from "viem/chains";
-import { useAccount } from "wagmi";
+import { encodeFunctionData, formatEther, parseEther } from "viem";
+import { useAccount, useSwitchChain } from "wagmi";
 import { Address, BlockieAvatar } from "~~/components/scaffold-eth";
 import { useTransactor } from "~~/hooks/scaffold-eth";
+import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 
 // Pre-game lobby for the Agent Arena. The roster filling up, the "connecting"
 // blips and the countdown are a fake multiplayer-lobby simulation, but the
@@ -80,17 +81,19 @@ export function ArenaLobby({ agents, onLaunch }: { agents: Agent[]; onLaunch: ()
   const readyCount = Object.values(slots).filter(s => s === "ready").length;
 
   // ---- funding -------------------------------------------------------------
-  // Sending is deliberately restricted to a local chain: these wallets are
-  // generated per run and their keys are thrown away, so anything sent on a real
-  // network would be unrecoverable.
+  // Only the networks listed in funding.ts can be funded: these wallets are
+  // generated per run and their keys are thrown away, so anything sent on a
+  // network where the funds matter would be unrecoverable.
   const { chain, isConnected } = useAccount();
   const { openConnectModal } = useConnectModal();
-  // `chain` (not `chainId`) on purpose: wagmi only resolves it for chains present
-  // in wagmiConfig, so this is false unless scaffold.config targets a local chain.
-  // That is the gate we want — useTransactor would throw ChainNotConfiguredError
-  // on an unregistered chain, so failing closed here keeps funding unreachable
-  // exactly when it could not work anyway.
-  const isLocalChain = chain?.id === hardhat.id;
+  const { targetNetwork } = useTargetNetwork();
+  const { switchChain } = useSwitchChain();
+  const mode = fundingMode(targetNetwork.id);
+  // The local shortcut talks to the node directly, so only the batch path needs
+  // a wallet — and it needs one sitting on the network we are funding.
+  const wrongNetwork = mode === "batch" && isConnected && chain?.id !== targetNetwork.id;
+  const walletReady = mode === "local" || (isConnected && !wrongNetwork);
+  const canFund = mode !== "none" && walletReady;
   const transactor = useTransactor();
 
   const addresses = useMemo(() => agents.map(a => a.address), [agents]);
@@ -120,7 +123,7 @@ export function ArenaLobby({ agents, onLaunch }: { agents: Agent[]; onLaunch: ()
 
   const fundAll = useCallback(async () => {
     const target = requiredRef.current;
-    if (!target) return;
+    if (!target || mode === "none") return;
     setFunding(true);
     try {
       // Read balances before deciding what to send. The poll only refreshes every
@@ -128,34 +131,64 @@ export function ArenaLobby({ agents, onLaunch }: { agents: Agent[]; onLaunch: ()
       // that window would see stale zeroes and double-send to funded agents.
       const fresh = await refetchBalances();
       if (fresh.isError || !fresh.data) {
-        pushLog("cannot read agent balances — is the local chain up?", RED);
+        pushLog(`cannot read agent balances — is ${targetNetwork.name} reachable?`, RED);
         return;
       }
       const current = fresh.data;
-      for (const a of agents) {
-        // Top up the shortfall rather than the full amount, so resuming after a
-        // failure — or raising the target mid-run — never overshoots.
-        const shortfall = target - (current[a.address] ?? 0n);
-        if (shortfall <= 0n) continue;
-        pushLog(`funding ${a.model} · ${shortAddress(a.address)}…`, YELLOW);
-        try {
-          // useTransactor resolves undefined (without throwing) when it has no
-          // wallet client — reporting that as funded would log ten green ticks
-          // for zero ETH moved.
-          const hash = await transactor({ to: a.address, value: shortfall });
-          if (!hash) throw new Error("no transaction hash");
-          pushLog(`${a.model} funded ✓`, GREEN);
-        } catch {
-          // A rejection means the director stepped away from the wallet — stop
-          // rather than firing the remaining confirmations at them.
-          pushLog(`funding ${a.model} failed — press FUND AGENTS to resume`, RED);
-          break;
-        }
+      // Top up the shortfall rather than the full amount, so resuming after a
+      // failure — or raising the target mid-run — never overshoots.
+      const pending = agents
+        .map(a => ({ agent: a, shortfall: target - (current[a.address] ?? 0n) }))
+        .filter(p => p.shortfall > 0n);
+
+      if (pending.length === 0) {
+        pushLog("every agent already holds the target amount", GREEN);
+        return;
       }
+
+      try {
+        if (mode === "local") {
+          // No transaction and no gas on a local node: set the balances outright.
+          for (const { agent } of pending) {
+            await localTestClient.setBalance({ address: agent.address, value: target });
+            pushLog(`${agent.model} · ${shortAddress(agent.address)} set to ${amount} ETH ✓`, GREEN);
+          }
+        } else {
+          // One Multicall3 call forwards value to every agent — a single
+          // confirmation for the director instead of one per agent. The contract
+          // reverts unless msg.value matches the sum exactly.
+          const total = pending.reduce((sum, p) => sum + p.shortfall, 0n);
+          pushLog(`funding ${pending.length} agents in one transaction…`, YELLOW);
+          // useTransactor resolves undefined (without throwing) when it has no
+          // wallet client — reporting that as funded would log a green tick for
+          // zero ETH moved.
+          const hash = await transactor({
+            to: MULTICALL3_ADDRESS[targetNetwork.id],
+            value: total,
+            data: encodeFunctionData({
+              abi: MULTICALL3_ABI,
+              functionName: "aggregate3Value",
+              args: [
+                pending.map(p => ({
+                  target: p.agent.address,
+                  allowFailure: false,
+                  value: p.shortfall,
+                  callData: "0x" as const,
+                })),
+              ],
+            }),
+          });
+          if (!hash) throw new Error("no transaction hash");
+          pushLog(`${pending.length} agents funded ✓ · ${formatEther(total)} ETH`, GREEN);
+        }
+      } catch {
+        pushLog("funding failed — press FUND AGENTS to retry", RED);
+      }
+      await refetchBalances();
     } finally {
       setFunding(false);
     }
-  }, [agents, transactor, pushLog, refetchBalances]);
+  }, [agents, amount, mode, targetNetwork, transactor, pushLog, refetchBalances]);
 
   const skipFunding = useCallback(() => {
     setPhase("ready");
@@ -348,9 +381,13 @@ export function ArenaLobby({ agents, onLaunch }: { agents: Agent[]; onLaunch: ()
               onFund={fundAll}
               onSkip={skipFunding}
               onConnect={openConnectModal}
+              onSwitchNetwork={() => switchChain({ chainId: targetNetwork.id })}
               funding={funding}
               isConnected={isConnected}
-              isLocalChain={isLocalChain}
+              mode={mode}
+              canFund={canFund}
+              wrongNetwork={wrongNetwork}
+              networkName={targetNetwork.name}
               balancesUnreachable={balancesUnreachable}
               locked={phase !== "funding"}
             />
@@ -437,9 +474,13 @@ function FundingBoard({
   onFund,
   onSkip,
   onConnect,
+  onSwitchNetwork,
   funding,
   isConnected,
-  isLocalChain,
+  mode,
+  canFund,
+  wrongNetwork,
+  networkName,
   balancesUnreachable,
   locked,
 }: {
@@ -451,12 +492,19 @@ function FundingBoard({
   onFund: () => void;
   onSkip: () => void;
   onConnect?: () => void;
+  onSwitchNetwork: () => void;
   funding: boolean;
   isConnected: boolean;
-  isLocalChain: boolean;
+  mode: FundingMode;
+  canFund: boolean;
+  wrongNetwork: boolean;
+  networkName: string;
   balancesUnreachable: boolean;
   locked: boolean;
 }) {
+  // The local shortcut needs no wallet, so the connect button only stands in for
+  // the batch path — and only until a wallet is actually connected.
+  const needsConnect = mode === "batch" && !isConnected;
   return (
     <div className="w-full max-w-4xl">
       <div className="flex flex-wrap items-center gap-3 mb-3">
@@ -472,10 +520,21 @@ function FundingBoard({
             />
             <span className="text-[#00FBFF]/40">ETH</span>
           </label>
-          {isConnected ? (
+          {wrongNetwork ? (
+            // The arena covers the site header, so its network switcher is out of
+            // reach — without this the board would just sit there disabled.
+            <button
+              onClick={onSwitchNetwork}
+              disabled={locked}
+              className="px-4 py-1.5 rounded border-2 font-dotGothic text-sm tracking-widest transition disabled:opacity-30"
+              style={{ borderColor: YELLOW, color: YELLOW }}
+            >
+              ▶ SWITCH TO {networkName.toUpperCase()}
+            </button>
+          ) : !needsConnect ? (
             <button
               onClick={onFund}
-              disabled={funding || locked || !isLocalChain || required === 0n}
+              disabled={funding || locked || !canFund || required === 0n}
               className="px-4 py-1.5 rounded border-2 font-dotGothic text-sm tracking-widest transition disabled:opacity-30 disabled:cursor-not-allowed"
               style={{ borderColor: YELLOW, color: YELLOW }}
             >
@@ -497,22 +556,28 @@ function FundingBoard({
 
       {balancesUnreachable && (
         <div className="mb-3 px-3 py-2 rounded border border-[#FF5861]/40 bg-[#FF5861]/10 text-xs text-[#FF5861]">
-          cannot reach the local chain — balances below are stale, start a node with `yarn chain`
+          {mode === "local"
+            ? "cannot reach the local chain — balances below are stale, start a node with `yarn chain`"
+            : `cannot reach ${networkName} — balances below are stale`}
         </div>
       )}
 
       {/* The skip escape has to appear whenever funding cannot complete, whether
-          or not a wallet is connected: off a local chain it is impossible by
-          design, and with the node unreachable the balances never reach the
+          or not a wallet is connected: on an unsupported network it is impossible
+          by design, and with the node unreachable the balances never reach the
           target, so without this the lobby dead-ends and the match never starts. */}
-      {(!isLocalChain || balancesUnreachable) && (
+      {(!canFund || balancesUnreachable) && (
         <div className="mb-3 flex flex-wrap items-center gap-3 px-3 py-2 rounded border border-[#00FBFF]/25 bg-[#00FBFF]/5 text-xs text-[#00FBFF]/60">
           <span>
-            {!isLocalChain && isConnected
-              ? "funding is only available on a local chain — these wallets are generated per run and their keys are discarded, so funds sent on a real network would be unrecoverable"
-              : !isLocalChain
-              ? "connect a wallet on a local chain to fund the agent wallets"
-              : "the local chain is unreachable, so funding cannot complete — start a node with `yarn chain` or skip"}
+            {mode === "none"
+              ? `funding is not available on ${networkName} — these wallets are generated per run and their keys are discarded, so funds sent where they matter would be unrecoverable`
+              : !canFund && isConnected
+              ? `switch your wallet to ${networkName} to fund the agent wallets`
+              : !canFund
+              ? `connect a wallet on ${networkName} to fund the agent wallets`
+              : mode === "local"
+              ? "the local chain is unreachable, so funding cannot complete — start a node with `yarn chain` or skip"
+              : `${networkName} is unreachable, so funding cannot complete — retry or skip`}
           </span>
           {!locked && (
             <button

@@ -1,29 +1,29 @@
 import { useQuery } from "@tanstack/react-query";
-import { Address, createPublicClient, http } from "viem";
-import { hardhat } from "viem/chains";
+import { Address } from "viem";
+import { usePublicClient } from "wagmi";
+import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 
 // Funding health check for the arena lobby. Balances are read straight from the
 // chain rather than inferred from our own transactions, so an agent funded by
 // any other means still shows up as funded.
-//
-// The client is pinned to hardhat instead of coming from wagmi: wagmiConfig only
-// holds scaffoldConfig.targetNetworks plus mainnet, so usePublicClient would not
-// resolve a local chain while the app targets Base. Funding is local-only anyway.
-const localPublicClient = createPublicClient({ chain: hardhat, transport: http() });
 
 export type FundingStatus = "waiting" | "partial" | "funded";
 
 export function useAgentBalances(addresses: Address[], enabled = true) {
+  const { targetNetwork } = useTargetNetwork();
+  const publicClient = usePublicClient({ chainId: targetNetwork.id });
+
   // Errors are not swallowed into a 0n balance: an unreachable node would then be
   // indistinguishable from ten genuinely empty wallets, leaving the director
   // staring at a board that never moves.
   const { data, isError, refetch } = useQuery({
-    queryKey: ["arenaAgentBalances", addresses],
-    enabled: enabled && addresses.length > 0,
+    queryKey: ["arenaAgentBalances", targetNetwork.id, addresses],
+    enabled: enabled && addresses.length > 0 && !!publicClient,
     refetchInterval: 2000,
     placeholderData: prev => prev,
     queryFn: async () => {
-      const balances = await Promise.all(addresses.map(address => localPublicClient.getBalance({ address })));
+      if (!publicClient) throw new Error("no public client for the target network");
+      const balances = await Promise.all(addresses.map(address => publicClient.getBalance({ address })));
       return Object.fromEntries(addresses.map((address, i) => [address, balances[i]])) as Record<string, bigint>;
     },
   });

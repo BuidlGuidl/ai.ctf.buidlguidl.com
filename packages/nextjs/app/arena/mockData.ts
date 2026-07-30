@@ -207,7 +207,7 @@ const SEEDS: Seed[] = [
 export const AGENT_COUNT = SEEDS.length;
 
 // How much ETH each agent needs before the match can start.
-export const FUNDING_AMOUNT_ETH = "0.05";
+export const FUNDING_AMOUNT_ETH = "0.001";
 
 function slug(harness: string, model: string) {
   return (harness.split(" ")[0] + "-" + model)
