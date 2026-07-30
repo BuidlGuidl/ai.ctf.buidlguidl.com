@@ -15,7 +15,6 @@ import {
   ConsoleEvent,
   DIFFICULTY_COLOR,
   DIRECTOR_REACTIONS,
-  HARNESS_GLYPH,
   SKILLS,
   buildAgents,
   makeEvent,
@@ -488,7 +487,7 @@ function AgentLog({ focused, lines, onClose }: { focused: Agent; lines: ConsoleE
   return (
     <div className="flex-1 min-h-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#020a0c]">
       <div className="flex items-center gap-2 px-3 h-9 border-b border-[#00FBFF]/15 bg-[#00141733] shrink-0 text-xs">
-        <AgentBadge agent={focused} />
+        <AgentBlockieLink agent={focused} />
         <span className="flex-1 min-w-0 text-sm font-bold text-white truncate">{focused.handle}</span>
         <StatusChip status={focused.status} />
         <span
@@ -776,15 +775,23 @@ function GridView({ ranked, onPick }: { ranked: Agent[]; onPick: (id: string) =>
       {ranked.map(a => {
         const ch = CHALLENGES[a.current - 1];
         return (
-          <button
+          <div
             key={a.id}
+            role="button"
+            tabIndex={0}
             onClick={() => onPick(a.id)}
-            className={`min-h-0 flex flex-col text-left rounded border bg-[#00090b] hover:border-[#00FBFF]/50 transition overflow-hidden group ${
+            onKeyDown={e => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onPick(a.id);
+              }
+            }}
+            className={`min-h-0 flex flex-col text-left rounded border bg-[#00090b] hover:border-[#00FBFF]/50 transition overflow-hidden group cursor-pointer ${
               a.status === "blocked" ? "border-[#FFBE00]/60" : "border-[#00FBFF]/15"
             }`}
           >
             <div className="flex items-center gap-1.5 px-2 h-8 shrink-0 border-b border-[#00FBFF]/10 bg-[#001417]">
-              <AgentBadge agent={a} />
+              <AgentBlockieLink agent={a} />
               <span className="text-[13px] font-bold text-white truncate flex-1">{a.handle}</span>
               <StatusDot status={a.status} />
             </div>
@@ -811,7 +818,7 @@ function GridView({ ranked, onPick }: { ranked: Agent[]; onPick: (id: string) =>
                 style={{ width: `${(a.solved.length / CHALLENGES.length) * 100}%`, background: a.color }}
               />
             </div>
-          </button>
+          </div>
         );
       })}
     </div>
@@ -1207,8 +1214,8 @@ function StatusChip({ status }: { status: AgentStatus }) {
   );
 }
 
-// Race-track badge: the agent wallet's blockie, linking out to the explorer.
-// It lives inside a clickable row, so the click must not also focus the agent.
+// Agent badge: the agent wallet's blockie, linking out to the explorer.
+// It lives inside a clickable row/card, so the click must not also focus the agent.
 function AgentBlockieLink({ agent, compact }: { agent: Agent; compact?: boolean }) {
   const { targetNetwork } = useTargetNetwork();
   return (
@@ -1223,18 +1230,6 @@ function AgentBlockieLink({ agent, compact }: { agent: Agent; compact?: boolean 
     >
       <BlockieAvatar address={agent.address} ensImage={null} size={compact ? 20 : 24} />
     </a>
-  );
-}
-
-function AgentBadge({ agent }: { agent: Agent }) {
-  return (
-    <span
-      className="flex items-center justify-center w-6 h-6 rounded text-[10px] font-bold shrink-0"
-      style={{ background: agent.color + "22", color: agent.color, border: `1px solid ${agent.color}55` }}
-      title={`${agent.harness} + ${agent.model}`}
-    >
-      {HARNESS_GLYPH[agent.harness] || "●"}
-    </span>
   );
 }
 
