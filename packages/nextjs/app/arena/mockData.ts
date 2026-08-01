@@ -42,6 +42,7 @@ export interface Agent {
   lastAction: string;
   preview: string[]; // rolling mini-terminal buffer (multiview cards)
   firstBlood: string; // time to first flag mm:ss
+  finishedAt: number | null; // match time in seconds when the last flag landed
 }
 
 // Names, blurbs and hints mirror the real CTF copy in packages/nextjs/data/challenges/*.md.
@@ -241,6 +242,7 @@ export function buildAgents(): Agent[] {
       lastAction: "waiting for match start",
       preview: seedPreview(CHALLENGES[0]?.tag || "default"),
       firstBlood: "—",
+      finishedAt: null,
     }),
   );
 }

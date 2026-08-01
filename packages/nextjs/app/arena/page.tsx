@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArenaLobby } from "./Lobby";
 import {
   AGENT_COUNT,
@@ -22,6 +22,7 @@ import {
   rollPreview,
   seedConsole,
 } from "./mockData";
+import { type ArenaPhase, readPreviewState } from "./previewState";
 import { BlockieAvatar } from "~~/components/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 import { getBlockExplorerAddressLink } from "~~/utils/scaffold-eth";
@@ -43,6 +44,10 @@ type ChatMsg = {
   text: string;
   director?: boolean;
 };
+// Once the board is locked the operator can still flip back to the live arena
+// layout to read the final numbers, so the result card is a view, not a phase.
+type FinalView = "results" | "data";
+type PodiumPlace = 1 | 2 | 3;
 
 let uid = 0;
 const nid = () => ++uid;
@@ -94,12 +99,35 @@ const fmtClock = (s: number) => {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 };
 
-// Flags first, then who drew first blood soonest, then a stable id tiebreak.
-// Cost is deliberately kept out of the tiebreak — it changes every tick, which
-// would make the race rows swap (and animate) constantly for no real reason.
+// `soft` is the translucent wash behind a podium row, `shadow`/`highlight` the
+// two ends of the medal's metal gradient.
+const PODIUM = {
+  1: { tone: "#FFBE00", highlight: "#FFF1A6", shadow: "#8A5700", soft: "rgba(255,190,0,.16)", label: "GOLD" },
+  2: { tone: "#CBD5E1", highlight: "#FFFFFF", shadow: "#64748B", soft: "rgba(203,213,225,.14)", label: "SILVER" },
+  3: { tone: "#CD7F32", highlight: "#F5C28F", shadow: "#6B351C", soft: "rgba(205,127,50,.16)", label: "BRONZE" },
+} as const;
+
+// How long a podium finish stays on screen. Kept in step with the
+// `podiumBroadcast` keyframes so the banner is never cut off mid-animation.
+const FINISH_STING_MS = 4600;
+
+const PODIUM_RESULT: Record<PodiumPlace, string> = {
+  1: "ARENA CHAMPION",
+  2: "SECOND PLACE SECURED",
+  3: "THIRD PLACE SECURED",
+};
+
+// Flags first, then the clock for anyone who cleared the board, then who drew
+// first blood soonest, then a stable id tiebreak. Cost is deliberately kept out
+// of the tiebreak — it changes every tick, which would make the race rows swap
+// (and animate) constantly for no real reason.
 const rankAgents = (agents: Agent[]) =>
   [...agents].sort(
-    (a, b) => b.solved.length - a.solved.length || a.firstBlood.localeCompare(b.firstBlood) || a.id.localeCompare(b.id),
+    (a, b) =>
+      b.solved.length - a.solved.length ||
+      (a.finishedAt !== null && b.finishedAt !== null ? a.finishedAt - b.finishedAt : 0) ||
+      a.firstBlood.localeCompare(b.firstBlood) ||
+      a.id.localeCompare(b.id),
   );
 
 // Challenge #1 must be minted first; after that any remaining flag is fair game.
@@ -121,13 +149,34 @@ export default function ArenaPage() {
   const [mounted, setMounted] = useState(false);
   const [stageMode, setStageMode] = useState<"overview" | "focus">("overview");
   const [overviewTab, setOverviewTab] = useState<"race" | "grid">("race");
-  // "lobby" = pre-game roster / connection screen, "live" = the running arena.
-  const [phase, setPhase] = useState<"lobby" | "live">("lobby");
+  // "lobby" = pre-game roster / connection screen, "live" = the running arena,
+  // "finished" = every result locked and the board frozen.
+  const [phase, setPhase] = useState<ArenaPhase>("lobby");
+  const [finalView, setFinalView] = useState<FinalView>("results");
   // Seed on the client only — buildAgents() uses Math.random(), so running it
   // during SSR would hand the client a different roster than the server rendered.
   useEffect(() => {
-    setAgents(buildAgents());
+    const roster = buildAgents();
+    const preview = readPreviewState(roster, window.location.search);
     setMounted(true);
+    if (!preview) {
+      setAgents(roster);
+      return;
+    }
+    setAgents(preview.agents);
+    setClock(preview.clock);
+    setPhase(preview.phase);
+    if (!preview.finisher) return;
+    const { index, at } = preview.finisher;
+    const t = setTimeout(() => {
+      setClock(at);
+      setAgents(prev =>
+        prev.map((a, i) =>
+          i === index ? { ...a, solved: CHALLENGES.map(c => c.id), status: "done", finishedAt: at } : a,
+        ),
+      );
+    }, 1600);
+    return () => clearTimeout(t);
   }, []);
 
   const agentsRef = useRef(agents);
@@ -156,6 +205,11 @@ export default function ArenaPage() {
   const focused = useMemo(() => agents.find(a => a.id === focusedId), [agents, focusedId]);
   const ranked = useMemo(() => rankAgents(agents), [agents]);
   const totalSolved = useMemo(() => agents.reduce((n, a) => n + a.solved.length, 0), [agents]);
+  const finishedCount = useMemo(() => agents.filter(a => a.finishedAt !== null).length, [agents]);
+  const allFinished = agents.length > 0 && finishedCount === agents.length;
+  // The running clock can be a tick past the last finish; the board should show
+  // the winning time, not whenever the interval happened to be torn down.
+  const lastFinishAt = useMemo(() => agents.reduce((n, a) => Math.max(n, a.finishedAt ?? 0), 0), [agents]);
 
   const pushFeed = useCallback((f: Omit<FeedItem, "id">) => {
     setFeed(prev => [{ ...f, id: nid() }, ...prev].slice(0, 40));
@@ -197,16 +251,17 @@ export default function ArenaPage() {
     setLines(seedConsole(a).map(l => ({ ...l, id: nid() })));
   }, [focusedId]);
 
-  // LIVE clock — only runs once the match has started.
+  // LIVE clock — runs between the start of the match and the last flag.
   useEffect(() => {
-    if (phase !== "live") return;
+    if (phase !== "live" || allFinished) return;
     const t = setInterval(() => setClock(c => c + 1), 1000);
     return () => clearInterval(t);
-  }, [phase]);
+  }, [phase, allFinished]);
 
-  // Master simulation loop — dormant until the match starts.
+  // Master simulation loop — dormant until the match starts, stopped for good
+  // once the last agent is home.
   useEffect(() => {
-    if (phase !== "live") return;
+    if (phase !== "live" || allFinished) return;
 
     // Mint one flag for an agent and announce it across the arena.
     const mint = (a: Agent, flagId: number) => {
@@ -226,6 +281,7 @@ export default function ArenaPage() {
             // leave a blocked row in the feed that never resolves.
             status: finished ? "done" : x.status === "blocked" ? "blocked" : "working",
             firstBlood: x.solved.length === 0 ? fmtClock(clockRef.current) : x.firstBlood,
+            finishedAt: finished ? clockRef.current : x.finishedAt,
           };
         }),
       );
@@ -237,7 +293,12 @@ export default function ArenaPage() {
         text: `${a.handle} captured Challenge ${flagId} · ${ch.name}`,
       });
       if (a.solved.length + 1 >= CHALLENGES.length) {
-        pushFeed({ type: "done", agentId: a.id, color: a.color, text: `${a.handle} cleared the board and exited` });
+        pushFeed({
+          type: "done",
+          agentId: a.id,
+          color: a.color,
+          text: `${a.handle} cleared the board in ${fmtClock(clockRef.current)} and exited`,
+        });
       }
     };
 
@@ -347,7 +408,15 @@ export default function ArenaPage() {
       }
     }, 950);
     return () => clearInterval(t);
-  }, [phase, pushFeed, pushChat, pushFlash]);
+  }, [phase, allFinished, pushFeed, pushChat, pushFlash]);
+
+  // Hold on the frozen board long enough for the last flag pop and the podium
+  // sting to finish playing, then cut to the result card.
+  useEffect(() => {
+    if (phase !== "live" || !allFinished) return;
+    const t = setTimeout(() => setPhase("finished"), FINISH_STING_MS + 200);
+    return () => clearTimeout(t);
+  }, [phase, allFinished]);
 
   if (!mounted || !focused) {
     return (
@@ -361,10 +430,20 @@ export default function ArenaPage() {
     return <ArenaLobby agents={agents} onLaunch={startMatch} />;
   }
 
+  if (phase === "finished" && finalView === "results") {
+    return <FinalCeremony ranked={ranked} onViewData={() => setFinalView("data")} />;
+  }
+
   return (
     <div className="fixed inset-0 z-[60] flex flex-col bg-black text-[#00FBFF] font-mono overflow-hidden arena-root">
       <Scanlines />
-      <TopBar clock={clock} totalSolved={totalSolved} />
+      <TopBar
+        clock={allFinished ? lastFinishAt : clock}
+        totalSolved={totalSolved}
+        finishedCount={finishedCount}
+        allFinished={allFinished}
+        onViewResults={phase === "finished" ? () => setFinalView("results") : undefined}
+      />
 
       <div className="flex flex-col flex-1 min-h-0">
         <div className="flex flex-1 min-h-0">
@@ -383,7 +462,7 @@ export default function ArenaPage() {
             {stageMode === "focus" ? (
               <AgentLog focused={focused} lines={lines} onClose={closeLog} />
             ) : (
-              <ArenaStream feed={feed} chat={chat} onSend={sendDirector} />
+              <ArenaStream feed={feed} chat={chat} onSend={sendDirector} archived={phase === "finished"} />
             )}
           </div>
         </div>
@@ -417,24 +496,281 @@ export default function ArenaPage() {
   );
 }
 
+/* ---------------------------------------------------------- FinalCeremony */
+
+// The end card: podium for the top three, then everyone else in finish order.
+function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: () => void }) {
+  if (!ranked.length) return null;
+
+  const rest = ranked.slice(3);
+  const columnBreak = Math.ceil(rest.length / 2);
+  const columns = [rest.slice(0, columnBreak), rest.slice(columnBreak)];
+
+  return (
+    <div className="fixed inset-0 z-[60] flex flex-col overflow-hidden bg-black text-[#00FBFF] font-mono final-root">
+      <Scanlines />
+      <div className="pointer-events-none absolute inset-0 z-10 final-victory-sweep" />
+
+      <header className="relative z-20 flex h-14 shrink-0 items-center gap-3 border-b border-[#FFBE00]/25 bg-black/65 px-4 sm:px-5">
+        <span className="flex items-center gap-2 text-xs font-bold tracking-[0.18em] text-[#00ff9c] sm:text-sm">
+          <span className="h-2.5 w-2.5 rounded-full bg-[#00ff9c] shadow-[0_0_10px_#00ff9c]" />
+          MATCH COMPLETE
+        </span>
+        <div className="hidden font-dotGothic text-lg tracking-wide text-[#00FBFF] lg:block lg:text-xl">
+          BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · FINAL TRANSMISSION
+        </div>
+        <button
+          onClick={onViewData}
+          className="ml-auto shrink-0 rounded border border-[#00FBFF]/30 px-2.5 py-1 text-[10px] font-bold tracking-[0.12em] text-[#00FBFF]/60 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
+        >
+          ARENA DATA ▸
+        </button>
+      </header>
+
+      <main className="console-scroll relative z-20 flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:py-8">
+        <section className="final-lock-in mx-auto max-w-5xl text-center">
+          <div className="text-[10px] font-bold tracking-[0.35em] text-[#00ff9c] sm:text-xs">
+            ALL AGENT RESULTS COMMITTED
+          </div>
+          <h1 className="final-title mt-2 font-dotGothic text-3xl tracking-[0.12em] text-white sm:text-5xl">
+            RESULTS LOCKED
+          </h1>
+        </section>
+
+        <section className="mx-auto mt-10 grid max-w-4xl grid-cols-1 items-end gap-3 md:mt-14 md:grid-cols-3 md:gap-4">
+          {ranked.slice(0, 3).map((agent, i) => (
+            <FinalistCard key={agent.id} agent={agent} place={(i + 1) as PodiumPlace} />
+          ))}
+        </section>
+
+        {rest.length > 0 && (
+          <section className="mx-auto mt-8 max-w-5xl pb-5 md:mt-10">
+            <div className="mb-3 flex items-center gap-3 text-[11px] font-bold tracking-[0.24em] text-[#00FBFF]/45 sm:text-xs">
+              <span>FINAL STANDINGS</span>
+              <span className="h-px flex-1 bg-[#00FBFF]/15" />
+              <span>{ranked.length} RESULTS</span>
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
+              {columns.map((column, columnIndex) => (
+                <div key={columnIndex} className="flex flex-col gap-2">
+                  {column.map((agent, i) => {
+                    const place = (columnIndex === 0 ? i : columnBreak + i) + 4;
+                    return (
+                      <div
+                        key={agent.id}
+                        className="final-result-in flex min-h-16 items-center gap-2 rounded-md border border-[#00FBFF]/15 bg-[#001014]/60 px-3 sm:gap-3 sm:px-4"
+                        style={{ animationDelay: `${1.15 + (place - 4) * 0.08}s` }}
+                      >
+                        <span className="race-final-position w-7 text-center font-dotGothic text-base text-[#00ff9c] sm:text-lg">
+                          {place}
+                        </span>
+                        <AgentBlockieLink agent={agent} />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-bold text-white">{agent.handle}</div>
+                          <div className="mt-0.5 truncate text-[11px] text-[#00FBFF]/40 sm:text-xs">
+                            {agent.harness} · {agent.model}
+                          </div>
+                        </div>
+                        <span className="hidden shrink-0 text-xs text-[#00FBFF]/40 min-[430px]:inline">
+                          {agent.solved.length} FLAGS
+                        </span>
+                        <span className="w-[78px] shrink-0 text-right text-sm font-bold tabular-nums text-[#00ff9c] sm:text-base">
+                          {fmtClock(agent.finishedAt ?? 0)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+      </main>
+
+      <ArenaStyles />
+    </div>
+  );
+}
+
+function FinalistCard({ agent, place }: { agent: Agent; place: PodiumPlace }) {
+  const winner = place === 1;
+  const podium = PODIUM[place];
+  // The champion sits centre and raised, silver left, bronze right — but only
+  // once the three cards are actually side by side.
+  const layout = place === 1 ? "md:order-2 md:-translate-y-5" : place === 2 ? "md:order-1" : "md:order-3";
+  const delay = place === 2 ? 0.35 : place === 1 ? 0.65 : 0.95;
+
+  return (
+    <div className={layout}>
+      <article
+        className={`final-card-in relative overflow-hidden rounded-xl border bg-[#020a0c]/95 px-4 py-4 text-center ${
+          winner ? "final-winner-card min-h-[224px] sm:px-6 sm:py-5" : "min-h-[184px]"
+        }`}
+        style={{
+          borderColor: podium.tone,
+          boxShadow: winner ? "0 0 44px -10px rgba(255,190,0,.6)" : `0 0 30px -14px ${podium.tone}`,
+          animationDelay: `${delay}s`,
+        }}
+      >
+        <div className="absolute inset-x-0 top-0 h-0.5" style={{ background: podium.tone }} />
+        <div className="flex min-h-10 items-start justify-between gap-3 text-left">
+          <div className="text-[9px] font-bold tracking-[0.28em]" style={{ color: podium.tone }}>
+            {winner ? PODIUM_RESULT[1] : `FINAL PLACE ${place}`}
+          </div>
+          <PodiumMedal place={place} size={winner ? "lg" : "md"} animate />
+        </div>
+        {/* The orbit ring sits outside the avatar's box, so it needs its own
+            wrapper — clipping the blockie into a circle would clip the ring too. */}
+        <div className={`relative mx-auto mt-1 ${winner ? "h-20 w-20 final-winner-orbit" : "h-14 w-14"}`}>
+          <div
+            className="h-full w-full overflow-hidden rounded-full border-2"
+            style={{ borderColor: agent.color, background: `${agent.color}14` }}
+          >
+            <BlockieAvatar address={agent.address} ensImage={null} size={winner ? 76 : 52} />
+          </div>
+        </div>
+        <div className={`mt-3 truncate font-bold text-white ${winner ? "text-base sm:text-lg" : "text-sm"}`}>
+          {agent.handle}
+        </div>
+        <div className="mt-0.5 truncate text-[10px] text-[#00FBFF]/40">
+          {agent.harness} · {agent.model}
+        </div>
+        <div
+          className={`mt-3 font-dotGothic tabular-nums ${
+            winner ? "text-xl text-[#FFBE00]" : "text-base text-[#00ff9c]"
+          }`}
+        >
+          {fmtClock(agent.finishedAt ?? 0)}
+        </div>
+        <div className="mt-1 text-[9px] tracking-[0.16em] text-[#00FBFF]/30">
+          {agent.solved.length}/{CHALLENGES.length} FLAGS · ${agent.cost.toFixed(2)}
+        </div>
+      </article>
+    </div>
+  );
+}
+
+// Gradient ids have to be unique per instance — several medals share a page and
+// `url(#id)` resolves against the first match, so a fixed id would repaint every
+// medal in gold. useId keeps that stable across SSR and hydration.
+function PodiumMedal({
+  place,
+  size = "md",
+  animate = false,
+  className = "",
+}: {
+  place: PodiumPlace;
+  size?: "sm" | "md" | "lg";
+  animate?: boolean;
+  className?: string;
+}) {
+  const podium = PODIUM[place];
+  const base = useId().replace(/:/g, "");
+  const metalId = `${base}-metal`;
+  const ribbonId = `${base}-ribbon`;
+  const sizeClass = size === "lg" ? "h-16 w-14" : size === "sm" ? "h-8 w-7" : "h-12 w-10";
+
+  return (
+    <svg
+      className={`podium-medal-svg ${sizeClass} ${animate ? "podium-medal-pop" : ""} ${className}`}
+      style={{ "--podium-tone": podium.tone, "--podium-soft": podium.soft } as CSSProperties}
+      viewBox="0 0 64 76"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <title>
+        {podium.label} medal, place {place}
+      </title>
+      <defs>
+        <linearGradient id={ribbonId} x1="10" y1="2" x2="50" y2="35" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#0B353A" />
+          <stop offset="0.46" stopColor="#031B1F" />
+          <stop offset="1" stopColor={podium.shadow} />
+        </linearGradient>
+        <linearGradient id={metalId} x1="17" y1="29" x2="48" y2="69" gradientUnits="userSpaceOnUse">
+          <stop stopColor={podium.highlight} />
+          <stop offset="0.38" stopColor={podium.tone} />
+          <stop offset="1" stopColor={podium.shadow} />
+        </linearGradient>
+      </defs>
+
+      <path d="M12 2H29L36 31L21 38L12 2Z" fill={`url(#${ribbonId})`} stroke={podium.tone} strokeWidth="1.5" />
+      <path d="M35 2H52L43 38L28 31L35 2Z" fill={`url(#${ribbonId})`} stroke={podium.tone} strokeWidth="1.5" />
+      <path d="M18 3H23L29 31L24 33L18 3Z" fill={podium.highlight} opacity="0.2" />
+      <path d="M41 3H47L40 33L35 31L41 3Z" fill={podium.highlight} opacity="0.16" />
+
+      <circle cx="32" cy="50" r="23" fill="#020708" stroke={podium.shadow} strokeWidth="2" />
+      <circle cx="32" cy="50" r="20" fill={`url(#${metalId})`} stroke={podium.highlight} strokeWidth="1.5" />
+      <circle cx="32" cy="50" r="15.5" fill="#051013" fillOpacity="0.92" stroke={podium.shadow} strokeWidth="1.25" />
+      <path
+        d="M19.8 43.5C22.3 37.2 28.7 33.2 35.5 34"
+        stroke={podium.highlight}
+        strokeWidth="2"
+        strokeLinecap="round"
+        opacity="0.72"
+      />
+      <path
+        d="M45.5 57.5C42.8 63.1 37.1 66.5 30.9 66"
+        stroke={podium.shadow}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        opacity="0.7"
+      />
+      <text x="32" y="57" fill={podium.tone} textAnchor="middle" fontFamily="monospace" fontSize="22" fontWeight="900">
+        {place}
+      </text>
+    </svg>
+  );
+}
+
 /* ------------------------------------------------------------------ TopBar */
 
-function TopBar({ clock, totalSolved }: { clock: number; totalSolved: number }) {
+// `onViewResults` is only handed over once the match is locked — it doubles as
+// the signal that the board is an archive and needs a way back to the podium.
+function TopBar({
+  clock,
+  totalSolved,
+  finishedCount,
+  allFinished,
+  onViewResults,
+}: {
+  clock: number;
+  totalSolved: number;
+  finishedCount: number;
+  allFinished: boolean;
+  onViewResults?: () => void;
+}) {
   return (
     <div className="flex items-center gap-4 px-5 h-14 border-b border-[#00FBFF]/25 bg-gradient-to-r from-[#020808] to-[#001014] shrink-0">
-      <span className="flex items-center gap-2 text-[#FF5861] font-bold tracking-widest">
-        <span className="w-2.5 h-2.5 rounded-full bg-[#FF5861] live-dot" /> LIVE
+      <span
+        className={`flex items-center gap-2 font-bold tracking-widest ${
+          allFinished ? "text-[#00ff9c]" : "text-[#FF5861]"
+        }`}
+      >
+        <span className={`w-2.5 h-2.5 rounded-full ${allFinished ? "bg-[#00ff9c]" : "bg-[#FF5861] live-dot"}`} />
+        {allFinished ? "LOCKED" : "LIVE"}
       </span>
-      <div className="font-dotGothic text-xl md:text-2xl text-[#00FBFF] tracking-wide title-glow">
+      <div className="hidden sm:block font-dotGothic text-xl md:text-2xl text-[#00FBFF] tracking-wide title-glow">
         BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · AGENT ARENA
       </div>
-      <div className="hidden lg:flex items-center gap-1 text-xs text-[#00FBFF]/50">
+      <div className="hidden 2xl:flex items-center gap-1 text-xs text-[#00FBFF]/50">
         <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{AGENT_COUNT} AGENTS</span>
         <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{CHALLENGES.length} CHALLENGES</span>
       </div>
       <div className="ml-auto flex items-center gap-4 text-sm">
-        <span className="text-[#00FBFF]/60">
+        {onViewResults && (
+          <button
+            onClick={onViewResults}
+            className="px-2.5 py-1 rounded border border-[#FFBE00]/50 text-[#FFBE00] text-[10px] font-bold tracking-[0.12em] hover:bg-[#FFBE00]/10 transition"
+          >
+            ◆ RESULTS
+          </button>
+        )}
+        <span className="hidden md:inline text-[#00FBFF]/60">
           🏁 <span className="text-[#00ff9c] font-bold">{totalSolved}</span> flags
+        </span>
+        <span className={finishedCount ? "text-[#00ff9c] font-bold" : "text-[#00FBFF]/45"}>
+          ◆ {finishedCount}/{AGENT_COUNT}
         </span>
         <span className="tabular-nums text-[#FFBE00] font-bold">⏱ {fmtClock(clock)}</span>
       </div>
@@ -483,6 +819,7 @@ function AgentLog({ focused, lines, onClose }: { focused: Agent; lines: ConsoleE
   }, [lines]);
 
   const ch = CHALLENGES[focused.current - 1];
+  const finished = focused.finishedAt !== null;
 
   return (
     <div className="flex-1 min-h-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#020a0c]">
@@ -490,13 +827,19 @@ function AgentLog({ focused, lines, onClose }: { focused: Agent; lines: ConsoleE
         <AgentBlockieLink agent={focused} />
         <span className="flex-1 min-w-0 text-sm font-bold text-white truncate">{focused.handle}</span>
         <StatusChip status={focused.status} />
-        <span
-          className="px-1.5 py-0.5 rounded font-bold shrink-0 text-[10px] max-w-[110px] truncate"
-          title={`#${ch.id} ${ch.name}`}
-          style={{ color: DIFFICULTY_COLOR[ch.difficulty], border: `1px solid ${DIFFICULTY_COLOR[ch.difficulty]}55` }}
-        >
-          #{ch.id} {ch.name}
-        </span>
+        {finished ? (
+          <span className="px-1.5 py-0.5 rounded font-bold shrink-0 text-[10px] text-[#00ff9c] border border-[#00ff9c]/40">
+            LOCKED · {fmtClock(focused.finishedAt ?? 0)}
+          </span>
+        ) : (
+          <span
+            className="px-1.5 py-0.5 rounded font-bold shrink-0 text-[10px] max-w-[110px] truncate"
+            title={`#${ch.id} ${ch.name}`}
+            style={{ color: DIFFICULTY_COLOR[ch.difficulty], border: `1px solid ${DIFFICULTY_COLOR[ch.difficulty]}55` }}
+          >
+            #{ch.id} {ch.name}
+          </span>
+        )}
         <span className="ml-auto text-[#00ff9c] font-bold shrink-0">
           {focused.solved.length}/{CHALLENGES.length}
         </span>
@@ -516,7 +859,13 @@ function AgentLog({ focused, lines, onClose }: { focused: Agent; lines: ConsoleE
         {lines.map(l => (
           <ConsoleRow key={l.id} line={l} />
         ))}
-        <div className="text-[#00ff9c] animate-pulse">▋</div>
+        {finished ? (
+          <div className="mt-2 border-t border-[#00ff9c]/20 pt-2 text-[#00ff9c] font-bold">
+            ◆ SESSION COMPLETE · RESULT COMMITTED
+          </div>
+        ) : (
+          <div className="text-[#00ff9c] animate-pulse">▋</div>
+        )}
       </div>
     </div>
   );
@@ -636,11 +985,41 @@ function RaceView({
     prevLeader.current = leader;
   }, [ranked]);
   useEffect(() => () => void (leadTimer.current && clearTimeout(leadTimer.current)), []);
+
+  // A podium finish gets a broadcast sting. Whoever has already finished when
+  // this view mounts is recorded silently, so switching tabs (or landing on a
+  // frozen board) never replays a celebration that already aired.
+  const [sting, setSting] = useState<{ key: string; agent: Agent; place: PodiumPlace } | null>(null);
+  const seenFinishers = useRef<Set<string> | null>(null);
+  const stingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const finishers = ranked.filter(a => a.solved.length >= total);
+    if (seenFinishers.current === null) {
+      seenFinishers.current = new Set(finishers.map(a => a.id));
+      return;
+    }
+    const seen = seenFinishers.current;
+    // Take the best-placed newcomer: two agents can land in the same tick and
+    // only one banner fits, so the higher step of the podium wins it.
+    const newcomer = finishers.find(a => !seen.has(a.id));
+    finishers.forEach(a => seen.add(a.id));
+    if (!newcomer) return;
+
+    const place = ranked.indexOf(newcomer) + 1;
+    if (place > 3) return;
+    if (stingTimer.current) clearTimeout(stingTimer.current);
+    setSting({ key: `${newcomer.id}:${newcomer.finishedAt ?? 0}`, agent: newcomer, place: place as PodiumPlace });
+    stingTimer.current = setTimeout(() => setSting(null), FINISH_STING_MS);
+  }, [ranked, total]);
+  useEffect(() => () => void (stingTimer.current && clearTimeout(stingTimer.current)), []);
+
   return (
-    <div className={compact ? "p-2 space-y-[2px]" : "p-3 space-y-1"}>
+    <div className={`relative ${compact ? "p-2 space-y-[2px]" : "p-3 space-y-1"}`}>
+      {sting && <RaceFinishSting key={sting.key} agent={sting.agent} place={sting.place} />}
+
       {/* ruler — one column per flag minted, in capture order */}
       <div className={`flex items-center ${rowGap} px-2 pb-1`}>
-        <span className="w-5 shrink-0" />
+        <span className="w-8 shrink-0" />
         <span className="w-3 shrink-0" />
         <span className={`${compact ? "w-5" : "w-6"} shrink-0`} />
         <span className={`${compact ? "w-40" : "w-44"} shrink-0 text-[9px] tracking-widest text-[#00FBFF]/25`}>
@@ -659,112 +1038,193 @@ function RaceView({
             </span>
           ))}
         </div>
-        <span className="w-10 shrink-0 text-right text-[9px] tracking-widest text-[#00FBFF]/25">FLAGS</span>
+        <span className="w-20 shrink-0 text-right text-[9px] tracking-widest text-[#00FBFF]/25">RESULT</span>
       </div>
 
-      {ranked.map((a, i) => (
-        // A div, not a button: the row holds the explorer link on the blockie and
-        // an anchor inside a button is invalid markup.
-        <div
-          key={a.id}
-          ref={el => {
-            if (el) rowRefs.current.set(a.id, el);
-            else rowRefs.current.delete(a.id);
-          }}
-          role="button"
-          tabIndex={0}
-          onClick={() => onPick(a.id)}
-          onKeyDown={e => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              onPick(a.id);
-            }
-          }}
-          className={`relative w-full flex items-center ${rowGap} px-2 ${
-            compact ? "py-[2px]" : "py-1.5"
-          } rounded hover:bg-[#00FBFF]/5 will-change-transform text-left group ${
-            leadTaker === a.id ? "lead-take" : ""
-          } cursor-pointer`}
-        >
-          <span
-            className={`w-5 text-center text-xs font-bold tabular-nums shrink-0 ${
-              i === 0 ? "text-[#FFBE00]" : i < 3 ? "text-[#00ff9c]" : "text-[#00FBFF]/40"
+      {ranked.map((a, i) => {
+        // Podium dressing is only earned by finishing — leading on flags alone
+        // keeps the plain crown, because the order can still change.
+        const place = done(a) && i < 3 ? ((i + 1) as PodiumPlace) : null;
+        const podium = place ? PODIUM[place] : null;
+        const celebrating = sting?.agent.id === a.id;
+        return (
+          // A div, not a button: the row holds the explorer link on the blockie and
+          // an anchor inside a button is invalid markup.
+          <div
+            key={a.id}
+            ref={el => {
+              if (el) rowRefs.current.set(a.id, el);
+              else rowRefs.current.delete(a.id);
+            }}
+            role="button"
+            tabIndex={0}
+            onClick={() => onPick(a.id)}
+            onKeyDown={e => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onPick(a.id);
+              }
+            }}
+            className={`relative w-full flex items-center ${rowGap} px-2 ${
+              compact ? "py-[2px]" : "py-1.5"
+            } rounded hover:bg-[#00FBFF]/5 will-change-transform text-left group cursor-pointer ${
+              leadTaker === a.id ? "lead-take" : ""
+            } ${done(a) ? "agent-finish-row" : ""} ${place ? `race-podium-row race-podium-${place}` : ""} ${
+              celebrating ? "race-podium-celebrate" : ""
             }`}
+            style={
+              podium ? ({ "--podium-tone": podium.tone, "--podium-soft": podium.soft } as CSSProperties) : undefined
+            }
           >
-            {i === 0 ? <span className={`inline-block ${leadTaker === a.id ? "crown-pop" : ""}`}>👑</span> : i + 1}
-          </span>
-          <StatusDot status={a.status} />
-          <AgentBlockieLink agent={a} compact={compact} />
-          <span
-            className={`${compact ? "w-40 text-xs" : "w-44 text-sm"} truncate font-bold text-white shrink-0`}
-            title={`${a.harness} + ${a.model}`}
-          >
-            {a.handle}
-          </span>
-          <span className="w-12 text-right text-[11px] tabular-nums shrink-0 text-[#00FBFF]/55">
-            {(a.tokens / 1000).toFixed(0)}k
-          </span>
-          <span className="w-14 text-right text-[11px] tabular-nums shrink-0 text-[#FFBE00]/70">
-            ${a.cost.toFixed(2)}
-          </span>
+            {done(a) && !place && (
+              <span
+                aria-hidden="true"
+                className="absolute inset-y-1 left-0 w-[3px] rounded-r-full bg-[#00ff9c] shadow-[0_0_10px_rgba(0,255,156,0.9)]"
+              />
+            )}
+            <span
+              className={`flex w-8 shrink-0 items-center justify-center text-center text-xs font-bold tabular-nums ${
+                place
+                  ? ""
+                  : done(a)
+                  ? "race-final-position text-[#00ff9c]"
+                  : i === 0
+                  ? "text-[#FFBE00]"
+                  : i < 3
+                  ? "text-[#00ff9c]"
+                  : "text-[#00FBFF]/40"
+              }`}
+            >
+              {place ? (
+                // The sting shows a big medal of its own; hiding the row's copy
+                // keeps the two from reading as two different awards.
+                <PodiumMedal place={place} size="sm" animate={celebrating} className={celebrating ? "invisible" : ""} />
+              ) : i === 0 ? (
+                <span className={`inline-block ${leadTaker === a.id ? "crown-pop" : ""}`}>👑</span>
+              ) : (
+                i + 1
+              )}
+            </span>
+            <StatusDot status={a.status} />
+            <AgentBlockieLink agent={a} compact={compact} />
+            <span
+              className={`${compact ? "w-40 text-xs" : "w-44 text-sm"} truncate font-bold text-white shrink-0`}
+              title={`${a.harness} + ${a.model}`}
+            >
+              {a.handle}
+            </span>
+            <span className="w-12 text-right text-[11px] tabular-nums shrink-0 text-[#00FBFF]/55">
+              {(a.tokens / 1000).toFixed(0)}k
+            </span>
+            <span className="w-14 text-right text-[11px] tabular-nums shrink-0 text-[#FFBE00]/70">
+              ${a.cost.toFixed(2)}
+            </span>
 
-          {/* each square shows the flag number minted at that step; the next
-              square is the challenge being worked, the rest are flags left */}
-          <div className="flex-1 flex gap-[3px]">
-            {slots.map(k => {
-              const flagId = a.solved[k];
-              if (flagId !== undefined) {
-                const ch = CHALLENGES[flagId - 1];
-                const flashing = flashes.includes(`${a.id}:${flagId}`);
+            {/* each square shows the flag number minted at that step; the next
+                square is the challenge being worked, the rest are flags left */}
+            <div className="flex-1 flex gap-[3px]">
+              {slots.map(k => {
+                const flagId = a.solved[k];
+                if (flagId !== undefined) {
+                  const ch = CHALLENGES[flagId - 1];
+                  const flashing = flashes.includes(`${a.id}:${flagId}`);
+                  return (
+                    <span
+                      key={k}
+                      title={`#${flagId} ${ch?.name ?? ""} · minted ${k + 1} of ${total}`}
+                      className={`relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center text-[9px] font-bold tabular-nums transition-colors ${
+                        flashing ? "flag-pop" : ""
+                      }`}
+                      style={{ background: a.color, borderColor: a.color, color: "#00181c" }}
+                    >
+                      {flagId}
+                    </span>
+                  );
+                }
+                if (k === a.solved.length && !done(a)) {
+                  const ch = CHALLENGES[a.current - 1];
+                  const dc = ch ? DIFFICULTY_COLOR[ch.difficulty] : "#00FBFF";
+                  return (
+                    <span
+                      key={k}
+                      title={
+                        a.status === "working"
+                          ? `working on #${a.current} ${ch?.name ?? ""}`
+                          : `#${a.current} ${ch?.name ?? ""} — ${STATUS_STYLE[a.status].label}`
+                      }
+                      className={`relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center text-[9px] font-bold tabular-nums ${
+                        a.status === "working" ? "cell-working" : "opacity-40"
+                      }`}
+                      style={{ background: `${dc}1f`, borderColor: dc, color: dc }}
+                    >
+                      {a.current}
+                    </span>
+                  );
+                }
                 return (
                   <span
                     key={k}
-                    title={`#${flagId} ${ch?.name ?? ""} · minted ${k + 1} of ${total}`}
-                    className={`relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center text-[9px] font-bold tabular-nums transition-colors ${
-                      flashing ? "flag-pop" : ""
-                    }`}
-                    style={{ background: a.color, borderColor: a.color, color: "#00181c" }}
-                  >
-                    {flagId}
-                  </span>
+                    title="flag not minted yet"
+                    className={`relative flex-1 ${cellH} rounded-[3px] border`}
+                    style={{ background: "#00fbff08", borderColor: "#00fbff1a" }}
+                  />
                 );
-              }
-              if (k === a.solved.length && !done(a)) {
-                const ch = CHALLENGES[a.current - 1];
-                const dc = ch ? DIFFICULTY_COLOR[ch.difficulty] : "#00FBFF";
-                return (
-                  <span
-                    key={k}
-                    title={
-                      a.status === "working"
-                        ? `working on #${a.current} ${ch?.name ?? ""}`
-                        : `#${a.current} ${ch?.name ?? ""} — ${STATUS_STYLE[a.status].label}`
-                    }
-                    className={`relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center text-[9px] font-bold tabular-nums ${
-                      a.status === "working" ? "cell-working" : "opacity-40"
-                    }`}
-                    style={{ background: `${dc}1f`, borderColor: dc, color: dc }}
-                  >
-                    {a.current}
-                  </span>
-                );
-              }
-              return (
-                <span
-                  key={k}
-                  title="flag not minted yet"
-                  className={`relative flex-1 ${cellH} rounded-[3px] border`}
-                  style={{ background: "#00fbff08", borderColor: "#00fbff1a" }}
-                />
-              );
-            })}
+              })}
+            </div>
+
+            <span className="w-20 text-right text-xs tabular-nums shrink-0 text-[#00FBFF]/70">
+              {done(a) ? (
+                <span className="agent-finish-time font-bold" style={{ color: podium?.tone ?? "#00ff9c" }}>
+                  ◆ {fmtClock(a.finishedAt ?? 0)}
+                </span>
+              ) : (
+                `${a.solved.length}/${total}`
+              )}
+            </span>
           </div>
+        );
+      })}
+    </div>
+  );
+}
 
-          <span className="w-10 text-right text-xs tabular-nums shrink-0 text-[#00FBFF]/70">
-            {done(a) ? <span className="text-[#00ff9c] font-bold">◆ {a.solved.length}</span> : a.solved.length}
-          </span>
+// The broadcast overlay for a podium finish — sits over the top of the track for
+// a few seconds, the way a race feed cuts to a result graphic.
+function RaceFinishSting({ agent, place }: { agent: Agent; place: PodiumPlace }) {
+  const podium = PODIUM[place];
+  return (
+    <div
+      className="podium-broadcast pointer-events-none absolute inset-x-0 top-0 z-30 w-full overflow-hidden rounded-lg border bg-[#020708] shadow-2xl"
+      style={{ "--podium-tone": podium.tone, "--podium-soft": podium.soft } as CSSProperties}
+      role="status"
+      aria-live="polite"
+    >
+      <span className="podium-broadcast-sweep absolute inset-0" />
+      <span className="podium-broadcast-line absolute inset-x-0 top-0 h-1" />
+      <div className="relative flex items-center gap-4 px-5 py-4 sm:px-7 sm:py-5">
+        <PodiumMedal place={place} size="lg" animate className="shrink-0" />
+        <div className="min-w-0 flex-1">
+          <div className="text-[9px] font-bold tracking-[0.32em] sm:text-[10px]" style={{ color: podium.tone }}>
+            {podium.label} FINISH · RESULT LOCKED
+          </div>
+          <div className="mt-1 truncate font-dotGothic text-xl tracking-wide text-white sm:text-2xl">
+            {PODIUM_RESULT[place]}
+          </div>
+          <div className="mt-1 flex items-center gap-2 text-xs sm:text-sm">
+            <span className="truncate font-bold text-white">{agent.handle}</span>
+            <span className="text-[#00FBFF]/30">/</span>
+            <span className="shrink-0 font-dotGothic tabular-nums" style={{ color: podium.tone }}>
+              {fmtClock(agent.finishedAt ?? 0)}
+            </span>
+          </div>
         </div>
-      ))}
+        <div className="hidden text-right sm:block">
+          <div className="font-dotGothic text-4xl leading-none" style={{ color: podium.tone }}>
+            0{place}
+          </div>
+          <div className="mt-1 text-[8px] font-bold tracking-[0.24em] text-[#00FBFF]/35">PODIUM</div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -774,6 +1234,7 @@ function GridView({ ranked, onPick }: { ranked: Agent[]; onPick: (id: string) =>
     <div className="h-full p-2 grid grid-cols-5 auto-rows-fr gap-2">
       {ranked.map(a => {
         const ch = CHALLENGES[a.current - 1];
+        const finished = a.finishedAt !== null;
         return (
           <div
             key={a.id}
@@ -796,21 +1257,35 @@ function GridView({ ranked, onPick }: { ranked: Agent[]; onPick: (id: string) =>
               <StatusDot status={a.status} />
             </div>
             <div className="flex items-center gap-2 px-2 h-6 shrink-0 text-[11px] border-b border-[#00FBFF]/[0.07] bg-[#000d0f]">
-              <span className="truncate" style={{ color: DIFFICULTY_COLOR[ch.difficulty] }}>
-                C{ch.id} {ch.name}
+              <span className="truncate" style={{ color: finished ? "#00ff9c" : DIFFICULTY_COLOR[ch.difficulty] }}>
+                {finished ? `◆ FINISHED · ${fmtClock(a.finishedAt ?? 0)}` : `C${ch.id} ${ch.name}`}
               </span>
               <span className="ml-auto shrink-0 text-[#00FBFF]/45 tabular-nums">
                 {a.solved.length}/{CHALLENGES.length}
               </span>
             </div>
-            {/* rolling console — newest line sits at the bottom */}
-            <div className="flex-1 min-h-0 flex flex-col justify-end overflow-hidden px-2 py-1 text-[11px] leading-[1.5]">
-              {a.preview.map((line, k) => (
-                <div key={k} className="truncate text-[#7fd8dd]/80">
-                  {line}
-                </div>
-              ))}
-              <div className="text-[#00ff9c] animate-pulse shrink-0">▋</div>
+            {/* rolling console — newest line sits at the bottom, or the exit
+                notice once the agent has cleared the board */}
+            <div
+              className={`flex-1 min-h-0 flex flex-col justify-end overflow-hidden px-2 py-1 text-[11px] leading-[1.5] ${
+                finished ? "agent-terminal-locked" : ""
+              }`}
+            >
+              {finished ? (
+                <>
+                  <div className="text-[#00FBFF]/35">all challenge processes exited</div>
+                  <div className="text-[#00ff9c] font-bold">result committed ✓</div>
+                </>
+              ) : (
+                <>
+                  {a.preview.map((line, k) => (
+                    <div key={k} className="truncate text-[#7fd8dd]/80">
+                      {line}
+                    </div>
+                  ))}
+                  <div className="text-[#00ff9c] animate-pulse shrink-0">▋</div>
+                </>
+              )}
             </div>
             <div className="h-1 shrink-0 bg-[#00FBFF]/10">
               <div
@@ -843,7 +1318,7 @@ function ChallengeBoard({
       <div className="flex-1 min-h-0 overflow-y-auto console-scroll p-2 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-1.5 content-start">
         {CHALLENGES.map(c => {
           const mine = focused.solved.includes(c.id);
-          const isCurrent = focused.current === c.id;
+          const isCurrent = focused.finishedAt === null && focused.current === c.id;
           const count = solvedCount(c.id);
           return (
             <button
@@ -1027,7 +1502,17 @@ const STREAM_FILTERS: { id: StreamFilter; label: string }[] = [
 
 // Feed events and agent/director chat merged into one chronological stream, so
 // the whole arena reads back like a single timeline with a large history.
-function ArenaStream({ feed, chat, onSend }: { feed: FeedItem[]; chat: ChatMsg[]; onSend: (t: string) => void }) {
+function ArenaStream({
+  feed,
+  chat,
+  onSend,
+  archived = false,
+}: {
+  feed: FeedItem[];
+  chat: ChatMsg[];
+  onSend: (t: string) => void;
+  archived?: boolean;
+}) {
   const [filter, setFilter] = useState<StreamFilter>("all");
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -1094,14 +1579,16 @@ function ArenaStream({ feed, chat, onSend }: { feed: FeedItem[]; chat: ChatMsg[]
           onKeyDown={e => {
             if (e.key === "Enter") submit();
           }}
-          placeholder="broadcast a message to all agents…"
-          className="flex-1 min-w-0 bg-[#00181c] border border-[#00FBFF]/20 rounded px-2 py-1 text-xs text-white placeholder-[#00FBFF]/25 focus:outline-none focus:border-[#FFBE00]/60"
+          disabled={archived}
+          placeholder={archived ? "match complete · stream archived" : "broadcast a message to all agents…"}
+          className="flex-1 min-w-0 bg-[#00181c] border border-[#00FBFF]/20 rounded px-2 py-1 text-xs text-white placeholder-[#00FBFF]/25 focus:outline-none focus:border-[#FFBE00]/60 disabled:cursor-not-allowed disabled:opacity-55"
         />
         <button
           onClick={submit}
-          className="px-2.5 py-1 rounded border border-[#FFBE00]/50 text-[#FFBE00] text-xs font-bold hover:bg-[#FFBE00]/10 transition shrink-0"
+          disabled={archived}
+          className="px-2.5 py-1 rounded border border-[#FFBE00]/50 text-[#FFBE00] text-xs font-bold hover:bg-[#FFBE00]/10 transition shrink-0 disabled:cursor-not-allowed disabled:opacity-45"
         >
-          SEND
+          {archived ? "ARCHIVED" : "SEND"}
         </button>
       </div>
     </div>
@@ -1113,7 +1600,9 @@ const FEED_STYLE: Record<FeedItem["type"], { icon: string; cls: string }> = {
   skill: { icon: "⚡", cls: "text-[#c084fc]" },
   blocked: { icon: "⚠", cls: "text-[#FFBE00] font-bold" },
   resumed: { icon: "▶", cls: "text-[#00FBFF]/70" },
-  done: { icon: "◆", cls: "text-[#7fd8dd] font-bold" },
+  // Clearing the board is the loudest thing an agent can do, so it outranks a
+  // single flag capture in the stream.
+  done: { icon: "◆", cls: "text-[#FFBE00] font-bold" },
 };
 
 function FeedRow({ item }: { item: FeedItem }) {
@@ -1253,6 +1742,10 @@ function ArenaStyles() {
     <style jsx global>{`
       .arena-root {
         background-image: radial-gradient(circle at 20% 0%, #001a1f 0%, #000 55%);
+      }
+      .final-root {
+        background-image: radial-gradient(circle at 50% 18%, rgba(255, 190, 0, 0.13) 0%, transparent 34%),
+          radial-gradient(circle at 18% 0%, #001a1f 0%, #000 58%);
       }
       .scanlines {
         background: repeating-linear-gradient(
@@ -1411,6 +1904,270 @@ function ArenaStyles() {
           box-shadow: 0 0 0 0 rgba(0, 255, 156, 0);
         }
       }
+      /* --- podium + finish --- */
+      .podium-medal-svg {
+        display: block;
+        flex: none;
+        overflow: visible;
+        filter: drop-shadow(0 0 7px var(--podium-soft));
+      }
+      .podium-medal-pop {
+        transform-origin: 50% 45%;
+        animation: podiumMedalReveal 0.9s cubic-bezier(0.18, 0.92, 0.28, 1.28) both;
+      }
+      .race-podium-row {
+        border: 1px solid color-mix(in srgb, var(--podium-tone) 34%, transparent);
+        background: linear-gradient(90deg, var(--podium-soft), rgba(0, 251, 255, 0.015));
+        box-shadow: inset 3px 0 0 var(--podium-tone);
+      }
+      .race-podium-row::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: radial-gradient(circle at 12% 50%, var(--podium-soft), transparent 36%);
+      }
+      .race-podium-celebrate {
+        z-index: 4;
+        animation: podiumRowFinish 4.4s cubic-bezier(0.2, 0.82, 0.2, 1) both;
+      }
+      .podium-broadcast {
+        border-color: color-mix(in srgb, var(--podium-tone) 72%, transparent);
+        box-shadow: 0 0 42px -8px var(--podium-tone), inset 0 0 30px var(--podium-soft);
+        animation: podiumBroadcast 4.6s cubic-bezier(0.2, 0.82, 0.2, 1) both;
+      }
+      .podium-broadcast-line {
+        background: var(--podium-tone);
+        box-shadow: 0 0 18px 2px var(--podium-tone);
+      }
+      .podium-broadcast-sweep {
+        background: linear-gradient(
+          105deg,
+          transparent 25%,
+          var(--podium-soft) 46%,
+          rgba(255, 255, 255, 0.18) 50%,
+          transparent 70%
+        );
+        transform: translateX(-115%);
+        animation: podiumBroadcastSweep 1.4s ease-out 0.18s both;
+      }
+      @keyframes podiumMedalReveal {
+        0% {
+          transform: translateY(-9px) scale(0.55) rotate(-7deg);
+          opacity: 0;
+          filter: brightness(2.5) drop-shadow(0 0 14px var(--podium-tone));
+        }
+        58% {
+          transform: translateY(2px) scale(1.12) rotate(2deg);
+          opacity: 1;
+          filter: brightness(1.75) drop-shadow(0 0 10px var(--podium-tone));
+        }
+        100% {
+          transform: translateY(0) scale(1) rotate(0);
+          opacity: 1;
+          filter: brightness(1) drop-shadow(0 0 7px var(--podium-soft));
+        }
+      }
+      @keyframes podiumRowFinish {
+        0% {
+          filter: brightness(1);
+          box-shadow: inset 3px 0 0 var(--podium-tone), 0 0 0 0 transparent;
+        }
+        14% {
+          filter: brightness(1.65);
+          box-shadow: inset 4px 0 0 var(--podium-tone), 0 0 34px 6px var(--podium-tone);
+        }
+        48% {
+          filter: brightness(1.15);
+          box-shadow: inset 4px 0 0 var(--podium-tone), 0 0 20px 3px var(--podium-soft);
+        }
+        100% {
+          filter: brightness(1);
+          box-shadow: inset 3px 0 0 var(--podium-tone), 0 0 0 0 transparent;
+        }
+      }
+      @keyframes podiumBroadcast {
+        0% {
+          transform: translateY(-22px) scale(0.96);
+          opacity: 0;
+          filter: brightness(1.8);
+        }
+        8% {
+          transform: translateY(0) scale(1.01);
+          opacity: 1;
+        }
+        14%,
+        82% {
+          transform: translateY(0) scale(1);
+          opacity: 1;
+          filter: brightness(1);
+        }
+        100% {
+          transform: translateY(-10px) scale(0.99);
+          opacity: 0;
+        }
+      }
+      @keyframes podiumBroadcastSweep {
+        to {
+          transform: translateX(115%);
+        }
+      }
+      .agent-finish-row {
+        overflow: hidden;
+        background: linear-gradient(90deg, rgba(0, 255, 156, 0.08), rgba(0, 251, 255, 0.015));
+        animation: agentFinishLock 2.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+      .agent-finish-row::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+        transform: translateX(-120%);
+        animation: agentFinishSweep 1s ease-out 0.12s both;
+      }
+      .agent-finish-time {
+        animation: agentFinishText 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.25) 0.3s both;
+      }
+      .race-final-position {
+        text-shadow: 0 0 8px rgba(0, 255, 156, 0.9);
+      }
+      .agent-terminal-locked {
+        animation: terminalLock 0.7s ease-out both;
+        background: linear-gradient(180deg, transparent, rgba(0, 255, 156, 0.05));
+      }
+      @keyframes agentFinishLock {
+        0% {
+          background-color: transparent;
+          box-shadow: inset 0 0 0 0 rgba(0, 255, 156, 0);
+        }
+        18% {
+          background-color: rgba(0, 255, 156, 0.2);
+          box-shadow: inset 0 0 0 1px rgba(0, 255, 156, 0.8), 0 0 28px 2px rgba(0, 255, 156, 0.35);
+        }
+        100% {
+          background-color: transparent;
+          box-shadow: inset 0 0 0 0 rgba(0, 255, 156, 0);
+        }
+      }
+      @keyframes agentFinishSweep {
+        to {
+          transform: translateX(120%);
+        }
+      }
+      @keyframes agentFinishText {
+        from {
+          transform: translateY(5px);
+          opacity: 0;
+          filter: brightness(2.5);
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+          filter: brightness(1);
+        }
+      }
+      @keyframes terminalLock {
+        from {
+          filter: brightness(2);
+          opacity: 0.3;
+        }
+        to {
+          filter: brightness(1);
+          opacity: 1;
+        }
+      }
+      /* --- result card --- */
+      .final-victory-sweep {
+        background: linear-gradient(105deg, transparent 35%, rgba(255, 190, 0, 0.13) 49%, transparent 63%);
+        transform: translateX(-100%);
+        animation: finalVictorySweep 1.25s ease-out 0.15s both;
+      }
+      .final-lock-in {
+        opacity: 0;
+        animation: finalLockIn 0.7s ease-out 0.12s forwards;
+      }
+      .final-title {
+        text-shadow: 0 0 18px rgba(255, 190, 0, 0.38), 0 0 38px rgba(0, 251, 255, 0.18);
+      }
+      .final-card-in {
+        opacity: 0;
+        animation: finalCardIn 0.7s cubic-bezier(0.2, 0.86, 0.25, 1.18) forwards;
+      }
+      .final-result-in {
+        opacity: 0;
+        animation: finalResultIn 0.42s ease-out forwards;
+      }
+      .final-winner-card::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: radial-gradient(circle at 50% 25%, rgba(255, 190, 0, 0.14), transparent 46%);
+      }
+      .final-winner-orbit::before {
+        content: "";
+        position: absolute;
+        inset: -9px;
+        border: 1px solid rgba(255, 190, 0, 0.55);
+        border-radius: 999px;
+        animation: finalOrbit 1.1s cubic-bezier(0.2, 0.86, 0.25, 1.18) 1.05s both;
+      }
+      @keyframes finalVictorySweep {
+        to {
+          transform: translateX(100%);
+        }
+      }
+      @keyframes finalLockIn {
+        from {
+          transform: translateY(10px);
+          opacity: 0;
+          filter: brightness(1.8);
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+          filter: brightness(1);
+        }
+      }
+      @keyframes finalCardIn {
+        from {
+          transform: translateY(26px) scale(0.94);
+          opacity: 0;
+          filter: brightness(1.7);
+        }
+        to {
+          transform: translateY(0) scale(1);
+          opacity: 1;
+          filter: brightness(1);
+        }
+      }
+      @keyframes finalResultIn {
+        from {
+          transform: translateX(-10px);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+      @keyframes finalOrbit {
+        from {
+          transform: scale(0.6);
+          opacity: 0;
+          box-shadow: 0 0 0 0 rgba(255, 190, 0, 0.7);
+        }
+        60% {
+          opacity: 1;
+          box-shadow: 0 0 26px 5px rgba(255, 190, 0, 0.35);
+        }
+        to {
+          transform: scale(1);
+          opacity: 0.65;
+          box-shadow: 0 0 8px 1px rgba(255, 190, 0, 0.18);
+        }
+      }
       .console-scroll::-webkit-scrollbar {
         width: 6px;
         height: 6px;
@@ -1421,6 +2178,36 @@ function ArenaStyles() {
       }
       .console-scroll::-webkit-scrollbar-track {
         background: transparent;
+      }
+      /* Several of the entrances start at opacity 0 and animate in, so killing
+         the animation alone would leave them invisible — reset the end state too. */
+      @media (prefers-reduced-motion: reduce) {
+        .live-dot,
+        .toast-in,
+        .feed-in,
+        .current-pulse,
+        .lead-take,
+        .crown-pop,
+        .blocked-pulse,
+        .cell-working,
+        .flag-pop,
+        .podium-medal-pop,
+        .race-podium-celebrate,
+        .podium-broadcast,
+        .podium-broadcast-sweep,
+        .agent-finish-row,
+        .agent-finish-row::after,
+        .agent-finish-time,
+        .agent-terminal-locked,
+        .final-victory-sweep,
+        .final-lock-in,
+        .final-card-in,
+        .final-result-in,
+        .final-winner-orbit::before {
+          animation: none !important;
+          opacity: 1;
+          transform: none;
+        }
       }
     `}</style>
   );
