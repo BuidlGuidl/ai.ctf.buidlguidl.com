@@ -52,6 +52,16 @@ yarn start
 
 Now your app on `http://localhost:3000` is running entirely locally.
 
+One more edit for local work. The committed config targets Base, because that is what the
+deployed site runs on. Point `packages/nextjs/scaffold.config.ts` at your local chain:
+
+```ts
+targetNetworks: [chains.hardhat],
+```
+
+The header only shows the connect and faucet buttons on Hardhat, and wagmi can only switch a
+wallet to a chain in this list. Keep this edit out of your commits.
+
 ## Running the agent arena
 
 `/arena` watches real agents race through the challenges. The agents live in
@@ -124,14 +134,8 @@ this rehearsal at least once before an event.
 
 1. Remove `NEXT_PUBLIC_ARENA_DEV_SIGNER_KEY` from `packages/nextjs/.env.local`, then restart the dev server. The
    value is inlined at build time, so a reload is not enough.
-2. Point `packages/nextjs/scaffold.config.ts` at the local chain:
-
-   ```ts
-   targetNetworks: [chains.hardhat],
-   ```
-
-   Wagmi can only switch to a chain in this list. Leave this edit out of your commits: the deployed site targets
-   Base.
+2. Point `scaffold.config.ts` at Hardhat, as in the local setup above. Without it the wallet cannot switch to the
+   run's chain, and the seed signature fails.
 3. Import Hardhat account 0 into a browser wallet. The backend allows one operator address, set by
    `ARENA_OPERATOR_ADDRESSES` in its `.env`, and any other account fails the login with a 401.
 4. Open `http://localhost:3000/arena` and press `CONNECT WALLET`. The address appears in the lobby header, so
