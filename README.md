@@ -75,8 +75,8 @@ NEXT_PUBLIC_ARENA_DEV_SIGNER_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5
 ```
 
 That is Hardhat account 0. The local chain profile registers it as the seed funder, so one key signs both the
-operator login and the run seed. It signs without a wallet prompt. To rehearse the real prompts instead, import the
-key into a browser wallet, connect it, and leave the variable empty.
+operator login and the run seed. It signs without a wallet prompt. To rehearse the real prompts instead, see
+[Rehearsing with a real wallet](#rehearsing-with-a-real-wallet) below.
 
 Copy the backend's environment file and fill it in:
 
@@ -111,5 +111,35 @@ The defaults in `.env.example` already point at `http://localhost:3000` and Hard
 needs editing for local work.
 
 Open `http://localhost:3000/arena`, sign in, and pick a race duration. The lobby creates the run, you sign the
-seed, the local faucet funds the agent wallets, and the race starts. Only the operator's stop button ends a run:
-the clock counts down and says when time is up, but nothing stops on its own.
+seed, and the agents appear with an address each. Press `FUND AGENTS` to top them up, and the race starts once
+every balance clears the threshold. Only the operator's stop button ends a run: the clock counts down and says
+when time is up, but nothing stops on its own.
+
+To skip the funding step, start the backend with `ARENA_LOCAL_FAUCET=true`.
+
+### Rehearsing with a real wallet
+
+The dev signer key holds a raw private key, so it signs without a wallet and skips every check a wallet makes. Run
+this rehearsal at least once before an event.
+
+1. Remove `NEXT_PUBLIC_ARENA_DEV_SIGNER_KEY` from `packages/nextjs/.env.local`, then restart the dev server. The
+   value is inlined at build time, so a reload is not enough.
+2. Point `packages/nextjs/scaffold.config.ts` at the local chain:
+
+   ```ts
+   targetNetworks: [chains.hardhat],
+   ```
+
+   Wagmi can only switch to a chain in this list. Leave this edit out of your commits: the deployed site targets
+   Base.
+3. Import Hardhat account 0 into a browser wallet. The backend allows one operator address, set by
+   `ARENA_OPERATOR_ADDRESSES` in its `.env`, and any other account fails the login with a 401.
+4. Open `http://localhost:3000/arena` and press `CONNECT WALLET`. The address appears in the lobby header, so
+   check it before signing in.
+
+The wallet prompts twice. First a `personal_sign` for the operator login, then EIP-712 typed data for the run
+seed. The seed carries the run's chain id, so the lobby switches your wallet to the local chain before it asks. If
+your wallet cannot switch, it says which chain id to select.
+
+Serve the frontend on `http://localhost:3000`. The backend checks the domain a SIWE message claims against
+`ARENA_SIWE_DOMAINS`, and a proxied hostname fails that check.
