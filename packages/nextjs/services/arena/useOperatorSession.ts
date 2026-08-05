@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo } from "react";
 import type { SessionResponse } from "./arena-types";
 import { devSigner, operatorSiweMessage, seedTypedData } from "./auth";
 import { arenaClient } from "./client";
-import { useAccount, useSignMessage, useSignTypedData } from "wagmi";
+import { useAccount, useSignMessage, useSignTypedData, useSwitchChain } from "wagmi";
 import create from "zustand";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 import { selectRunChainId, useArenaStore } from "~~/services/arena/store";
@@ -88,18 +88,26 @@ export function useOperatorSession(): OperatorSession {
 }
 
 export function useSeedSigner() {
-  const { address: connectedAddress } = useAccount();
+  const { address: connectedAddress, chainId: connectedChainId } = useAccount();
   const { signTypedDataAsync } = useSignTypedData();
+  const { switchChainAsync } = useSwitchChain();
 
   return useCallback(
     async (runId: string, chainId: number) => {
       const typedData = seedTypedData(runId, chainId);
+      // A wallet refuses typed data whose domain chain is not the one it has
+      // selected. The dev signer holds a raw key, so it never checks.
+      if (connectedAddress && connectedChainId !== chainId) {
+        await switchChainAsync({ chainId }).catch(() => {
+          throw new Error(`Switch the wallet to chain ${chainId} to sign the run seed`);
+        });
+      }
       const signature = connectedAddress
         ? await signTypedDataAsync(typedData)
         : await devSigner?.signTypedData(typedData);
       if (!signature) throw new Error("The wallet returned no seed signature");
       return signature;
     },
-    [connectedAddress, signTypedDataAsync],
+    [connectedAddress, connectedChainId, signTypedDataAsync, switchChainAsync],
   );
 }

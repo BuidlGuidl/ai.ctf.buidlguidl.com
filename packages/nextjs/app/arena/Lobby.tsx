@@ -7,7 +7,7 @@ import { Agent, CHALLENGES, FUNDING_AMOUNT_ETH } from "./mockData";
 import { type FundingStatus, fundingStatus, useAgentBalances } from "./useAgentBalances";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { encodeFunctionData, formatEther, parseEther } from "viem";
-import { useAccount, useSwitchChain } from "wagmi";
+import { useAccount, useDisconnect, useSwitchChain } from "wagmi";
 import { Address, BlockieAvatar } from "~~/components/scaffold-eth";
 import { useTransactor } from "~~/hooks/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
@@ -81,6 +81,7 @@ export function ArenaLobby({
   const lastRunState = useRef<string | null>(null);
 
   const operator = useOperatorSession();
+  const needsWallet = !operator.authenticated && !operator.address;
   const signSeed = useSeedSigner();
 
   const phase: Phase = !run
@@ -125,6 +126,7 @@ export function ArenaLobby({
   // network where the funds matter would be unrecoverable.
   const { chain, isConnected } = useAccount();
   const { openConnectModal } = useConnectModal();
+  const { disconnect } = useDisconnect();
   const { targetNetwork } = useTargetNetwork();
   const { switchChain } = useSwitchChain();
   const fundingChainId = run?.chainId ?? targetNetwork.id;
@@ -191,6 +193,10 @@ export function ArenaLobby({
             await localTestClient.setBalance({ address, value: target });
             pushLog(`${agent.model} · ${shortAddress(address)} set to ${amount} ETH ✓`, GREEN);
           }
+          // setBalance mines nothing, and the backend reads balances one block behind
+          // the head. Without a block of its own the run waits at awaiting_funding
+          // until the phase times out.
+          await localTestClient.mine({ blocks: 1 });
         } else {
           // One Multicall3 call forwards value to every agent — a single
           // confirmation for the director instead of one per agent. The contract
@@ -351,16 +357,24 @@ export function ArenaLobby({
         >
           {muted ? "🔇 SFX OFF" : "🔊 SFX ON"}
         </button>
+        {/* Shown before sign-in too: the backend allowlists one operator address, so
+            seeing which account connected is the only way to catch the wrong one. */}
+        <OperatorAddress address={operator.address} />
         {operator.authenticated && (
-          <>
-            <OperatorAddress address={operator.address} />
-            <button
-              onClick={() => void operator.signOut()}
-              className="text-xs px-2 py-1 rounded border border-[#00FBFF]/25 text-[#00FBFF]/60 hover:text-[#00FBFF] hover:border-[#00FBFF]/60 transition"
-            >
-              SIGN OUT
-            </button>
-          </>
+          <button
+            onClick={() => void operator.signOut()}
+            className="text-xs px-2 py-1 rounded border border-[#00FBFF]/25 text-[#00FBFF]/60 hover:text-[#00FBFF] hover:border-[#00FBFF]/60 transition"
+          >
+            SIGN OUT
+          </button>
+        )}
+        {isConnected && (
+          <button
+            onClick={() => disconnect()}
+            className="text-xs px-2 py-1 rounded border border-[#00FBFF]/25 text-[#00FBFF]/60 hover:text-[#00FBFF] hover:border-[#00FBFF]/60 transition"
+          >
+            DISCONNECT
+          </button>
         )}
       </div>
 
@@ -422,13 +436,25 @@ export function ArenaLobby({
                 />
                 MIN
               </label>
-              <button
-                onClick={() => void openLobby()}
-                disabled={!agents.length || !operator.configured || starting}
-                className="lobby-cta group px-10 py-3 rounded-md font-dotGothic text-lg tracking-widest border-2 border-[#00FBFF] text-[#00FBFF] hover:bg-[#00FBFF] hover:text-black transition disabled:opacity-40"
-              >
-                {starting ? "STARTING…" : operator.authenticated ? "▶ OPEN LOBBY" : "▶ SIGN IN & OPEN LOBBY"}
-              </button>
+              {needsWallet ? (
+                // Without the dev signer there is nothing to sign with, and the arena
+                // covers the site header, so this is the only way in.
+                <button
+                  onClick={openConnectModal}
+                  disabled={!openConnectModal}
+                  className="lobby-cta group px-10 py-3 rounded-md font-dotGothic text-lg tracking-widest border-2 border-[#00FBFF] text-[#00FBFF] hover:bg-[#00FBFF] hover:text-black transition disabled:opacity-40"
+                >
+                  ▶ CONNECT WALLET
+                </button>
+              ) : (
+                <button
+                  onClick={() => void openLobby()}
+                  disabled={!agents.length || !operator.configured || starting}
+                  className="lobby-cta group px-10 py-3 rounded-md font-dotGothic text-lg tracking-widest border-2 border-[#00FBFF] text-[#00FBFF] hover:bg-[#00FBFF] hover:text-black transition disabled:opacity-40"
+                >
+                  {starting ? "STARTING…" : operator.authenticated ? "▶ OPEN LOBBY" : "▶ SIGN IN & OPEN LOBBY"}
+                </button>
+              )}
               {!operator.configured && (
                 <span className="text-[11px] text-[#FFBE00]/80">wallet operator login is not configured</span>
               )}
