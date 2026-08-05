@@ -1,11 +1,11 @@
-import { Address, createTestClient, http } from "viem";
+import { Address, createTestClient, http, publicActions } from "viem";
 import { base, baseSepolia, hardhat } from "viem/chains";
 
 // How the lobby tops up the ten per-run agent wallets, one action per network:
 //
 //   local  — hardhat_setBalance, no wallet and no gas involved
 //   batch  — a single Multicall3.aggregate3Value transaction from the director
-//   none   — funding is unavailable and the lobby offers to skip instead
+//   none   — funding is unavailable and the controls stay disabled
 export type FundingMode = "local" | "batch" | "none";
 
 // Multicall3 is deployed at the same canonical address on both Base networks.
@@ -57,4 +57,6 @@ export const MULTICALL3_ABI = [
 ] as const;
 
 // Anvil answers the hardhat_ namespace too, so this covers both local nodes.
-export const localTestClient = createTestClient({ chain: hardhat, mode: "hardhat", transport: http() });
+export const localTestClient = createTestClient({ chain: hardhat, mode: "hardhat", transport: http() }).extend(
+  publicActions,
+);

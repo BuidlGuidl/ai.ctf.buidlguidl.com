@@ -2,95 +2,41 @@
 
 import { type CSSProperties, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArenaLobby } from "./Lobby";
-import {
-  AGENT_COUNT,
-  Agent,
-  AgentStatus,
-  CHALLENGES,
-  CHAT_LINES,
-  CHAT_OPENERS_DIRECTED,
-  CHAT_REPLIES,
-  Challenge,
-  ConsoleEntry,
-  ConsoleEvent,
-  DIFFICULTY_COLOR,
-  DIRECTOR_REACTIONS,
-  SKILLS,
-  buildAgents,
-  makeEvent,
-  makeToolResult,
-  rollPreview,
-  seedConsole,
-} from "./mockData";
-import { type ArenaPhase, readPreviewState } from "./previewState";
+import { Agent, AgentStatus, CHALLENGES, Challenge, DIFFICULTY_COLOR } from "./mockData";
+import type { Address } from "viem";
 import { BlockieAvatar } from "~~/components/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
+import type { EntrantSummary, RunState } from "~~/services/arena/arena-types";
+import { arenaClient } from "~~/services/arena/client";
+import { connectRun } from "~~/services/arena/connect";
+import type { ChatItem, ConsoleEntry, FeedItem } from "~~/services/arena/projection";
+import { ROSTER, displayForEntrant } from "~~/services/arena/roster";
+import {
+  type ConnectionStatus,
+  selectChat,
+  selectConnectionError,
+  selectConnectionStatus,
+  selectConsoleFor,
+  selectFeed,
+  selectLastFlagEvent,
+  selectPreviewFor,
+  selectRunChainId,
+  selectRunDeadlineAt,
+  selectRunEntrants,
+  selectRunError,
+  selectRunFinishedAt,
+  selectRunId,
+  selectRunStartedAt,
+  selectRunState,
+  useArenaStore,
+} from "~~/services/arena/store";
+import { useOperatorSession } from "~~/services/arena/useOperatorSession";
 import { getBlockExplorerAddressLink } from "~~/utils/scaffold-eth";
 
 export const dynamic = "force-dynamic";
 
-type FeedItem = {
-  id: number;
-  type: "flag" | "skill" | "blocked" | "resumed" | "done";
-  agentId: string;
-  color: string;
-  text: string;
-};
-type ChatMsg = {
-  id: number;
-  fromId: string;
-  fromHandle: string;
-  color: string;
-  text: string;
-  director?: boolean;
-};
-// Once the board is locked the operator can still flip back to the live arena
-// layout to read the final numbers, so the result card is a view, not a phase.
 type FinalView = "results" | "data";
 type PodiumPlace = 1 | 2 | 3;
-
-let uid = 0;
-const nid = () => ++uid;
-const pick = <T,>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
-
-// Simulate one line of agent-to-agent banter: a threaded reply to the last
-// speaker, a directed opener, or a standalone quip.
-function genAgentChat(list: Agent[], last: Agent | null): { msg: Omit<ChatMsg, "id">; speaker: Agent } {
-  const speaker = pick(list);
-  const others = list.filter(a => a.id !== speaker.id);
-  const wrap = (text: string) => ({
-    msg: { fromId: speaker.id, fromHandle: speaker.handle, color: speaker.color, text },
-    speaker,
-  });
-  if (last && last.id !== speaker.id && Math.random() < 0.5) {
-    return wrap(pick(CHAT_REPLIES).replace("{t}", last.handle));
-  }
-  if (others.length && Math.random() < 0.55) {
-    return wrap(pick(CHAT_OPENERS_DIRECTED).replace("{t}", pick(others).handle));
-  }
-  return wrap(pick(CHAT_LINES));
-}
-
-// Fold one console event into the observed agent's log. A tool result attaches
-// to the LATEST unresolved call with the same id rather than the first, because
-// harness call ids reset per process — first-match pairing could hand a dangling
-// call from a crashed turn someone else's result. An unmatched or duplicate
-// result stays a standalone row instead of being dropped.
-function ingestConsole(entries: ConsoleEntry[], event: ConsoleEvent, id: number): ConsoleEntry[] {
-  if (event.kind === "tool-result") {
-    for (let i = entries.length - 1; i >= 0; i--) {
-      const entry = entries[i];
-      if (entry.kind === "tool" && entry.toolCallId === event.toolCallId && !entry.result) {
-        const next = [...entries];
-        next[i] = { ...entry, result: { ok: event.ok, detail: event.text } };
-        return next;
-      }
-    }
-    const orphan: ConsoleEntry = { id, kind: "tool-result", text: event.text, toolCallId: event.toolCallId };
-    return [...entries, orphan].slice(-70);
-  }
-  return [...entries, { ...event, id }].slice(-70);
-}
 
 const fmtClock = (s: number) => {
   const h = Math.floor(s / 3600);
@@ -110,6 +56,7 @@ const PODIUM = {
 // How long a podium finish stays on screen. Kept in step with the
 // `podiumBroadcast` keyframes so the banner is never cut off mid-animation.
 const FINISH_STING_MS = 4600;
+const STOP_ARM_MS = 6000;
 
 const PODIUM_RESULT: Record<PodiumPlace, string> = {
   1: "ARENA CHAMPION",
@@ -126,299 +73,202 @@ const rankAgents = (agents: Agent[]) =>
     (a, b) =>
       b.solved.length - a.solved.length ||
       (a.finishedAt !== null && b.finishedAt !== null ? a.finishedAt - b.finishedAt : 0) ||
-      a.firstBlood.localeCompare(b.firstBlood) ||
+      (a.firstBloodAt ?? "\uffff").localeCompare(b.firstBloodAt ?? "\uffff") ||
       a.id.localeCompare(b.id),
   );
 
-// Challenge #1 must be minted first; after that any remaining flag is fair game.
-const nextTarget = (solved: number[]): number => {
-  if (!solved.includes(1)) return 1;
-  const remaining = CHALLENGES.filter(c => !solved.includes(c.id)).map(c => c.id);
-  return remaining.length ? pick(remaining) : 1;
-};
+function secondsFrom(start: string | null, end: string | null): number | null {
+  if (!start || !end) return null;
+  return Math.max(0, Math.floor((Date.parse(end) - Date.parse(start)) / 1000));
+}
+
+function agentsFromRun(entrants: EntrantSummary[] | null, startedAt: string | null): Agent[] {
+  if (!entrants) {
+    return ROSTER.map(entrant => {
+      const display = displayForEntrant(entrant.id, entrant.harness, entrant.model);
+      return {
+        id: entrant.id,
+        handle: display.handle,
+        harness: display.harnessLabel,
+        model: display.modelLabel,
+        vendor: display.vendor,
+        color: display.color,
+        short: display.short,
+        address: null,
+        solved: [],
+        status: "idle",
+        tokens: 0,
+        cost: null,
+        firstBloodAt: null,
+        finishedAt: null,
+      };
+    });
+  }
+
+  return entrants.map(entrant => {
+    const display = displayForEntrant(entrant.id, entrant.harness, entrant.model);
+    const firstSolve = entrant.solves[0]?.ts ?? null;
+    const clearedAt = entrant.solves.length >= CHALLENGES.length ? entrant.solves.at(-1)?.ts ?? null : null;
+    return {
+      id: entrant.id,
+      handle: display.handle,
+      harness: display.harnessLabel,
+      model: display.modelLabel,
+      vendor: display.vendor,
+      color: display.color,
+      short: display.short,
+      address: entrant.address as Address | null,
+      solved: entrant.solves.map(solve => solve.challengeId),
+      status: entrant.status,
+      tokens: entrant.inputTokens + entrant.outputTokens,
+      cost: entrant.costUsd,
+      firstBloodAt: firstSolve,
+      finishedAt: secondsFrom(startedAt, clearedAt),
+    };
+  });
+}
+
+function useArenaClock(
+  startedAt: string | null,
+  deadlineAt: string | null,
+  runState: RunState | null,
+  runFinishedAt: string | null,
+) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!startedAt || runState === "finished" || runState === "failed") return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [runState, startedAt]);
+
+  const end = runFinishedAt ? Date.parse(runFinishedAt) : now;
+  const elapsed = startedAt ? Math.max(0, Math.floor((end - Date.parse(startedAt)) / 1000)) : 0;
+  if (!deadlineAt) return { seconds: elapsed, countdown: false, timeUp: false };
+  const remaining = Math.max(0, Math.ceil((Date.parse(deadlineAt) - end) / 1000));
+  return { seconds: remaining, countdown: true, timeUp: remaining === 0 && runState === "running" };
+}
 
 export default function ArenaPage() {
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [focusedId, setFocusedId] = useState<string>("agent-0");
-  const [lines, setLines] = useState<ConsoleEntry[]>([]);
-  const [feed, setFeed] = useState<FeedItem[]>([]);
-  const [chat, setChat] = useState<ChatMsg[]>([]);
+  const [focusedId, setFocusedId] = useState<string>(ROSTER[0].id);
   const [flashes, setFlashes] = useState<string[]>([]);
+  const flashTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const [openChallenge, setOpenChallenge] = useState<number | null>(null);
-  const [clock, setClock] = useState(0);
   const [mounted, setMounted] = useState(false);
   const [stageMode, setStageMode] = useState<"overview" | "focus">("overview");
   const [overviewTab, setOverviewTab] = useState<"race" | "grid">("race");
-  // "lobby" = pre-game roster / connection screen, "live" = the running arena,
-  // "finished" = every result locked and the board frozen.
-  const [phase, setPhase] = useState<ArenaPhase>("lobby");
+  const [liveStarted, setLiveStarted] = useState(false);
+  const [ceremonyReady, setCeremonyReady] = useState(false);
   const [finalView, setFinalView] = useState<FinalView>("results");
-  // Seed on the client only — buildAgents() uses Math.random(), so running it
-  // during SSR would hand the client a different roster than the server rendered.
+  const runId = useArenaStore(selectRunId);
+  const runState = useArenaStore(selectRunState);
+  const runEntrants = useArenaStore(selectRunEntrants);
+  const runStartedAt = useArenaStore(selectRunStartedAt);
+  const runDeadlineAt = useArenaStore(selectRunDeadlineAt);
+  const currentRunId = useArenaStore(state => state.currentRunId);
+  const connectionStatus = useArenaStore(selectConnectionStatus);
+  const connectionError = useArenaStore(selectConnectionError);
+  const lastFlagEvent = useArenaStore(selectLastFlagEvent);
+  const runFinishedAt = useArenaStore(selectRunFinishedAt);
+  const runError = useArenaStore(selectRunError);
+  const operator = useOperatorSession();
+
   useEffect(() => {
-    const roster = buildAgents();
-    const preview = readPreviewState(roster, window.location.search);
+    const runId = new URLSearchParams(window.location.search).get("run");
+    if (runId) useArenaStore.getState().setCurrentRunId(runId);
     setMounted(true);
-    if (!preview) {
-      setAgents(roster);
-      return;
-    }
-    setAgents(preview.agents);
-    setClock(preview.clock);
-    setPhase(preview.phase);
-    if (!preview.finisher) return;
-    const { index, at } = preview.finisher;
-    const t = setTimeout(() => {
-      setClock(at);
-      setAgents(prev =>
-        prev.map((a, i) =>
-          i === index ? { ...a, solved: CHALLENGES.map(c => c.id), status: "done", finishedAt: at } : a,
-        ),
-      );
-    }, 1600);
-    return () => clearTimeout(t);
   }, []);
 
-  const agentsRef = useRef(agents);
-  const focusRef = useRef(focusedId);
-  const clockRef = useRef(clock);
-  const lastSpeakerRef = useRef<Agent | null>(null);
-  // Tool calls the observed agent is still waiting on, oldest first.
-  const pendingCallsRef = useRef<string[]>([]);
-  agentsRef.current = agents;
-  focusRef.current = focusedId;
-  clockRef.current = clock;
+  useEffect(() => {
+    if (!currentRunId) return;
+    return connectRun(currentRunId);
+  }, [currentRunId]);
 
-  // START MATCH — the agents come off the line and the clock starts only now.
-  const startMatch = useCallback(() => {
-    setAgents(prev => prev.map(a => ({ ...a, status: "working" })));
-    setPhase("live");
-  }, []);
+  const agents = useMemo(() => agentsFromRun(runEntrants, runStartedAt), [runEntrants, runStartedAt]);
+  const startMatch = useCallback(() => setLiveStarted(true), []);
 
-  // Observe an agent's live log in the right column — the wide shot stays put.
   const goFocus = useCallback((id: string) => {
     setFocusedId(id);
     setStageMode("focus");
   }, []);
   const closeLog = useCallback(() => setStageMode("overview"), []);
 
-  const focused = useMemo(() => agents.find(a => a.id === focusedId), [agents, focusedId]);
+  useEffect(() => {
+    if (agents.some(agent => agent.id === focusedId)) return;
+    if (agents[0]) setFocusedId(agents[0].id);
+  }, [agents, focusedId]);
+
+  const focused = useMemo(() => agents.find(a => a.id === focusedId) ?? agents[0], [agents, focusedId]);
   const ranked = useMemo(() => rankAgents(agents), [agents]);
   const totalSolved = useMemo(() => agents.reduce((n, a) => n + a.solved.length, 0), [agents]);
-  const finishedCount = useMemo(() => agents.filter(a => a.finishedAt !== null).length, [agents]);
-  const allFinished = agents.length > 0 && finishedCount === agents.length;
-  // The running clock can be a tick past the last finish; the board should show
-  // the winning time, not whenever the interval happened to be torn down.
-  const lastFinishAt = useMemo(() => agents.reduce((n, a) => Math.max(n, a.finishedAt ?? 0), 0), [agents]);
+  const finishedCount = useMemo(() => agents.filter(agent => agent.status === "done").length, [agents]);
+  const allFinished = runState === "finished";
+  const runFailed = runState === "failed";
+  const runTerminal = allFinished || runFailed;
+  const clock = useArenaClock(runStartedAt, runDeadlineAt, runState, runFinishedAt);
 
-  const pushFeed = useCallback((f: Omit<FeedItem, "id">) => {
-    setFeed(prev => [{ ...f, id: nid() }, ...prev].slice(0, 40));
+  const backToLobby = useCallback(() => {
+    useArenaStore.getState().clear();
+    const url = new URL(window.location.href);
+    url.searchParams.delete("run");
+    window.history.replaceState(null, "", url);
+    setLiveStarted(false);
+    setCeremonyReady(false);
+    setFinalView("results");
   }, []);
 
-  const pushChat = useCallback((m: Omit<ChatMsg, "id">) => {
-    setChat(prev => [...prev, { ...m, id: nid() }].slice(-60));
+  useEffect(() => {
+    if (!lastFlagEvent) return;
+    const key = `${lastFlagEvent.payload.entrantId}:${lastFlagEvent.payload.challengeId}`;
+    setFlashes(previous => [...previous, key]);
+    const priorTimer = flashTimers.current.get(key);
+    if (priorTimer) clearTimeout(priorTimer);
+    flashTimers.current.set(
+      key,
+      setTimeout(() => {
+        setFlashes(previous => previous.filter(value => value !== key));
+        flashTimers.current.delete(key);
+      }, 3200),
+    );
+  }, [lastFlagEvent]);
+
+  useEffect(() => {
+    const timers = flashTimers.current;
+    return () => {
+      timers.forEach(clearTimeout);
+      timers.clear();
+    };
   }, []);
 
-  // A just-captured flag lights up its cell on the race track for a beat.
-  const pushFlash = useCallback((key: string) => {
-    setFlashes(prev => [...prev, key]);
-    setTimeout(() => setFlashes(prev => prev.filter(k => k !== key)), 3200);
-  }, []);
+  useEffect(() => {
+    if (!liveStarted || !allFinished) return;
+    const timer = setTimeout(() => setCeremonyReady(true), FINISH_STING_MS + 200);
+    return () => clearTimeout(timer);
+  }, [allFinished, liveStarted]);
 
-  // Director/streamer broadcasts to the arena; a couple of agents react shortly after.
-  const sendDirector = useCallback(
-    (text: string) => {
-      const clean = text.trim();
-      if (!clean) return;
-      pushChat({ fromId: "director", fromHandle: "DIRECTOR", color: "#FFBE00", text: clean, director: true });
-      const reactors = [...agentsRef.current]
-        .sort(() => Math.random() - 0.5)
-        .slice(0, 1 + Math.floor(Math.random() * 2));
-      reactors.forEach((a, i) => {
-        setTimeout(() => {
-          pushChat({ fromId: a.id, fromHandle: a.handle, color: a.color, text: pick(DIRECTOR_REACTIONS) });
-        }, 700 + i * 900 + Math.random() * 600);
-      });
+  const stopRace = useCallback(async () => {
+    if (!runId) return;
+    const snapshot = await arenaClient.stopRun(runId);
+    useArenaStore.getState().syncSnapshot(snapshot);
+  }, [runId]);
+
+  const steer = useCallback(
+    async (text: string) => {
+      if (!runId || !focused) return;
+      await arenaClient.steerEntrant(runId, focused.id, { text });
     },
-    [pushChat],
+    [focused, runId],
   );
 
-  // Reseed the observer console whenever focus changes.
-  useEffect(() => {
-    const a = agentsRef.current.find(x => x.id === focusedId);
-    if (!a) return;
-    pendingCallsRef.current = [];
-    setLines(seedConsole(a).map(l => ({ ...l, id: nid() })));
-  }, [focusedId]);
+  const broadcast = useCallback(
+    async (text: string) => {
+      if (!runId) return;
+      await arenaClient.broadcast(runId, { text });
+    },
+    [runId],
+  );
 
-  // LIVE clock — runs between the start of the match and the last flag.
-  useEffect(() => {
-    if (phase !== "live" || allFinished) return;
-    const t = setInterval(() => setClock(c => c + 1), 1000);
-    return () => clearInterval(t);
-  }, [phase, allFinished]);
-
-  // Master simulation loop — dormant until the match starts, stopped for good
-  // once the last agent is home.
-  useEffect(() => {
-    if (phase !== "live" || allFinished) return;
-
-    // Mint one flag for an agent and announce it across the arena.
-    const mint = (a: Agent, flagId: number) => {
-      const ch = CHALLENGES[flagId - 1];
-      if (!ch) return;
-      setAgents(prev =>
-        prev.map(x => {
-          if (x.id !== a.id || x.solved.includes(flagId)) return x;
-          const solved = [...x.solved, flagId];
-          const finished = solved.length >= CHALLENGES.length;
-          return {
-            ...x,
-            solved,
-            current: finished ? x.current : nextTarget(solved),
-            // Callers pick from the tick's opening snapshot, so an agent blocked
-            // earlier in the same tick can still land here — clearing it would
-            // leave a blocked row in the feed that never resolves.
-            status: finished ? "done" : x.status === "blocked" ? "blocked" : "working",
-            firstBlood: x.solved.length === 0 ? fmtClock(clockRef.current) : x.firstBlood,
-            finishedAt: finished ? clockRef.current : x.finishedAt,
-          };
-        }),
-      );
-      pushFlash(`${a.id}:${flagId}`);
-      pushFeed({
-        type: "flag",
-        agentId: a.id,
-        color: a.color,
-        text: `${a.handle} captured Challenge ${flagId} · ${ch.name}`,
-      });
-      if (a.solved.length + 1 >= CHALLENGES.length) {
-        pushFeed({
-          type: "done",
-          agentId: a.id,
-          color: a.color,
-          text: `${a.handle} cleared the board in ${fmtClock(clockRef.current)} and exited`,
-        });
-      }
-    };
-
-    const setStatus = (id: string, status: AgentStatus) =>
-      setAgents(prev => prev.map(x => (x.id === id ? { ...x, status } : x)));
-
-    let tick = 0;
-    const t = setInterval(() => {
-      tick++;
-      const list = agentsRef.current;
-
-      // WARM-UP — flag #1 is the gate, so clear it for everyone in a quick burst
-      // before the any-order race really gets going.
-      const needFirst = list.filter(a => a.status === "working" && !a.solved.includes(1));
-      if (needFirst.length) {
-        needFirst.slice(0, 4).forEach(a => mint(a, 1));
-      }
-
-      // BLOCKED — the agent is sitting on a permission prompt. The arena runs a
-      // dontAsk policy, so this should never fire: when it does, something broke
-      // on the harness side and the board has to say so.
-      if (tick % 17 === 0 && Math.random() < 0.3) {
-        const stuck = pick(list.filter(a => a.status === "working"));
-        if (stuck) {
-          setStatus(stuck.id, "blocked");
-          pushFeed({
-            type: "blocked",
-            agentId: stuck.id,
-            color: stuck.color,
-            text: `${stuck.handle} is blocked on a permission prompt`,
-          });
-        }
-      }
-      list
-        .filter(a => a.status === "blocked" && Math.random() < 0.25)
-        .forEach(a => {
-          setStatus(a.id, "working");
-          pushFeed({ type: "resumed", agentId: a.id, color: a.color, text: `${a.handle} unblocked, back to work` });
-        });
-
-      // stream console events for the focused agent, pairing tool results back
-      // onto their call. Ids are minted out here so a StrictMode double-invoke of
-      // the updater can't consume a pending call twice.
-      const foc = list.find(a => a.id === focusRef.current);
-      if (foc && foc.status === "working") {
-        const tag = CHALLENGES[foc.current - 1]?.tag || "default";
-        const event = makeEvent(foc, tag);
-        const batch: { event: ConsoleEvent; id: number }[] = [{ event, id: nid() }];
-        if (event.kind === "tool") pendingCallsRef.current.push(event.toolCallId);
-
-        // Settle an outstanding call — but not always, so some rows sit on ⟳ for
-        // a beat the way a real tool does.
-        const pending = pendingCallsRef.current;
-        if (pending.length && (pending.length >= 3 || Math.random() < 0.6)) {
-          const result = makeToolResult(pending.shift() as string);
-          if (result) batch.push({ event: result, id: nid() });
-        }
-
-        setLines(prev => batch.reduce((acc, b) => ingestConsole(acc, b.event, b.id), prev));
-        if (event.kind === "skill") {
-          pushFeed({ type: "skill", agentId: foc.id, color: foc.color, text: `${foc.handle} ${event.text}` });
-        }
-      }
-
-      // token / cost burn + rolling mini-terminal preview for working agents
-      setAgents(prev =>
-        prev.map(a =>
-          a.status !== "working"
-            ? a
-            : {
-                ...a,
-                tokens: a.tokens + Math.floor(Math.random() * 9000),
-                cost: a.cost + Math.random() * 0.06,
-                preview:
-                  Math.random() < 0.55
-                    ? rollPreview(a.preview, CHALLENGES[a.current - 1]?.tag || "default")
-                    : a.preview,
-              },
-        ),
-      );
-
-      // random skill-load announcement from a non-focused agent
-      if (tick % 4 === 0) {
-        const a = list[Math.floor(Math.random() * list.length)];
-        if (a && a.id !== focusRef.current) {
-          const skill = SKILLS[Math.floor(Math.random() * SKILLS.length)];
-          pushFeed({ type: "skill", agentId: a.id, color: a.color, text: `${a.handle} loaded skill » ${skill}` });
-        }
-      }
-
-      // agent-to-agent chat — conversational, lands in the dedicated chat panel
-      if (tick % 3 === 0) {
-        const { msg, speaker } = genAgentChat(list, lastSpeakerRef.current);
-        pushChat(msg);
-        lastSpeakerRef.current = speaker;
-      }
-
-      // FLAG CAPTURE — a busy agent mints the flag it's currently working on.
-      // Agents past the flag-#1 gate work a random remaining challenge, so
-      // whatever they're on is what gets captured.
-      if (tick % 6 === 0) {
-        const candidates = list.filter(
-          a => a.solved.includes(1) && a.solved.length < CHALLENGES.length && a.status === "working",
-        );
-        const a = candidates[Math.floor(Math.random() * candidates.length)];
-        if (a) mint(a, a.current);
-      }
-    }, 950);
-    return () => clearInterval(t);
-  }, [phase, allFinished, pushFeed, pushChat, pushFlash]);
-
-  // Hold on the frozen board long enough for the last flag pop and the podium
-  // sting to finish playing, then cut to the result card.
-  useEffect(() => {
-    if (phase !== "live" || !allFinished) return;
-    const t = setTimeout(() => setPhase("finished"), FINISH_STING_MS + 200);
-    return () => clearTimeout(t);
-  }, [phase, allFinished]);
-
-  if (!mounted || !focused) {
+  if (!mounted) {
     return (
       <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black text-[#00FBFF] font-dotGothic text-2xl tracking-widest">
         <span className="animate-pulse">◆ LOADING AGENT ARENA…</span>
@@ -426,11 +276,33 @@ export default function ArenaPage() {
     );
   }
 
-  if (phase === "lobby") {
-    return <ArenaLobby agents={agents} onLaunch={startMatch} />;
+  if (currentRunId && !runId && (connectionStatus === "not-found" || connectionStatus === "error")) {
+    return (
+      <RunExitPanel
+        title="RUN UNAVAILABLE"
+        message={
+          connectionStatus === "not-found"
+            ? "This arena run no longer exists. The backend may have restarted."
+            : connectionError ?? "Could not load the arena run."
+        }
+        onBack={backToLobby}
+      />
+    );
   }
 
-  if (phase === "finished" && finalView === "results") {
+  if (!focused || (currentRunId && !runId)) {
+    return (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black text-[#00FBFF] font-dotGothic text-2xl tracking-widest">
+        <span className="animate-pulse">◆ LOADING AGENT ARENA…</span>
+      </div>
+    );
+  }
+
+  if (!liveStarted) {
+    return <ArenaLobby agents={agents} onLaunch={startMatch} onStartOver={backToLobby} />;
+  }
+
+  if (ceremonyReady && finalView === "results") {
     return <FinalCeremony ranked={ranked} onViewData={() => setFinalView("data")} />;
   }
 
@@ -438,12 +310,32 @@ export default function ArenaPage() {
     <div className="fixed inset-0 z-[60] flex flex-col bg-black text-[#00FBFF] font-mono overflow-hidden arena-root">
       <Scanlines />
       <TopBar
-        clock={allFinished ? lastFinishAt : clock}
+        clock={clock.seconds}
+        countdown={clock.countdown}
+        timeUp={clock.timeUp}
         totalSolved={totalSolved}
         finishedCount={finishedCount}
         allFinished={allFinished}
-        onViewResults={phase === "finished" ? () => setFinalView("results") : undefined}
+        runFailed={runFailed}
+        agentCount={agents.length}
+        connectionStatus={connectionStatus}
+        onViewResults={ceremonyReady ? () => setFinalView("results") : undefined}
       />
+
+      {runFailed && (
+        <div className="flex shrink-0 items-center gap-4 border-b border-[#FF5861]/50 bg-[#FF5861]/10 px-5 py-3 text-[#FF5861]">
+          <span className="font-dotGothic text-xl tracking-widest">RUN FAILED</span>
+          <span className="min-w-0 flex-1 text-sm text-[#FF5861]/80">
+            {runError ?? "The backend ended the run without a reason."}
+          </span>
+          <button
+            onClick={backToLobby}
+            className="shrink-0 rounded border border-[#FF5861] px-3 py-1.5 text-xs font-bold tracking-widest transition hover:bg-[#FF5861] hover:text-black"
+          >
+            BACK TO LOBBY
+          </button>
+        </div>
+      )}
 
       <div className="flex flex-col flex-1 min-h-0">
         <div className="flex flex-1 min-h-0">
@@ -459,10 +351,17 @@ export default function ArenaPage() {
 
           {/* RIGHT COLUMN — the unified arena stream; the observed agent's log takes over here */}
           <div className="w-[400px] flex flex-col min-h-0 min-w-0">
-            {stageMode === "focus" ? (
-              <AgentLog focused={focused} lines={lines} onClose={closeLog} />
-            ) : (
-              <ArenaStream feed={feed} chat={chat} onSend={sendDirector} archived={phase === "finished"} />
+            {stageMode === "focus" ? <AgentLog focused={focused} onClose={closeLog} /> : <ArenaStream />}
+            {operator.authenticated && (
+              <OperatorStrip
+                focused={focused}
+                archived={runTerminal}
+                timeUp={clock.timeUp}
+                onSteer={steer}
+                onBroadcast={broadcast}
+                onStop={stopRace}
+                onSignOut={operator.signOut}
+              />
             )}
           </div>
         </div>
@@ -492,6 +391,23 @@ export default function ArenaPage() {
       )}
 
       <ArenaStyles />
+    </div>
+  );
+}
+
+function RunExitPanel({ title, message, onBack }: { title: string; message: string; onBack: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black px-6 text-[#00FBFF] font-mono">
+      <div className="w-full max-w-xl rounded-lg border border-[#FF5861]/50 bg-[#FF5861]/10 p-6 text-center">
+        <h1 className="font-dotGothic text-3xl tracking-widest text-[#FF5861]">{title}</h1>
+        <p className="mt-3 text-sm text-[#FF5861]/80">{message}</p>
+        <button
+          onClick={onBack}
+          className="mt-6 rounded border border-[#00FBFF] px-4 py-2 font-dotGothic text-sm tracking-widest text-[#00FBFF] transition hover:bg-[#00FBFF] hover:text-black"
+        >
+          BACK TO LOBBY
+        </button>
+      </div>
     </div>
   );
 }
@@ -575,7 +491,7 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
                           {agent.solved.length} FLAGS
                         </span>
                         <span className="w-[78px] shrink-0 text-right text-sm font-bold tabular-nums text-[#00ff9c] sm:text-base">
-                          {fmtClock(agent.finishedAt ?? 0)}
+                          {agent.finishedAt === null ? "—" : fmtClock(agent.finishedAt)}
                         </span>
                       </div>
                     );
@@ -626,7 +542,16 @@ function FinalistCard({ agent, place }: { agent: Agent; place: PodiumPlace }) {
             className="h-full w-full overflow-hidden rounded-full border-2"
             style={{ borderColor: agent.color, background: `${agent.color}14` }}
           >
-            <BlockieAvatar address={agent.address} ensImage={null} size={winner ? 76 : 52} />
+            {agent.address ? (
+              <BlockieAvatar address={agent.address} ensImage={null} size={winner ? 76 : 52} />
+            ) : (
+              <span
+                className="flex h-full items-center justify-center font-dotGothic text-xl"
+                style={{ color: agent.color }}
+              >
+                {agent.short}
+              </span>
+            )}
           </div>
         </div>
         <div className={`mt-3 truncate font-bold text-white ${winner ? "text-base sm:text-lg" : "text-sm"}`}>
@@ -640,10 +565,11 @@ function FinalistCard({ agent, place }: { agent: Agent; place: PodiumPlace }) {
             winner ? "text-xl text-[#FFBE00]" : "text-base text-[#00ff9c]"
           }`}
         >
-          {fmtClock(agent.finishedAt ?? 0)}
+          {agent.finishedAt === null ? "—" : fmtClock(agent.finishedAt)}
         </div>
         <div className="mt-1 text-[9px] tracking-[0.16em] text-[#00FBFF]/30">
-          {agent.solved.length}/{CHALLENGES.length} FLAGS · ${agent.cost.toFixed(2)}
+          {agent.solved.length}/{CHALLENGES.length} FLAGS ·{" "}
+          {agent.cost === null ? "COST N/A" : `$${agent.cost.toFixed(2)}`}
         </div>
       </article>
     </div>
@@ -729,15 +655,25 @@ function PodiumMedal({
 // the signal that the board is an archive and needs a way back to the podium.
 function TopBar({
   clock,
+  countdown,
+  timeUp,
   totalSolved,
   finishedCount,
   allFinished,
+  runFailed,
+  agentCount,
+  connectionStatus,
   onViewResults,
 }: {
   clock: number;
+  countdown: boolean;
+  timeUp: boolean;
   totalSolved: number;
   finishedCount: number;
   allFinished: boolean;
+  runFailed: boolean;
+  agentCount: number;
+  connectionStatus: ConnectionStatus;
   onViewResults?: () => void;
 }) {
   return (
@@ -747,16 +683,25 @@ function TopBar({
           allFinished ? "text-[#00ff9c]" : "text-[#FF5861]"
         }`}
       >
-        <span className={`w-2.5 h-2.5 rounded-full ${allFinished ? "bg-[#00ff9c]" : "bg-[#FF5861] live-dot"}`} />
-        {allFinished ? "LOCKED" : "LIVE"}
+        <span
+          className={`w-2.5 h-2.5 rounded-full ${
+            allFinished ? "bg-[#00ff9c]" : runFailed ? "bg-[#FF5861]" : "bg-[#FF5861] live-dot"
+          }`}
+        />
+        {allFinished ? "LOCKED" : runFailed ? "FAILED" : "LIVE"}
       </span>
       <div className="hidden sm:block font-dotGothic text-xl md:text-2xl text-[#00FBFF] tracking-wide title-glow">
         BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · AGENT ARENA
       </div>
       <div className="hidden 2xl:flex items-center gap-1 text-xs text-[#00FBFF]/50">
-        <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{AGENT_COUNT} AGENTS</span>
+        <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{agentCount} AGENTS</span>
         <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{CHALLENGES.length} CHALLENGES</span>
       </div>
+      {timeUp && (
+        <span className="animate-pulse rounded border border-[#FF5861] bg-[#FF5861]/15 px-3 py-1 text-xs font-bold tracking-widest text-[#FF5861]">
+          TIME&apos;S UP · OPERATOR: STOP THE RACE
+        </span>
+      )}
       <div className="ml-auto flex items-center gap-4 text-sm">
         {onViewResults && (
           <button
@@ -770,9 +715,14 @@ function TopBar({
           🏁 <span className="text-[#00ff9c] font-bold">{totalSolved}</span> flags
         </span>
         <span className={finishedCount ? "text-[#00ff9c] font-bold" : "text-[#00FBFF]/45"}>
-          ◆ {finishedCount}/{AGENT_COUNT}
+          ◆ {finishedCount}/{agentCount}
         </span>
-        <span className="tabular-nums text-[#FFBE00] font-bold">⏱ {fmtClock(clock)}</span>
+        <span className="hidden xl:inline text-[10px] uppercase tracking-wider text-[#00FBFF]/35">
+          {connectionStatus}
+        </span>
+        <span className={`tabular-nums font-bold ${timeUp ? "text-[#FF5861]" : "text-[#FFBE00]"}`}>
+          {countdown ? "⏳" : "⏱"} {fmtClock(clock)}
+        </span>
       </div>
     </div>
   );
@@ -812,14 +762,14 @@ function StageTabs({ tab, onTab }: { tab: OverviewTab; onTab: (t: OverviewTab) =
 
 // The observer console for one agent — lives in the right column so the wide
 // shot behind it keeps running.
-function AgentLog({ focused, lines, onClose }: { focused: Agent; lines: ConsoleEntry[]; onClose: () => void }) {
+function AgentLog({ focused, onClose }: { focused: Agent; onClose: () => void }) {
+  const lines = useArenaStore(selectConsoleFor(focused.id));
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [lines]);
 
-  const ch = CHALLENGES[focused.current - 1];
-  const finished = focused.finishedAt !== null;
+  const finished = focused.status === "done";
 
   return (
     <div className="flex-1 min-h-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#020a0c]">
@@ -827,17 +777,13 @@ function AgentLog({ focused, lines, onClose }: { focused: Agent; lines: ConsoleE
         <AgentBlockieLink agent={focused} />
         <span className="flex-1 min-w-0 text-sm font-bold text-white truncate">{focused.handle}</span>
         <StatusChip status={focused.status} />
-        {finished ? (
+        {focused.finishedAt !== null ? (
           <span className="px-1.5 py-0.5 rounded font-bold shrink-0 text-[10px] text-[#00ff9c] border border-[#00ff9c]/40">
-            LOCKED · {fmtClock(focused.finishedAt ?? 0)}
+            CLEARED · {fmtClock(focused.finishedAt)}
           </span>
         ) : (
-          <span
-            className="px-1.5 py-0.5 rounded font-bold shrink-0 text-[10px] max-w-[110px] truncate"
-            title={`#${ch.id} ${ch.name}`}
-            style={{ color: DIFFICULTY_COLOR[ch.difficulty], border: `1px solid ${DIFFICULTY_COLOR[ch.difficulty]}55` }}
-          >
-            #{ch.id} {ch.name}
+          <span className="px-1.5 py-0.5 rounded font-bold shrink-0 text-[10px] text-[#00FBFF]/55 border border-[#00FBFF]/20">
+            TARGET UNREPORTED
           </span>
         )}
         <span className="ml-auto text-[#00ff9c] font-bold shrink-0">
@@ -876,7 +822,8 @@ function AgentLog({ focused, lines, onClose }: { focused: Agent; lines: ConsoleE
 // paired here by `toolCallId`.
 function ConsoleRow({ line }: { line: ConsoleEntry }) {
   if (line.kind === "think") return <div className="text-[#7fd8dd] italic">· {line.text}</div>;
-  if (line.kind === "skill") return <div className="text-[#c084fc] font-bold">⚡ {line.text}</div>;
+  if (line.kind === "message") return <div className="text-white/85">› {line.text}</div>;
+  if (line.kind === "error") return <div className="text-[#FF5861] font-bold">⚠ {line.text}</div>;
   if (line.kind === "flag") return <div className="text-[#00ff9c] font-bold">🏁 {line.text}</div>;
   if (line.kind === "tool") {
     const state = !line.result ? "running" : line.result.ok ? "ok" : "fail";
@@ -1117,11 +1064,10 @@ function RaceView({
               {(a.tokens / 1000).toFixed(0)}k
             </span>
             <span className="w-14 text-right text-[11px] tabular-nums shrink-0 text-[#FFBE00]/70">
-              ${a.cost.toFixed(2)}
+              {a.cost === null ? "—" : `$${a.cost.toFixed(2)}`}
             </span>
 
-            {/* each square shows the flag number minted at that step; the next
-                square is the challenge being worked, the rest are flags left */}
+            {/* The backend reports captures but not each entrant's active challenge. */}
             <div className="flex-1 flex gap-[3px]">
               {slots.map(k => {
                 const flagId = a.solved[k];
@@ -1142,22 +1088,17 @@ function RaceView({
                   );
                 }
                 if (k === a.solved.length && !done(a)) {
-                  const ch = CHALLENGES[a.current - 1];
-                  const dc = ch ? DIFFICULTY_COLOR[ch.difficulty] : "#00FBFF";
+                  const color = STATUS_STYLE[a.status].color;
                   return (
                     <span
                       key={k}
-                      title={
-                        a.status === "working"
-                          ? `working on #${a.current} ${ch?.name ?? ""}`
-                          : `#${a.current} ${ch?.name ?? ""} — ${STATUS_STYLE[a.status].label}`
-                      }
+                      title={STATUS_STYLE[a.status].label}
                       className={`relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center text-[9px] font-bold tabular-nums ${
                         a.status === "working" ? "cell-working" : "opacity-40"
                       }`}
-                      style={{ background: `${dc}1f`, borderColor: dc, color: dc }}
+                      style={{ background: `${color}1f`, borderColor: color, color }}
                     >
-                      {a.current}
+                      …
                     </span>
                   );
                 }
@@ -1232,70 +1173,71 @@ function RaceFinishSting({ agent, place }: { agent: Agent; place: PodiumPlace })
 function GridView({ ranked, onPick }: { ranked: Agent[]; onPick: (id: string) => void }) {
   return (
     <div className="h-full p-2 grid grid-cols-5 auto-rows-fr gap-2">
-      {ranked.map(a => {
-        const ch = CHALLENGES[a.current - 1];
-        const finished = a.finishedAt !== null;
-        return (
-          <div
-            key={a.id}
-            role="button"
-            tabIndex={0}
-            onClick={() => onPick(a.id)}
-            onKeyDown={e => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onPick(a.id);
-              }
-            }}
-            className={`min-h-0 flex flex-col text-left rounded border bg-[#00090b] hover:border-[#00FBFF]/50 transition overflow-hidden group cursor-pointer ${
-              a.status === "blocked" ? "border-[#FFBE00]/60" : "border-[#00FBFF]/15"
-            }`}
-          >
-            <div className="flex items-center gap-1.5 px-2 h-8 shrink-0 border-b border-[#00FBFF]/10 bg-[#001417]">
-              <AgentBlockieLink agent={a} />
-              <span className="text-[13px] font-bold text-white truncate flex-1">{a.handle}</span>
-              <StatusDot status={a.status} />
-            </div>
-            <div className="flex items-center gap-2 px-2 h-6 shrink-0 text-[11px] border-b border-[#00FBFF]/[0.07] bg-[#000d0f]">
-              <span className="truncate" style={{ color: finished ? "#00ff9c" : DIFFICULTY_COLOR[ch.difficulty] }}>
-                {finished ? `◆ FINISHED · ${fmtClock(a.finishedAt ?? 0)}` : `C${ch.id} ${ch.name}`}
-              </span>
-              <span className="ml-auto shrink-0 text-[#00FBFF]/45 tabular-nums">
-                {a.solved.length}/{CHALLENGES.length}
-              </span>
-            </div>
-            {/* rolling console — newest line sits at the bottom, or the exit
-                notice once the agent has cleared the board */}
-            <div
-              className={`flex-1 min-h-0 flex flex-col justify-end overflow-hidden px-2 py-1 text-[11px] leading-[1.5] ${
-                finished ? "agent-terminal-locked" : ""
-              }`}
-            >
-              {finished ? (
-                <>
-                  <div className="text-[#00FBFF]/35">all challenge processes exited</div>
-                  <div className="text-[#00ff9c] font-bold">result committed ✓</div>
-                </>
-              ) : (
-                <>
-                  {a.preview.map((line, k) => (
-                    <div key={k} className="truncate text-[#7fd8dd]/80">
-                      {line}
-                    </div>
-                  ))}
-                  <div className="text-[#00ff9c] animate-pulse shrink-0">▋</div>
-                </>
-              )}
-            </div>
-            <div className="h-1 shrink-0 bg-[#00FBFF]/10">
-              <div
-                className="h-full transition-all duration-500"
-                style={{ width: `${(a.solved.length / CHALLENGES.length) * 100}%`, background: a.color }}
-              />
-            </div>
-          </div>
-        );
-      })}
+      {ranked.map(agent => (
+        <GridCard key={agent.id} agent={agent} onPick={onPick} />
+      ))}
+    </div>
+  );
+}
+
+function GridCard({ agent, onPick }: { agent: Agent; onPick: (id: string) => void }) {
+  const preview = useArenaStore(selectPreviewFor(agent.id));
+  const finished = agent.status === "done";
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onPick(agent.id)}
+      onKeyDown={event => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onPick(agent.id);
+        }
+      }}
+      className={`min-h-0 flex flex-col text-left rounded border bg-[#00090b] hover:border-[#00FBFF]/50 transition overflow-hidden group cursor-pointer ${
+        agent.status === "blocked" ? "border-[#FFBE00]/60" : "border-[#00FBFF]/15"
+      }`}
+    >
+      <div className="flex items-center gap-1.5 px-2 h-8 shrink-0 border-b border-[#00FBFF]/10 bg-[#001417]">
+        <AgentBlockieLink agent={agent} />
+        <span className="text-[13px] font-bold text-white truncate flex-1">{agent.handle}</span>
+        <StatusDot status={agent.status} />
+      </div>
+      <div className="flex items-center gap-2 px-2 h-6 shrink-0 text-[11px] border-b border-[#00FBFF]/[0.07] bg-[#000d0f]">
+        <span className="truncate" style={{ color: finished ? "#00ff9c" : STATUS_STYLE[agent.status].color }}>
+          {agent.finishedAt !== null ? `◆ CLEARED · ${fmtClock(agent.finishedAt)}` : STATUS_STYLE[agent.status].label}
+        </span>
+        <span className="ml-auto shrink-0 text-[#00FBFF]/45 tabular-nums">
+          {agent.solved.length}/{CHALLENGES.length}
+        </span>
+      </div>
+      <div
+        className={`flex-1 min-h-0 flex flex-col justify-end overflow-hidden px-2 py-1 text-[11px] leading-[1.5] ${
+          finished ? "agent-terminal-locked" : ""
+        }`}
+      >
+        {finished ? (
+          <>
+            <div className="text-[#00FBFF]/35">agent process exited</div>
+            <div className="text-[#00ff9c] font-bold">result committed ✓</div>
+          </>
+        ) : (
+          <>
+            {preview.map((line, index) => (
+              <div key={`${index}:${line}`} className="truncate text-[#7fd8dd]/80">
+                {line}
+              </div>
+            ))}
+            <div className="text-[#00ff9c] animate-pulse shrink-0">▋</div>
+          </>
+        )}
+      </div>
+      <div className="h-1 shrink-0 bg-[#00FBFF]/10">
+        <div
+          className="h-full transition-all duration-500"
+          style={{ width: `${(agent.solved.length / CHALLENGES.length) * 100}%`, background: agent.color }}
+        />
+      </div>
     </div>
   );
 }
@@ -1318,18 +1260,13 @@ function ChallengeBoard({
       <div className="flex-1 min-h-0 overflow-y-auto console-scroll p-2 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-1.5 content-start">
         {CHALLENGES.map(c => {
           const mine = focused.solved.includes(c.id);
-          const isCurrent = focused.finishedAt === null && focused.current === c.id;
           const count = solvedCount(c.id);
           return (
             <button
               key={c.id}
               onClick={() => onOpen(c.id)}
               className={`px-2 py-1.5 rounded border text-[11px] text-left transition hover:border-[#00FBFF] ${
-                mine
-                  ? "bg-[#00ff9c]/10 border-[#00ff9c]/50"
-                  : isCurrent
-                  ? "border-[#FFBE00] bg-[#FFBE00]/5 current-pulse"
-                  : "border-[#00FBFF]/15 bg-[#00FBFF]/[0.02]"
+                mine ? "bg-[#00ff9c]/10 border-[#00ff9c]/50" : "border-[#00FBFF]/15 bg-[#00FBFF]/[0.02]"
               }`}
             >
               <div className="flex items-center gap-1">
@@ -1337,7 +1274,6 @@ function ChallengeBoard({
                   #{c.id}
                 </span>
                 {mine && <span className="text-[#00ff9c]">✓</span>}
-                {isCurrent && <span className="text-[#FFBE00] animate-pulse">▶</span>}
               </div>
               <div className="text-white/80 truncate">{c.name}</div>
               <div className="text-[#00FBFF]/40">
@@ -1373,9 +1309,6 @@ function ChallengeDetails({
   }, [onClose]);
 
   const cleared = agents.filter(a => a.solved.includes(challenge.id));
-  const onIt = agents.filter(
-    a => !a.solved.includes(challenge.id) && a.current === challenge.id && a.status === "working",
-  );
   const dc = DIFFICULTY_COLOR[challenge.difficulty];
 
   const AgentChips = ({ list, empty }: { list: Agent[]; empty: string }) =>
@@ -1472,11 +1405,6 @@ function ChallengeDetails({
             <AgentChips list={cleared} empty="nobody has cracked this one yet" />
           </div>
 
-          <div className="space-y-1.5">
-            <div className="tracking-widest text-[10px] text-[#00FBFF]/45">WORKING ON IT NOW</div>
-            <AgentChips list={onIt} empty="no one is on this right now" />
-          </div>
-
           <div className="pt-1 text-[10px] text-[#00FBFF]/30">
             click an agent to jump to its close-up · Esc to close
           </div>
@@ -1490,7 +1418,7 @@ function ChallengeDetails({
 
 type StreamFilter = "all" | "chat" | "flags" | "events";
 type StreamRow =
-  | { id: number; group: "chat"; msg: ChatMsg }
+  | { id: number; group: "chat"; msg: ChatItem }
   | { id: number; group: "flags" | "events"; item: FeedItem };
 
 const STREAM_FILTERS: { id: StreamFilter; label: string }[] = [
@@ -1500,24 +1428,12 @@ const STREAM_FILTERS: { id: StreamFilter; label: string }[] = [
   { id: "events", label: "EVENTS" },
 ];
 
-// Feed events and agent/director chat merged into one chronological stream, so
-// the whole arena reads back like a single timeline with a large history.
-function ArenaStream({
-  feed,
-  chat,
-  onSend,
-  archived = false,
-}: {
-  feed: FeedItem[];
-  chat: ChatMsg[];
-  onSend: (t: string) => void;
-  archived?: boolean;
-}) {
+function ArenaStream() {
+  const feed = useArenaStore(selectFeed);
+  const chat = useArenaStore(selectChat);
   const [filter, setFilter] = useState<StreamFilter>("all");
-  const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // ids come from a single monotonic counter, so sorting by id restores order.
   const merged = useMemo<StreamRow[]>(() => {
     const chatRows: StreamRow[] = chat.map(m => ({ id: m.id, group: "chat", msg: m }));
     const feedRows: StreamRow[] = feed.map(item => ({
@@ -1530,18 +1446,10 @@ function ArenaStream({
 
   const rows = merged.filter(r => filter === "all" || r.group === filter);
 
-  // Follow on the newest row's id, not the row count: feed and chat are capped
-  // (40 / 60), so once both saturate the count stops changing while rows keep
-  // arriving — keying on length would strand the viewport for the rest of the run.
   const newestRowId = rows.length ? rows[rows.length - 1].id : 0;
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [newestRowId]);
-
-  const submit = () => {
-    onSend(draft);
-    setDraft("");
-  };
 
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-[#010607]">
@@ -1565,39 +1473,132 @@ function ArenaStream({
       </div>
 
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto console-scroll px-3 py-1.5 text-xs space-y-1">
-        {rows.length === 0 && <div className="text-[#00FBFF]/30 italic">waiting for the arena to heat up…</div>}
+        {rows.length === 0 && <div className="text-[#00FBFF]/30 italic">waiting for real arena events…</div>}
         {rows.map(r =>
           r.group === "chat" ? <ChatRow key={r.id} msg={r.msg} /> : <FeedRow key={r.id} item={r.item} />,
         )}
       </div>
+    </div>
+  );
+}
 
-      <div className="flex items-center gap-2 px-2 py-2 border-t border-[#00FBFF]/15 shrink-0">
-        <span className="text-[10px] text-[#FFBE00] font-bold shrink-0">🎬 DIRECTOR</span>
+function OperatorStrip({
+  focused,
+  archived,
+  timeUp,
+  onSteer,
+  onBroadcast,
+  onStop,
+  onSignOut,
+}: {
+  focused: Agent;
+  archived: boolean;
+  timeUp: boolean;
+  onSteer: (text: string) => Promise<void>;
+  onBroadcast: (text: string) => Promise<void>;
+  onStop: () => Promise<void>;
+  onSignOut: () => Promise<void>;
+}) {
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [stopArmed, setStopArmed] = useState(false);
+  const stopArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => clearTimeout(stopArmTimer.current ?? undefined), []);
+
+  const send = async (action: (text: string) => Promise<void>) => {
+    const text = draft.trim();
+    if (!text || busy || archived) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await action(text);
+      setDraft("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The operator command failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Stopping ends the race for everyone, so it takes two clicks. The arm state
+  // lapses on its own; a native confirm dialog would cover the broadcast.
+  const stop = async () => {
+    if (busy || archived) return;
+    if (!stopArmed) {
+      setStopArmed(true);
+      stopArmTimer.current = setTimeout(() => setStopArmed(false), STOP_ARM_MS);
+      return;
+    }
+    clearTimeout(stopArmTimer.current ?? undefined);
+    setStopArmed(false);
+    setBusy(true);
+    setError(null);
+    try {
+      await onStop();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The stop request failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      className={`shrink-0 border-t px-2 py-2 ${timeUp ? "border-[#FF5861] bg-[#FF5861]/10" : "border-[#00FBFF]/15"}`}
+    >
+      <div className="mb-1 flex items-center gap-2 text-[10px] font-bold text-[#FFBE00]">
+        <span>🎬 OPERATOR</span>
+        <span className="truncate text-[#00FBFF]/40">focused: {focused.handle}</span>
+        <button onClick={() => void onSignOut()} className="ml-auto text-[#00FBFF]/35 hover:text-[#00FBFF]">
+          SIGN OUT
+        </button>
+      </div>
+      <div className="flex items-center gap-1.5">
         <input
           value={draft}
-          onChange={e => setDraft(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === "Enter") submit();
+          onChange={event => setDraft(event.target.value)}
+          onKeyDown={event => {
+            if (event.key === "Enter") void send(onSteer);
           }}
-          disabled={archived}
-          placeholder={archived ? "match complete · stream archived" : "broadcast a message to all agents…"}
+          disabled={busy || archived}
+          placeholder={archived ? "run ended · controls locked" : "send an operator message…"}
           className="flex-1 min-w-0 bg-[#00181c] border border-[#00FBFF]/20 rounded px-2 py-1 text-xs text-white placeholder-[#00FBFF]/25 focus:outline-none focus:border-[#FFBE00]/60 disabled:cursor-not-allowed disabled:opacity-55"
         />
         <button
-          onClick={submit}
-          disabled={archived}
-          className="px-2.5 py-1 rounded border border-[#FFBE00]/50 text-[#FFBE00] text-xs font-bold hover:bg-[#FFBE00]/10 transition shrink-0 disabled:cursor-not-allowed disabled:opacity-45"
+          onClick={() => void send(onSteer)}
+          disabled={busy || archived || !draft.trim()}
+          className="px-2 py-1 rounded border border-[#00FBFF]/40 text-[#00FBFF] text-[10px] font-bold disabled:opacity-40"
         >
-          {archived ? "ARCHIVED" : "SEND"}
+          STEER
+        </button>
+        <button
+          onClick={() => void send(onBroadcast)}
+          disabled={busy || archived || !draft.trim()}
+          className="px-2 py-1 rounded border border-[#FFBE00]/50 text-[#FFBE00] text-[10px] font-bold disabled:opacity-40"
+        >
+          ALL
+        </button>
+        <button
+          onClick={() => void stop()}
+          disabled={busy || archived}
+          className={`px-2 py-1 rounded border text-[10px] font-bold disabled:opacity-40 ${
+            stopArmed || timeUp
+              ? "animate-pulse border-[#FF5861] bg-[#FF5861] text-black"
+              : "border-[#FF5861]/60 text-[#FF5861]"
+          }`}
+        >
+          {stopArmed ? "CONFIRM STOP" : "STOP"}
         </button>
       </div>
+      {error && <div className="mt-1 text-[10px] text-[#FF5861]">{error}</div>}
     </div>
   );
 }
 
 const FEED_STYLE: Record<FeedItem["type"], { icon: string; cls: string }> = {
   flag: { icon: "🏁", cls: "text-[#00ff9c] font-bold" },
-  skill: { icon: "⚡", cls: "text-[#c084fc]" },
   blocked: { icon: "⚠", cls: "text-[#FFBE00] font-bold" },
   resumed: { icon: "▶", cls: "text-[#00FBFF]/70" },
   // Clearing the board is the loudest thing an agent can do, so it outranks a
@@ -1619,7 +1620,7 @@ function FeedRow({ item }: { item: FeedItem }) {
 
 /* ---------------------------------------------------------------- ChatRow */
 
-function ChatRow({ msg }: { msg: ChatMsg }) {
+function ChatRow({ msg }: { msg: ChatItem }) {
   if (msg.director) {
     return (
       <div className="flex items-start gap-2 feed-in rounded bg-[#FFBE00]/10 border border-[#FFBE00]/30 px-2 py-1">
@@ -1707,6 +1708,28 @@ function StatusChip({ status }: { status: AgentStatus }) {
 // It lives inside a clickable row/card, so the click must not also focus the agent.
 function AgentBlockieLink({ agent, compact }: { agent: Agent; compact?: boolean }) {
   const { targetNetwork } = useTargetNetwork();
+  const runChainId = useArenaStore(selectRunChainId);
+  const className = `${compact ? "w-5 h-5" : "w-6 h-6"} shrink-0 rounded overflow-hidden transition`;
+  const badge = agent.address ? (
+    <BlockieAvatar address={agent.address} ensImage={null} size={compact ? 20 : 24} />
+  ) : (
+    <span className="flex h-full items-center justify-center text-[8px] font-bold" style={{ color: agent.color }}>
+      {agent.short}
+    </span>
+  );
+
+  if (!agent.address || runChainId !== targetNetwork.id) {
+    return (
+      <span
+        title={`${agent.harness} + ${agent.model}${agent.address ? ` · ${agent.address}` : " · address pending"}`}
+        className={className}
+        style={{ border: `1px solid ${agent.color}55` }}
+      >
+        {badge}
+      </span>
+    );
+  }
+
   return (
     <a
       href={getBlockExplorerAddressLink(targetNetwork, agent.address)}
@@ -1714,10 +1737,10 @@ function AgentBlockieLink({ agent, compact }: { agent: Agent; compact?: boolean 
       rel="noopener noreferrer"
       onClick={e => e.stopPropagation()}
       title={`${agent.harness} + ${agent.model} · ${agent.address}`}
-      className={`${compact ? "w-5 h-5" : "w-6 h-6"} shrink-0 rounded overflow-hidden hover:opacity-80 transition`}
+      className={`${className} hover:opacity-80`}
       style={{ border: `1px solid ${agent.color}55` }}
     >
-      <BlockieAvatar address={agent.address} ensImage={null} size={compact ? 20 : 24} />
+      {badge}
     </a>
   );
 }

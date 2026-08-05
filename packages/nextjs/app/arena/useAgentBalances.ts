@@ -1,3 +1,4 @@
+import { localTestClient } from "./funding";
 import { useQuery } from "@tanstack/react-query";
 import { Address } from "viem";
 import { usePublicClient } from "wagmi";
@@ -9,21 +10,23 @@ import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 
 export type FundingStatus = "waiting" | "partial" | "funded";
 
-export function useAgentBalances(addresses: Address[], enabled = true) {
+export function useAgentBalances(addresses: Address[], enabled = true, chainId?: number) {
   const { targetNetwork } = useTargetNetwork();
   const publicClient = usePublicClient({ chainId: targetNetwork.id });
+  const activeChainId = chainId ?? targetNetwork.id;
+  const balanceClient = activeChainId === 31337 ? localTestClient : publicClient;
 
   // Errors are not swallowed into a 0n balance: an unreachable node would then be
   // indistinguishable from ten genuinely empty wallets, leaving the director
   // staring at a board that never moves.
   const { data, isError, refetch } = useQuery({
-    queryKey: ["arenaAgentBalances", targetNetwork.id, addresses],
-    enabled: enabled && addresses.length > 0 && !!publicClient,
+    queryKey: ["arenaAgentBalances", activeChainId, addresses],
+    enabled: enabled && addresses.length > 0 && !!balanceClient,
     refetchInterval: 2000,
     placeholderData: prev => prev,
     queryFn: async () => {
-      if (!publicClient) throw new Error("no public client for the target network");
-      const balances = await Promise.all(addresses.map(address => publicClient.getBalance({ address })));
+      if (!balanceClient) throw new Error("no public client for the arena network");
+      const balances = await Promise.all(addresses.map(address => balanceClient.getBalance({ address })));
       return Object.fromEntries(addresses.map((address, i) => [address, balances[i]])) as Record<string, bigint>;
     },
   });

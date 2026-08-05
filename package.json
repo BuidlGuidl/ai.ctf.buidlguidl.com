@@ -9,6 +9,7 @@
   },
   "scripts": {
     "account": "yarn workspace @se-2/hardhat account",
+    "arena:dev": "bash scripts/arena-dev.sh",
     "chain": "yarn workspace @se-2/hardhat chain",
     "compile": "yarn workspace @se-2/hardhat compile",
     "deploy": "yarn workspace @se-2/hardhat deploy",
