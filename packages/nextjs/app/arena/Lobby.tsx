@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { OperatorAddress } from "./OperatorAddress";
 import { FundingMode, MULTICALL3_ABI, MULTICALL3_ADDRESS, fundingMode, localTestClient } from "./funding";
 import { Agent, CHALLENGES, FUNDING_AMOUNT_ETH } from "./mockData";
 import { type FundingStatus, fundingStatus, useAgentBalances } from "./useAgentBalances";
@@ -351,12 +352,15 @@ export function ArenaLobby({
           {muted ? "🔇 SFX OFF" : "🔊 SFX ON"}
         </button>
         {operator.authenticated && (
-          <button
-            onClick={() => void operator.signOut()}
-            className="text-xs px-2 py-1 rounded border border-[#00FBFF]/25 text-[#00FBFF]/60 hover:text-[#00FBFF] hover:border-[#00FBFF]/60 transition"
-          >
-            SIGN OUT
-          </button>
+          <>
+            <OperatorAddress address={operator.address} />
+            <button
+              onClick={() => void operator.signOut()}
+              className="text-xs px-2 py-1 rounded border border-[#00FBFF]/25 text-[#00FBFF]/60 hover:text-[#00FBFF] hover:border-[#00FBFF]/60 transition"
+            >
+              SIGN OUT
+            </button>
+          </>
         )}
       </div>
 

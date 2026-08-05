@@ -2,6 +2,7 @@
 
 import { type CSSProperties, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArenaLobby } from "./Lobby";
+import { OperatorAddress } from "./OperatorAddress";
 import { Agent, AgentStatus, CHALLENGES, Challenge, DIFFICULTY_COLOR } from "./mockData";
 import type { Address } from "viem";
 import { BlockieAvatar } from "~~/components/scaffold-eth";
@@ -355,6 +356,7 @@ export default function ArenaPage() {
             {operator.authenticated && (
               <OperatorStrip
                 focused={focused}
+                address={operator.address}
                 archived={runTerminal}
                 timeUp={clock.timeUp}
                 onSteer={steer}
@@ -821,6 +823,9 @@ function AgentLog({ focused, onClose }: { focused: Agent; onClose: () => void })
 // command and its output — the call and the result are separate events upstream,
 // paired here by `toolCallId`.
 function ConsoleRow({ line }: { line: ConsoleEntry }) {
+  const [expanded, setExpanded] = useState(false);
+  const rowRef = useRef<HTMLDivElement>(null);
+
   if (line.kind === "think") return <div className="text-[#7fd8dd] italic">· {line.text}</div>;
   if (line.kind === "message") return <div className="text-white/85">› {line.text}</div>;
   if (line.kind === "error") return <div className="text-[#FF5861] font-bold">⚠ {line.text}</div>;
@@ -828,28 +833,70 @@ function ConsoleRow({ line }: { line: ConsoleEntry }) {
   if (line.kind === "tool") {
     const state = !line.result ? "running" : line.result.ok ? "ok" : "fail";
     const color = state === "running" ? "#FFBE00" : state === "ok" ? "#00ff9c" : "#FF5861";
-    return (
-      <div>
+
+    if (!line.result) {
+      return (
         <div className="text-[#00FBFF]">
-          <span
-            className={state === "running" ? "animate-pulse" : ""}
-            style={{ color }}
-            title={`${line.tool} ${state}`}
-          >
-            {state === "running" ? "⟳" : state === "ok" ? "✓" : "✗"}
+          <span className="inline-block w-3" />
+          <span className="animate-pulse" style={{ color }} title={`${line.tool} ${state}`}>
+            ⟳
           </span>{" "}
           <span className="text-[#00ff9c]">$</span> {line.text}
         </div>
-        {line.result && (
+      );
+    }
+
+    const truncation = line.result.truncated?.["detail"];
+    const trimmedChars = truncation ? truncation.fullLength - line.result.detail.length : 0;
+    const originalLines = Number(truncation?.lines);
+    const hasOriginalLines = Number.isFinite(originalLines) && originalLines > 0;
+
+    return (
+      <div ref={rowRef}>
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={() => {
+            const expanding = !expanded;
+            setExpanded(expanding);
+            if (expanding) {
+              requestAnimationFrame(() => rowRef.current?.scrollIntoView({ block: "nearest" }));
+            }
+          }}
+          title={expanded ? undefined : line.text}
+          className="flex w-full min-w-0 items-baseline text-left text-[#00FBFF] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#00FBFF]/70"
+        >
+          <span className="w-3 shrink-0">{expanded ? "▾" : "▸"}</span>
+          <span style={{ color }} title={`${line.tool} ${state}`}>
+            {state === "ok" ? "✓" : "✗"}
+          </span>
+          <span className="ml-1 text-[#00ff9c]">$</span>
+          <span className={`ml-1 min-w-0 flex-1 ${expanded ? "whitespace-pre-wrap break-all" : "truncate"}`}>
+            {line.text}
+          </span>
+        </button>
+        {expanded && (
           <div className={`pl-4 break-all ${state === "fail" ? "text-[#FF5861]/70" : "text-[#00FBFF]/55"}`}>
-            → {line.result.detail}
+            {line.truncated?.["detail"] && <div className="text-[#00FBFF]/35">command trimmed by backend</div>}
+            <div className="whitespace-pre-wrap">→ {line.result.detail}</div>
+            {truncation && trimmedChars > 0 && (
+              <div className="text-[#00FBFF]/35">
+                output trimmed by backend ({trimmedChars.toLocaleString()} chars cut
+                {hasOriginalLines && ` · ${originalLines.toLocaleString()} original lines`})
+              </div>
+            )}
           </div>
         )}
       </div>
     );
   }
   // A result with no matching call — kept rather than dropped, same as upstream.
-  return <div className="text-[#00FBFF]/55 pl-4 break-all">→ {line.text}</div>;
+  return (
+    <div className="text-[#00FBFF]/55 pl-4 break-all">
+      → {line.text}
+      {line.truncated?.["detail"] && <span className="text-[#00FBFF]/35"> · trimmed</span>}
+    </div>
+  );
 }
 
 /* ------------------------------------------------------------ OverviewStage */
@@ -1484,6 +1531,7 @@ function ArenaStream() {
 
 function OperatorStrip({
   focused,
+  address,
   archived,
   timeUp,
   onSteer,
@@ -1492,6 +1540,7 @@ function OperatorStrip({
   onSignOut,
 }: {
   focused: Agent;
+  address: string | null;
   archived: boolean;
   timeUp: boolean;
   onSteer: (text: string) => Promise<void>;
@@ -1551,9 +1600,12 @@ function OperatorStrip({
       <div className="mb-1 flex items-center gap-2 text-[10px] font-bold text-[#FFBE00]">
         <span>🎬 OPERATOR</span>
         <span className="truncate text-[#00FBFF]/40">focused: {focused.handle}</span>
-        <button onClick={() => void onSignOut()} className="ml-auto text-[#00FBFF]/35 hover:text-[#00FBFF]">
-          SIGN OUT
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <OperatorAddress address={address} />
+          <button onClick={() => void onSignOut()} className="text-[#00FBFF]/35 hover:text-[#00FBFF]">
+            SIGN OUT
+          </button>
+        </div>
       </div>
       <div className="flex items-center gap-1.5">
         <input

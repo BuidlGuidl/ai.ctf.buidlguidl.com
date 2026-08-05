@@ -8,7 +8,8 @@ export interface ConsoleEntry {
   text: string;
   tool?: string;
   toolCallId?: string;
-  result?: { ok: boolean; detail: string };
+  truncated?: ArenaEvent["truncated"];
+  result?: { ok: boolean; detail: string; truncated?: ArenaEvent["truncated"] };
 }
 
 export interface FeedItem {
@@ -145,6 +146,7 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         tool: event.payload.tool,
         toolCallId: event.payload.toolCallId,
         text: event.payload.detail,
+        truncated: event.truncated,
       });
       return appendPreview(
         next,
@@ -309,7 +311,10 @@ function attachToolResult(
       entry.result === undefined
     ) {
       const updated = [...entries];
-      updated[index] = { ...entry, result: { ok: event.payload.ok, detail: event.payload.detail } };
+      updated[index] = {
+        ...entry,
+        result: { ok: event.payload.ok, detail: event.payload.detail, truncated: event.truncated },
+      };
       return {
         ...state,
         consoleByEntrant: { ...state.consoleByEntrant, [event.payload.entrantId]: updated },
@@ -323,6 +328,7 @@ function attachToolResult(
     kind: "tool-result",
     toolCallId: event.payload.toolCallId,
     text: event.payload.detail,
+    truncated: event.truncated,
   });
 }
 
