@@ -78,12 +78,20 @@ That is Hardhat account 0. The local chain profile registers it as the seed fund
 operator login and the run seed. It signs without a wallet prompt. To rehearse the real prompts instead, import the
 key into a browser wallet, connect it, and leave the variable empty.
 
-Each harness reads a credential from your shell. One missing credential fails the whole run, not just that agent:
+Copy the backend's environment file and fill it in:
 
-| Harness  | Credential                                       |
-| -------- | ------------------------------------------------ |
-| codex    | `~/.codex/auth.json`                             |
-| opencode | `OPENROUTER_API_KEY`                             |
+```
+cd ../agents-arena-backend
+cp .env.example .env
+```
+
+Set `AI_CTF_REPO` to the absolute path of this repo, and add the harness credentials. Each harness reads one, and
+a single missing credential fails the whole run, not just that agent:
+
+| Harness  | Credential                                           |
+| -------- | ---------------------------------------------------- |
+| codex    | `~/.codex/auth.json`, no variable needed              |
+| opencode | `OPENROUTER_API_KEY`                                 |
 | claude   | `CLAUDE_CODE_OAUTH_TOKEN`, from `claude setup-token` |
 
 Claude Code reads `ANTHROPIC_API_KEY` first. Unset it, or it overrides the subscription token.
@@ -96,21 +104,11 @@ switch versions and the SQLite module fails to load.
 ```
 cd ../agents-arena-backend
 fnm use 22   # or: nvm use 22
-
-ARENA_OPERATOR_TOKEN=local-dev-token \
-ARENA_DB=/tmp/arena-dev.db \
-ARENA_CORS_ORIGINS=http://localhost:3000 \
-ARENA_OPERATOR_ADDRESSES=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 \
-ARENA_SIWE_DOMAINS=localhost:3000 \
-ARENA_CHAIN_PROFILE=local \
-ARENA_AUTO_SIGN=false \
-AI_CTF_REPO=$(cd ../ai.ctf.buidlguidl.com && pwd) \
 pnpm --filter backend dev
 ```
 
-`ARENA_DB` is a file, not `:memory:`, because the dev server restarts on every backend edit. A memory database
-loses the running race each time. `ARENA_AUTO_SIGN=false` keeps the seed signature in the browser, where the real
-event runs it.
+The defaults in `.env.example` already point at `http://localhost:3000` and Hardhat account 0, so nothing else
+needs editing for local work.
 
 Open `http://localhost:3000/arena`, sign in, and pick a race duration. The lobby creates the run, you sign the
 seed, the local faucet funds the agent wallets, and the race starts. Only the operator's stop button ends a run:
