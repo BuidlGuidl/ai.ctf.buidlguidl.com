@@ -374,7 +374,7 @@ export default function ArenaPage() {
         {overviewTab === "grid" ? (
           <div className="shrink-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#010607]">
             <SectionHead label="RACE" hint="click to observe" />
-            <div className="max-h-[42vh] overflow-y-auto console-scroll">
+            <div className="max-h-[38vh] overflow-y-auto console-scroll">
               <RaceView ranked={ranked} onPick={goFocus} flashes={flashes} compact />
             </div>
           </div>
@@ -584,7 +584,7 @@ function PodiumMedal({
   className = "",
 }: {
   place: PodiumPlace;
-  size?: "sm" | "md" | "lg";
+  size?: "xs" | "sm" | "md" | "lg";
   animate?: boolean;
   className?: string;
 }) {
@@ -592,7 +592,7 @@ function PodiumMedal({
   const base = useId().replace(/:/g, "");
   const metalId = `${base}-metal`;
   const ribbonId = `${base}-ribbon`;
-  const sizeClass = size === "lg" ? "h-16 w-14" : size === "sm" ? "h-8 w-7" : "h-12 w-10";
+  const sizeClass = size === "lg" ? "h-16 w-14" : size === "xs" ? "h-6 w-5" : size === "sm" ? "h-8 w-7" : "h-12 w-10";
 
   return (
     <svg
@@ -936,7 +936,9 @@ function RaceView({
 }) {
   const total = CHALLENGES.length;
   const rowGap = compact ? "gap-3" : "gap-4";
-  const cellH = compact ? "h-7" : "h-9";
+  const cellH = compact ? "h-6" : "h-9";
+  const dataText = compact ? "text-sm" : "text-base";
+  const numText = compact ? "text-base" : "text-lg";
   const done = (a: Agent) => a.solved.length >= total;
   // Columns are mint-order slots, not fixed challenges — slot k holds the k-th
   // flag an agent minted, so a row reads left-to-right as its capture history.
@@ -1015,23 +1017,23 @@ function RaceView({
         <span className="w-10 shrink-0" />
         <span className="w-4 shrink-0" />
         <span className={`${compact ? "w-7" : "w-8"} shrink-0`} />
-        <span className={`${compact ? "w-56" : "w-[300px]"} shrink-0 text-sm tracking-widest text-[#00FBFF]/55`}>
+        <span className={`${compact ? "w-56" : "w-[300px]"} shrink-0 ${dataText} tracking-widest text-[#00FBFF]/55`}>
           AGENT · MINTS →
         </span>
-        <span className="w-16 shrink-0 text-right text-sm tracking-widest text-[#00FBFF]/55">TOK</span>
-        <span className="w-20 shrink-0 text-right text-sm tracking-widest text-[#00FBFF]/55">COST</span>
+        <span className={`w-16 shrink-0 text-right ${dataText} tracking-widest text-[#00FBFF]/55`}>TOK</span>
+        <span className={`w-20 shrink-0 text-right ${dataText} tracking-widest text-[#00FBFF]/55`}>COST</span>
         <div className="flex-1 flex gap-1">
           {slots.map(k => (
             <span
               key={k}
               title={`${k + 1}. flag minted`}
-              className="flex-1 text-center text-sm font-bold tabular-nums text-[#00FBFF]/55"
+              className={`flex-1 text-center ${dataText} font-bold tabular-nums text-[#00FBFF]/55`}
             >
               {k + 1}
             </span>
           ))}
         </div>
-        <span className="w-28 shrink-0 text-right text-sm tracking-widest text-[#00FBFF]/55">RESULT</span>
+        <span className={`w-28 shrink-0 text-right ${dataText} tracking-widest text-[#00FBFF]/55`}>RESULT</span>
       </div>
 
       {ranked.map((a, i) => {
@@ -1059,7 +1061,7 @@ function RaceView({
               }
             }}
             className={`relative w-full flex items-center ${rowGap} px-2 ${
-              compact ? "py-1" : "py-2"
+              compact ? "py-0.5" : "py-2"
             } rounded hover:bg-[#00FBFF]/5 will-change-transform text-left group cursor-pointer ${
               leadTaker === a.id ? "lead-take" : ""
             } ${done(a) ? "agent-finish-row" : ""} ${place ? `race-podium-row race-podium-${place}` : ""} ${
@@ -1076,7 +1078,7 @@ function RaceView({
               />
             )}
             <span
-              className={`flex w-10 shrink-0 items-center justify-center text-center text-lg font-bold tabular-nums ${
+              className={`flex w-10 shrink-0 items-center justify-center text-center ${numText} font-bold tabular-nums ${
                 place
                   ? ""
                   : done(a)
@@ -1091,7 +1093,12 @@ function RaceView({
               {place ? (
                 // The sting shows a big medal of its own; hiding the row's copy
                 // keeps the two from reading as two different awards.
-                <PodiumMedal place={place} size="sm" animate={celebrating} className={celebrating ? "invisible" : ""} />
+                <PodiumMedal
+                  place={place}
+                  size={compact ? "xs" : "sm"}
+                  animate={celebrating}
+                  className={celebrating ? "invisible" : ""}
+                />
               ) : i === 0 ? (
                 <span className={`inline-block ${leadTaker === a.id ? "crown-pop" : ""}`}>👑</span>
               ) : (
@@ -1101,15 +1108,15 @@ function RaceView({
             <StatusDot status={a.status} />
             <AgentBlockieLink agent={a} compact={compact} />
             <span
-              className={`${compact ? "w-56 text-lg" : "w-[300px] text-2xl"} truncate font-bold text-white shrink-0`}
+              className={`${compact ? "w-56 text-base" : "w-[300px] text-2xl"} truncate font-bold text-white shrink-0`}
               title={`${a.harness} + ${a.model}`}
             >
               {a.handle}
             </span>
-            <span className="w-16 text-right text-base tabular-nums shrink-0 text-[#00FBFF]/75">
+            <span className={`w-16 text-right ${dataText} tabular-nums shrink-0 text-[#00FBFF]/75`}>
               {(a.tokens / 1000).toFixed(0)}k
             </span>
-            <span className="w-20 text-right text-base tabular-nums shrink-0 text-[#FFBE00]/90">
+            <span className={`w-20 text-right ${dataText} tabular-nums shrink-0 text-[#FFBE00]/90`}>
               {a.cost === null ? "—" : `$${a.cost.toFixed(2)}`}
             </span>
 
@@ -1124,7 +1131,7 @@ function RaceView({
                     <span
                       key={k}
                       title={`#${flagId} ${ch?.name ?? ""} · minted ${k + 1} of ${total}`}
-                      className={`relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center text-lg font-bold tabular-nums transition-colors ${
+                      className={`relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums transition-colors ${
                         flashing ? "flag-pop" : ""
                       }`}
                       style={{ background: a.color, borderColor: a.color, color: "#00181c" }}
@@ -1139,7 +1146,7 @@ function RaceView({
                     <span
                       key={k}
                       title={STATUS_STYLE[a.status].label}
-                      className={`relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center text-lg font-bold tabular-nums ${
+                      className={`relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums ${
                         a.status === "working" ? "cell-working" : "opacity-40"
                       }`}
                       style={{ background: `${color}1f`, borderColor: color, color }}
@@ -1159,7 +1166,7 @@ function RaceView({
               })}
             </div>
 
-            <span className="w-28 text-right text-lg tabular-nums shrink-0 text-[#00FBFF]/85">
+            <span className={`w-28 text-right ${numText} tabular-nums shrink-0 text-[#00FBFF]/85`}>
               {done(a) ? (
                 <span className="agent-finish-time font-bold" style={{ color: podium?.tone ?? "#00ff9c" }}>
                   ◆ {fmtClock(a.finishedAt ?? 0)}
@@ -1264,13 +1271,13 @@ function GridCard({ agent, onPick }: { agent: Agent; onPick: (id: string) => voi
       >
         {finished ? (
           <>
-            <div className="text-[#00FBFF]/55">agent process exited</div>
-            <div className="text-[#00ff9c] font-bold">result committed ✓</div>
+            <div className="shrink-0 text-[#00FBFF]/55">agent process exited</div>
+            <div className="shrink-0 text-[#00ff9c] font-bold">result committed ✓</div>
           </>
         ) : (
           <>
             {preview.map((line, index) => (
-              <div key={`${index}:${line}`} className="truncate text-[#7fd8dd]/90">
+              <div key={`${index}:${line}`} className="shrink-0 truncate text-[#7fd8dd]/90">
                 {line}
               </div>
             ))}
@@ -1758,9 +1765,9 @@ function StatusChip({ status }: { status: AgentStatus }) {
 function AgentBlockieLink({ agent, compact }: { agent: Agent; compact?: boolean }) {
   const { targetNetwork } = useTargetNetwork();
   const runChainId = useArenaStore(selectRunChainId);
-  const className = `${compact ? "w-7 h-7" : "w-8 h-8"} shrink-0 rounded overflow-hidden transition`;
+  const className = `${compact ? "w-6 h-6" : "w-8 h-8"} shrink-0 rounded overflow-hidden transition`;
   const badge = agent.address ? (
-    <BlockieAvatar address={agent.address} ensImage={null} size={compact ? 28 : 32} />
+    <BlockieAvatar address={agent.address} ensImage={null} size={compact ? 24 : 32} />
   ) : (
     <span className="flex h-full items-center justify-center text-xs font-bold" style={{ color: agent.color }}>
       {agent.short}
