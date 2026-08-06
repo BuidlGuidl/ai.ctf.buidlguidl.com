@@ -9,11 +9,16 @@ interface ArenaStore {
   projection: ProjectionState | null;
   connectionStatus: ConnectionStatus;
   connectionError: string | null;
+  // Client-local: a steer the backend accepted but has not injected yet. The
+  // projection stays a pure function of journal events, and nothing was
+  // journalled until the agent's turn ends.
+  pendingSteers: Record<string, string[]>;
   setCurrentRunId: (runId: string | null) => void;
   seedSnapshot: (run: RunSnapshot, history?: ArenaEvent[]) => void;
   syncSnapshot: (run: RunSnapshot) => void;
   dispatchEvent: (event: ArenaEvent) => void;
   dispatchEvents: (events: ArenaEvent[]) => void;
+  addPendingSteer: (entrantId: string, text: string, sinceEventId: number) => void;
   setConnection: (status: ConnectionStatus, error?: string | null) => void;
   clear: () => void;
 }
@@ -23,13 +28,19 @@ export const useArenaStore = create<ArenaStore>(set => ({
   projection: null,
   connectionStatus: "idle",
   connectionError: null,
+  pendingSteers: {},
   setCurrentRunId: currentRunId => set({ currentRunId }),
   seedSnapshot: (run, history = []) =>
-    set({ currentRunId: run.id, projection: seedProjection(run, history), connectionError: null }),
+    set({
+      currentRunId: run.id,
+      projection: seedProjection(run, history),
+      connectionError: null,
+      pendingSteers: {},
+    }),
   syncSnapshot: run =>
     set(current => {
       if (current.projection === null || current.projection.run.id !== run.id) {
-        return { currentRunId: run.id, projection: initialProjection(run), connectionError: null };
+        return { currentRunId: run.id, projection: initialProjection(run), connectionError: null, pendingSteers: {} };
       }
       if (run.lastEventId < current.projection.lastEventId) return current;
       return {
@@ -43,34 +54,72 @@ export const useArenaStore = create<ArenaStore>(set => ({
             deadlineAt: run.deadlineAt,
           },
         },
+        pendingSteers: {},
       };
     }),
   dispatchEvent: event =>
     set(current => {
       if (current.projection === null) return current;
       const projection = applyEvent(current.projection, event);
-      return projection === current.projection ? current : { projection };
+      if (projection === current.projection) return current;
+      return { projection, pendingSteers: resolvePendingSteers(current.pendingSteers, event) };
     }),
   dispatchEvents: events =>
     set(current => {
       if (current.projection === null) return current;
       const projection = events.reduce(applyEvent, current.projection);
-      return projection === current.projection ? current : { projection };
+      if (projection === current.projection) return current;
+      return { projection, pendingSteers: events.reduce(resolvePendingSteers, current.pendingSteers) };
+    }),
+  addPendingSteer: (entrantId, text, sinceEventId) =>
+    set(current => {
+      // The queued response can lose the race against the steer's own injection
+      // event. A hint for a steer the console already shows would never resolve.
+      if (current.projection === null || current.projection.runFinishedAt !== null) return current;
+      const injected = (current.projection.consoleByEntrant[entrantId] ?? []).some(
+        entry => entry.kind === "steer" && entry.text === text && entry.id > sinceEventId,
+      );
+      if (injected) return current;
+      return {
+        pendingSteers: { ...current.pendingSteers, [entrantId]: [...(current.pendingSteers[entrantId] ?? []), text] },
+      };
     }),
   setConnection: (connectionStatus, connectionError = null) => set({ connectionStatus, connectionError }),
-  clear: () => set({ currentRunId: null, projection: null, connectionStatus: "idle", connectionError: null }),
+  clear: () =>
+    set({ currentRunId: null, projection: null, connectionStatus: "idle", connectionError: null, pendingSteers: {} }),
 }));
 
+// A queued steer is settled by the `entrant.steered` event it eventually
+// produces. Matching on text, not id, because the hint is written before the
+// backend journals anything — and a broadcast the projection dedupes for chat
+// still clears the entrant's hint here.
+function resolvePendingSteers(pending: Record<string, string[]>, event: ArenaEvent): Record<string, string[]> {
+  if (event.type === "run.state" && event.payload.state === "finished") return {};
+  // A done entrant takes no more turns, so its queue can only have been dropped.
+  if (event.type === "entrant.status" && event.payload.status === "done" && pending[event.payload.entrantId]) {
+    return { ...pending, [event.payload.entrantId]: [] };
+  }
+  if (event.type !== "entrant.steered") return pending;
+
+  const queue = pending[event.payload.entrantId] ?? [];
+  const index = queue.indexOf(event.payload.text);
+  if (index === -1) return pending;
+
+  return { ...pending, [event.payload.entrantId]: [...queue.slice(0, index), ...queue.slice(index + 1)] };
+}
+
 // The snapshot already carries the run head, so replaying older events needs the
-// cursor wound back first. It is restored afterwards: the stream must resume at
-// the head, not at the last backfilled event.
+// cursor wound back first. It is restored afterwards to whichever is newer, the
+// head or the last backfilled event: history is fetched after the snapshot, so an
+// event landing in that gap is already applied and must not replay off the stream.
 function seedProjection(run: RunSnapshot, history: ArenaEvent[]): ProjectionState {
   const base = initialProjection(run);
   const oldest = history[0];
   if (oldest === undefined) return base;
 
   const replayed = history.reduce(applyEvent, { ...base, lastEventId: oldest.id - 1 });
-  return { ...replayed, lastEventId: run.lastEventId, run: { ...replayed.run, lastEventId: run.lastEventId } };
+  const cursor = Math.max(run.lastEventId, replayed.lastEventId);
+  return { ...replayed, lastEventId: cursor, run: { ...replayed.run, lastEventId: cursor } };
 }
 
 export const selectRun = (state: ArenaStore) => state.projection?.run ?? null;
@@ -93,9 +142,12 @@ export const selectConsoleFor = (entrantId: string) => (state: ArenaStore) =>
   state.projection?.consoleByEntrant[entrantId] ?? EMPTY_CONSOLE;
 export const selectPreviewFor = (entrantId: string) => (state: ArenaStore) =>
   state.projection?.previewsByEntrant[entrantId] ?? EMPTY_PREVIEW;
+export const selectPendingSteersFor = (entrantId: string) => (state: ArenaStore) =>
+  state.pendingSteers[entrantId] ?? EMPTY_PENDING_STEERS;
 
 const EMPTY_FEED: NonNullable<ProjectionState["feed"]> = [];
 const EMPTY_CHAT: NonNullable<ProjectionState["chat"]> = [];
 const EMPTY_FUNDING: NonNullable<ProjectionState["fundingByEntrant"]> = {};
 const EMPTY_CONSOLE: NonNullable<ProjectionState["consoleByEntrant"][string]> = [];
 const EMPTY_PREVIEW: NonNullable<ProjectionState["previewsByEntrant"][string]> = [];
+const EMPTY_PENDING_STEERS: string[] = [];

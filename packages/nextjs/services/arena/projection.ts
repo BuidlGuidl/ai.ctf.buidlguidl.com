@@ -4,7 +4,7 @@ import { displayForEntrant } from "./roster";
 export interface ConsoleEntry {
   id: number;
   source: string;
-  kind: "think" | "message" | "flag" | "error" | "tool" | "tool-result";
+  kind: "think" | "message" | "flag" | "error" | "steer" | "tool" | "tool-result";
   text: string;
   tool?: string;
   toolCallId?: string;
@@ -161,6 +161,14 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         `${event.payload.ok ? "✓" : "✗"} ${event.payload.tool} ${singleLine(event.payload.detail)}`,
       );
     case "entrant.steered": {
+      // The console shows the steer even when the chat dedupe below drops it:
+      // the entrant was told this, whoever the message was addressed to.
+      next = appendConsole(next, event.payload.entrantId, {
+        id: event.id,
+        source: event.source,
+        kind: "steer",
+        text: event.payload.text,
+      });
       const pending = next.pendingBroadcast;
       if (
         pending !== null &&

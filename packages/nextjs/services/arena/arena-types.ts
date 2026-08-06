@@ -155,6 +155,14 @@ export interface SteerRequest {
   text: string;
 }
 
+// An agent mid-turn cannot be interrupted, so its steer waits for the turn to end.
+export type SteerDelivery = "queued" | "injected";
+
+export interface SteerResponse {
+  accepted: boolean;
+  status: SteerDelivery;
+}
+
 export interface BroadcastRequest {
   text: string;
 }
@@ -165,6 +173,9 @@ export interface BroadcastResponse {
   accepted: boolean;
   delivered: string[];
   failed: { entrantId: string; message: string }[];
+  // The subset of `delivered` still waiting behind a running turn. Their
+  // `entrant.steered` events land later — the journal records injection, not intent.
+  queued: string[];
 }
 
 export interface NonceResponse {

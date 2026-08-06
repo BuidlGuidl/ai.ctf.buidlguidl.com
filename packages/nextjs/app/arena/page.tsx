@@ -20,6 +20,7 @@ import {
   selectConsoleFor,
   selectFeed,
   selectLastFlagEvent,
+  selectPendingSteersFor,
   selectPreviewFor,
   selectRunChainId,
   selectRunDeadlineAt,
@@ -256,7 +257,11 @@ export default function ArenaPage() {
   const steer = useCallback(
     async (text: string) => {
       if (!runId || !focused) return;
-      await arenaClient.steerEntrant(runId, focused.id, { text });
+      const sinceEventId = useArenaStore.getState().projection?.lastEventId ?? 0;
+      const { status } = await arenaClient.steerEntrant(runId, focused.id, { text });
+      // An injected steer is already on its way back as an event; only a queued
+      // one needs the hint to stand in until the agent's turn ends.
+      if (status === "queued") useArenaStore.getState().addPendingSteer(focused.id, text, sinceEventId);
     },
     [focused, runId],
   );
@@ -830,6 +835,7 @@ function ConsoleRow({ line }: { line: ConsoleEntry }) {
   if (line.kind === "message") return <div className="text-white/85">› {line.text}</div>;
   if (line.kind === "error") return <div className="text-[#FF5861] font-bold">⚠ {line.text}</div>;
   if (line.kind === "flag") return <div className="text-[#00ff9c] font-bold">🏁 {line.text}</div>;
+  if (line.kind === "steer") return <div className="text-[#FFBE00] font-bold">◆ DIRECTOR: {line.text}</div>;
   if (line.kind === "tool") {
     const state = !line.result ? "running" : line.result.ok ? "ok" : "fail";
     const color = state === "running" ? "#FFBE00" : state === "ok" ? "#00ff9c" : "#FF5861";
@@ -1548,6 +1554,7 @@ function OperatorStrip({
   onStop: () => Promise<void>;
   onSignOut: () => Promise<void>;
 }) {
+  const pendingSteers = useArenaStore(selectPendingSteersFor(focused.id));
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1644,6 +1651,13 @@ function OperatorStrip({
           {stopArmed ? "CONFIRM STOP" : "STOP"}
         </button>
       </div>
+      {pendingSteers.length > 0 && (
+        <div className="mt-1 animate-pulse text-[10px] text-[#FFBE00]">
+          {pendingSteers.length === 1
+            ? `◆ queued · lands when ${focused.handle} finishes this turn`
+            : `◆ ${pendingSteers.length} queued · land when ${focused.handle} finishes this turn`}
+        </div>
+      )}
       {error && <div className="mt-1 text-[10px] text-[#FF5861]">{error}</div>}
     </div>
   );
