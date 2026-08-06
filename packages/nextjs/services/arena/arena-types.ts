@@ -24,7 +24,7 @@ export const ROSTER_MODELS: Readonly<Record<HarnessId, readonly string[]>> = {
   opencode: ["openrouter/z-ai/glm-5.2", "openrouter/moonshotai/kimi-k3", "openrouter/deepseek/deepseek-v4-flash-0731"],
 };
 
-export const ROSTER_EFFORTS = ["low", "medium", "high", "xhigh"] as const;
+export const ROSTER_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 export type RosterEffort = (typeof ROSTER_EFFORTS)[number];
 
 export interface EntrantSolve {

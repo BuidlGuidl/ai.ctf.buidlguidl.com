@@ -1,13 +1,15 @@
-import type { RosterEntry } from "./arena-types";
+import type { RosterEffort, RosterEntry } from "./arena-types";
 
+// Claude Code has no effort flag; "high" is its documented default, pinned here so
+// the badge states what the entrant actually runs. OpenCode exposes no knob at all.
 export const ROSTER = [
   { id: "gpt-56-sol", harness: "codex", model: "gpt-5.6-sol", effort: "xhigh" },
-  { id: "opus-5", harness: "claude", model: "claude-opus-5" },
+  { id: "opus-5", harness: "claude", model: "claude-opus-5", effort: "high" },
   { id: "glm-52", harness: "opencode", model: "openrouter/z-ai/glm-5.2" },
   { id: "gpt-55", harness: "codex", model: "gpt-5.5", effort: "high" },
-  { id: "sonnet-5", harness: "claude", model: "claude-sonnet-5" },
+  { id: "sonnet-5", harness: "claude", model: "claude-sonnet-5", effort: "high" },
   { id: "kimi-k3", harness: "opencode", model: "openrouter/moonshotai/kimi-k3" },
-  { id: "opus-48", harness: "claude", model: "claude-opus-4-8" },
+  { id: "opus-48", harness: "claude", model: "claude-opus-4-8", effort: "high" },
   { id: "deepseek-v4", harness: "opencode", model: "openrouter/deepseek/deepseek-v4-flash-0731" },
   { id: "gpt-56-high", harness: "codex", model: "gpt-5.6-sol", effort: "high" },
   { id: "gpt-55-xhigh", harness: "codex", model: "gpt-5.5", effort: "xhigh" },
@@ -20,6 +22,8 @@ export interface RosterDisplay {
   vendor: string;
   harnessLabel: string;
   modelLabel: string;
+  // Absent for harnesses that expose no effort setting — the UI then shows no badge.
+  effort?: RosterEffort;
 }
 
 export const ROSTER_DISPLAY: Readonly<Record<string, RosterDisplay>> = {
@@ -93,7 +97,7 @@ export const ROSTER_DISPLAY: Readonly<Record<string, RosterDisplay>> = {
     short: "OA",
     vendor: "OpenAI",
     harnessLabel: "Codex CLI",
-    modelLabel: "GPT-5.6 Sol · high",
+    modelLabel: "GPT-5.6 Sol",
   },
   "gpt-55-xhigh": {
     handle: "codex-gpt-55-xhigh",
@@ -101,19 +105,26 @@ export const ROSTER_DISPLAY: Readonly<Record<string, RosterDisplay>> = {
     short: "OA",
     vendor: "OpenAI",
     harnessLabel: "Codex CLI",
-    modelLabel: "GPT-5.5 · xhigh",
+    modelLabel: "GPT-5.5",
   },
 };
 
-export function displayForEntrant(id: string, harness: string, model: string): RosterDisplay {
-  return (
-    ROSTER_DISPLAY[id] ?? {
-      handle: id,
-      color: "#00FBFF",
-      short: harness.slice(0, 2).toUpperCase(),
-      vendor: harness,
-      harnessLabel: harness,
-      modelLabel: model,
-    }
-  );
+const ROSTER_EFFORT_BY_ID: Readonly<Record<string, RosterEffort | undefined>> = Object.fromEntries(
+  ROSTER.map(entry => [entry.id, "effort" in entry ? entry.effort : undefined]),
+);
+
+// A roster preset states its own effort, so the entrant's reported one is only
+// trusted for ids we don't ship — an entrant the backend brings along.
+export function displayForEntrant(id: string, harness: string, model: string, effort?: RosterEffort): RosterDisplay {
+  const preset = ROSTER_DISPLAY[id];
+  if (preset) return { ...preset, effort: ROSTER_EFFORT_BY_ID[id] };
+  return {
+    handle: id,
+    color: "#00FBFF",
+    short: harness.slice(0, 2).toUpperCase(),
+    vendor: harness,
+    harnessLabel: harness,
+    modelLabel: model,
+    effort,
+  };
 }

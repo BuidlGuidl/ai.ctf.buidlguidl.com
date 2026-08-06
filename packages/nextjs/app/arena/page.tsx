@@ -1,6 +1,7 @@
 "use client";
 
 import { type CSSProperties, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { EffortBadge } from "./EffortBadge";
 import { ArenaLobby } from "./Lobby";
 import { OperatorAddress } from "./OperatorAddress";
 import { Agent, AgentStatus, CHALLENGES, Challenge, DIFFICULTY_COLOR } from "./mockData";
@@ -92,6 +93,7 @@ function agentsFromRun(entrants: EntrantSummary[] | null, startedAt: string | nu
         handle: display.handle,
         harness: display.harnessLabel,
         model: display.modelLabel,
+        effort: display.effort,
         vendor: display.vendor,
         color: display.color,
         short: display.short,
@@ -107,7 +109,7 @@ function agentsFromRun(entrants: EntrantSummary[] | null, startedAt: string | nu
   }
 
   return entrants.map(entrant => {
-    const display = displayForEntrant(entrant.id, entrant.harness, entrant.model);
+    const display = displayForEntrant(entrant.id, entrant.harness, entrant.model, entrant.effort);
     const firstSolve = entrant.solves[0]?.ts ?? null;
     const clearedAt = entrant.solves.length >= CHALLENGES.length ? entrant.solves.at(-1)?.ts ?? null : null;
     return {
@@ -115,6 +117,7 @@ function agentsFromRun(entrants: EntrantSummary[] | null, startedAt: string | nu
       handle: display.handle,
       harness: display.harnessLabel,
       model: display.modelLabel,
+      effort: display.effort,
       vendor: display.vendor,
       color: display.color,
       short: display.short,
@@ -485,8 +488,13 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
                         <AgentBlockieLink agent={agent} />
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-sm font-bold text-white">{agent.handle}</div>
-                          <div className="mt-0.5 truncate text-[11px] text-[#00FBFF]/40 sm:text-xs">
-                            {agent.harness} · {agent.model}
+                          <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-[#00FBFF]/40 sm:text-xs">
+                            <span className="truncate">
+                              {agent.harness} · {agent.model}
+                            </span>
+                            {/* On the narrowest screens this row truncates the model name
+                                before the badge; better to drop the badge than the name. */}
+                            <EffortBadge effort={agent.effort} className="max-[400px]:hidden" />
                           </div>
                         </div>
                         <span className="hidden shrink-0 text-xs text-[#00FBFF]/40 min-[430px]:inline">
@@ -559,8 +567,11 @@ function FinalistCard({ agent, place }: { agent: Agent; place: PodiumPlace }) {
         <div className={`mt-3 truncate font-bold text-white ${winner ? "text-base sm:text-lg" : "text-sm"}`}>
           {agent.handle}
         </div>
-        <div className="mt-0.5 truncate text-[10px] text-[#00FBFF]/40">
-          {agent.harness} · {agent.model}
+        <div className="mt-0.5 flex items-center justify-center gap-1.5 text-[10px] text-[#00FBFF]/40">
+          <span className="truncate">
+            {agent.harness} · {agent.model}
+          </span>
+          <EffortBadge effort={agent.effort} />
         </div>
         <div
           className={`mt-3 font-dotGothic tabular-nums ${
@@ -1103,7 +1114,7 @@ function RaceView({
             <AgentBlockieLink agent={a} compact={compact} />
             <span
               className={`${compact ? "w-40 text-xs" : "w-44 text-sm"} truncate font-bold text-white shrink-0`}
-              title={`${a.harness} + ${a.model}`}
+              title={`${a.harness} + ${a.model}${a.effort ? ` · ${a.effort}` : ""}`}
             >
               {a.handle}
             </span>
@@ -1773,7 +1784,9 @@ function AgentBlockieLink({ agent, compact }: { agent: Agent; compact?: boolean 
   if (!agent.address || runChainId !== targetNetwork.id) {
     return (
       <span
-        title={`${agent.harness} + ${agent.model}${agent.address ? ` · ${agent.address}` : " · address pending"}`}
+        title={`${agent.harness} + ${agent.model}${agent.effort ? ` · ${agent.effort}` : ""}${
+          agent.address ? ` · ${agent.address}` : " · address pending"
+        }`}
         className={className}
         style={{ border: `1px solid ${agent.color}55` }}
       >
@@ -1788,7 +1801,7 @@ function AgentBlockieLink({ agent, compact }: { agent: Agent; compact?: boolean 
       target="_blank"
       rel="noopener noreferrer"
       onClick={e => e.stopPropagation()}
-      title={`${agent.harness} + ${agent.model} · ${agent.address}`}
+      title={`${agent.harness} + ${agent.model}${agent.effort ? ` · ${agent.effort}` : ""} · ${agent.address}`}
       className={`${className} hover:opacity-80`}
       style={{ border: `1px solid ${agent.color}55` }}
     >
