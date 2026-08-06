@@ -145,9 +145,8 @@ function useArenaClock(
 
   const end = runFinishedAt ? Date.parse(runFinishedAt) : now;
   const elapsed = startedAt ? Math.max(0, Math.floor((end - Date.parse(startedAt)) / 1000)) : 0;
-  if (!deadlineAt) return { seconds: elapsed, countdown: false, timeUp: false };
-  const remaining = Math.max(0, Math.ceil((Date.parse(deadlineAt) - end) / 1000));
-  return { seconds: remaining, countdown: true, timeUp: remaining === 0 && runState === "running" };
+  const timeUp = deadlineAt ? end >= Date.parse(deadlineAt) && runState === "running" : false;
+  return { seconds: elapsed, timeUp };
 }
 
 export default function ArenaPage() {
@@ -312,7 +311,6 @@ export default function ArenaPage() {
       <Scanlines />
       <TopBar
         clock={clock.seconds}
-        countdown={clock.countdown}
         timeUp={clock.timeUp}
         totalSolved={totalSolved}
         finishedCount={finishedCount}
@@ -657,7 +655,6 @@ function PodiumMedal({
 // the signal that the board is an archive and needs a way back to the podium.
 function TopBar({
   clock,
-  countdown,
   timeUp,
   totalSolved,
   finishedCount,
@@ -668,7 +665,6 @@ function TopBar({
   onViewResults,
 }: {
   clock: number;
-  countdown: boolean;
   timeUp: boolean;
   totalSolved: number;
   finishedCount: number;
@@ -723,7 +719,7 @@ function TopBar({
           {connectionStatus}
         </span>
         <span className={`tabular-nums font-bold ${timeUp ? "text-[#FF5861]" : "text-[#FFBE00]"}`}>
-          {countdown ? "⏳" : "⏱"} {fmtClock(clock)}
+          ⏱ {fmtClock(clock)}
         </span>
       </div>
     </div>
