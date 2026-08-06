@@ -2,7 +2,12 @@
 
 import { operatorSiweMessage } from "./auth";
 import { ArenaApiError, arenaClient } from "./client";
-import { applySession, useAuthenticationStatus } from "./useOperatorSession";
+import {
+  applySession,
+  endOperatorSession,
+  useAuthenticationStatus,
+  useWalletSessionWatcher,
+} from "./useOperatorSession";
 import { RainbowKitAuthenticationProvider, createAuthenticationAdapter } from "@rainbow-me/rainbowkit";
 import type { Address } from "viem";
 import { notification } from "~~/utils/scaffold-eth";
@@ -24,20 +29,18 @@ const arenaAuthenticationAdapter = createAuthenticationAdapter({
     }
   },
   signOut: async () => {
-    try {
-      await arenaClient.logout();
-    } catch {
-      // RainbowKit must clear the local session even if the arena backend is unavailable.
-    }
-    applySession(null);
+    endOperatorSession();
   },
 });
 
-export function ArenaAuthProvider({ children }: { children: React.ReactNode }) {
+// Always mounted so client-side nav across the /arena boundary never swaps the
+// provider tree (a swap would remount the whole app); `enabled` does the scoping.
+export function ArenaAuthProvider({ enabled, children }: { enabled: boolean; children: React.ReactNode }) {
   const status = useAuthenticationStatus();
+  useWalletSessionWatcher();
 
   return (
-    <RainbowKitAuthenticationProvider adapter={arenaAuthenticationAdapter} status={status}>
+    <RainbowKitAuthenticationProvider adapter={arenaAuthenticationAdapter} status={status} enabled={enabled}>
       {children}
     </RainbowKitAuthenticationProvider>
   );

@@ -20,18 +20,18 @@ export const queryClient = new QueryClient({
 
 export const ScaffoldEthAppProviders = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname();
-  const rainbowKitTree = (
-    <RainbowKitProvider avatar={BlockieAvatar}>
-      {children}
-      <Toaster />
-    </RainbowKitProvider>
-  );
+  const onArena = pathname === "/arena" || pathname.startsWith("/arena/");
 
   return (
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <ProgressBar height="3px" color="#00FBFF" />
-        {pathname.startsWith("/arena") ? <ArenaAuthProvider>{rainbowKitTree}</ArenaAuthProvider> : rainbowKitTree}
+        <ArenaAuthProvider enabled={onArena}>
+          <RainbowKitProvider avatar={BlockieAvatar}>
+            {children}
+            <Toaster />
+          </RainbowKitProvider>
+        </ArenaAuthProvider>
       </QueryClientProvider>
     </WagmiProvider>
   );

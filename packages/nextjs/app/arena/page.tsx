@@ -353,7 +353,9 @@ export default function ArenaPage() {
           {/* RIGHT COLUMN — the unified arena stream; the observed agent's log takes over here */}
           <div className="w-[400px] flex flex-col min-h-0 min-w-0">
             {stageMode === "focus" ? <AgentLog focused={focused} onClose={closeLog} /> : <ArenaStream />}
-            {operator.configured && (
+            {/* Run URLs are spectator-shareable, so the strip only shows for someone
+                who is (or was, mid-race) the operator — never as a sign-in invitation. */}
+            {(operator.authenticated || operator.hadSession) && (
               <OperatorStrip
                 focused={focused}
                 address={operator.address}

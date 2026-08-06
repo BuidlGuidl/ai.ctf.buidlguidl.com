@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import type { SessionResponse } from "./arena-types";
 import { devSigner, operatorSiweMessage, seedTypedData } from "./auth";
 import { arenaClient } from "./client";
@@ -39,12 +39,52 @@ const useOperatorSessionStore = create<OperatorSessionState>(set => ({
     })),
 }));
 
+// null here means a deliberate sign-out (the wallet left), so the sticky
+// hadSession clears too — unlike invalidate(), where the session died under a
+// still-connected operator and "sign back in" is the right offer.
 export function applySession(next: SessionResponse | null): void {
+  if (next === null) {
+    useOperatorSessionStore.setState({ session: null, hadSession: false });
+    return;
+  }
   useOperatorSessionStore.getState().setSession(next);
 }
 
-export function getStoredSession(): SessionResponse | null {
-  return useOperatorSessionStore.getState().session;
+// Deliberate exit: local auth dies first so the controls disarm immediately,
+// then the backend hears about it best-effort — a hung or failed logout must
+// not keep a disconnected operator armed.
+export function endOperatorSession(): void {
+  applySession(null);
+  void arenaClient.logout().catch(() => {
+    // The server cookie outlives an unreachable backend; the wallet watcher
+    // ends any session the loader restores while the wallet is still gone.
+  });
+}
+
+// The session follows the wallet. Mounted once in ArenaAuthProvider (which is
+// always mounted), so a disconnect on a spectator route ends the operator
+// session too. Only settled wagmi states act — 'reconnecting' on a reload must
+// not kill a valid session — and dev-signer sessions have no wallet to follow.
+export function useWalletSessionWatcher(): void {
+  const { address, status } = useAccount();
+  const session = useOperatorSessionStore(state => state.session);
+
+  useEffect(() => {
+    if (devSigner !== undefined) return;
+    if (session?.authenticated !== true) return;
+    if (status === "disconnected") {
+      endOperatorSession();
+      return;
+    }
+    if (
+      status === "connected" &&
+      session.address &&
+      address &&
+      session.address.toLowerCase() !== address.toLowerCase()
+    ) {
+      endOperatorSession();
+    }
+  }, [address, status, session]);
 }
 
 export function useAuthenticationStatus(): "loading" | "unauthenticated" | "authenticated" {
@@ -66,7 +106,6 @@ export function useOperatorSession(): OperatorSession {
   const { targetNetwork } = useTargetNetwork();
   const chainId = connectedChainId ?? runChainId ?? targetNetwork.id;
   const { signMessageAsync } = useSignMessage();
-  const previousConnectedAddress = useRef<typeof connectedAddress>(undefined);
 
   const signingAddress = connectedAddress ?? devSigner?.address;
 
@@ -111,32 +150,10 @@ export function useOperatorSession(): OperatorSession {
   }, [chainId, connectedAddress, setSession, signMessageAsync, signingAddress]);
 
   const signOut = useCallback(async () => {
-    try {
-      await arenaClient.logout();
-    } catch {
-      // Local session cleanup must still run when the backend is unavailable.
-    } finally {
-      setSession(null);
-    }
-  }, [setSession]);
+    endOperatorSession();
+  }, []);
 
   const invalidate = useCallback(() => setSession(null), [setSession]);
-
-  useEffect(() => {
-    const previousAddress = previousConnectedAddress.current;
-    previousConnectedAddress.current = connectedAddress;
-
-    if (
-      session?.authenticated &&
-      session.address &&
-      connectedAddress &&
-      session.address.toLowerCase() !== connectedAddress.toLowerCase()
-    ) {
-      void signOut();
-    }
-
-    if (previousAddress && !connectedAddress && session?.authenticated) void signOut();
-  }, [connectedAddress, session, signOut]);
 
   return useMemo(
     () => ({
