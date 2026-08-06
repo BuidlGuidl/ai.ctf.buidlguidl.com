@@ -331,7 +331,7 @@ export default function ArenaPage() {
           </span>
           <button
             onClick={backToLobby}
-            className="shrink-0 rounded border border-[#FF5861] px-3 py-1.5 text-xs font-bold tracking-widest transition hover:bg-[#FF5861] hover:text-black"
+            className="shrink-0 rounded border border-[#FF5861] px-3 py-1.5 text-sm font-bold tracking-widest transition hover:bg-[#FF5861] hover:text-black"
           >
             BACK TO LOBBY
           </button>
@@ -351,7 +351,7 @@ export default function ArenaPage() {
           </div>
 
           {/* RIGHT COLUMN — the unified arena stream; the observed agent's log takes over here */}
-          <div className="w-[400px] flex flex-col min-h-0 min-w-0">
+          <div className="w-[520px] flex flex-col min-h-0 min-w-0">
             {stageMode === "focus" ? <AgentLog focused={focused} onClose={closeLog} /> : <ArenaStream />}
             {operator.authenticated && (
               <OperatorStrip
@@ -430,7 +430,7 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
       <div className="pointer-events-none absolute inset-0 z-10 final-victory-sweep" />
 
       <header className="relative z-20 flex h-14 shrink-0 items-center gap-3 border-b border-[#FFBE00]/25 bg-black/65 px-4 sm:px-5">
-        <span className="flex items-center gap-2 text-xs font-bold tracking-[0.18em] text-[#00ff9c] sm:text-sm">
+        <span className="flex items-center gap-2 text-sm font-bold tracking-[0.18em] text-[#00ff9c]">
           <span className="h-2.5 w-2.5 rounded-full bg-[#00ff9c] shadow-[0_0_10px_#00ff9c]" />
           MATCH COMPLETE
         </span>
@@ -439,7 +439,7 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
         </div>
         <button
           onClick={onViewData}
-          className="ml-auto shrink-0 rounded border border-[#00FBFF]/30 px-2.5 py-1 text-[10px] font-bold tracking-[0.12em] text-[#00FBFF]/60 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
+          className="ml-auto shrink-0 rounded border border-[#00FBFF]/30 px-2.5 py-1 text-sm font-bold tracking-[0.12em] text-[#00FBFF]/75 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
         >
           ARENA DATA ▸
         </button>
@@ -447,23 +447,21 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
 
       <main className="console-scroll relative z-20 flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:py-8">
         <section className="final-lock-in mx-auto max-w-5xl text-center">
-          <div className="text-[10px] font-bold tracking-[0.35em] text-[#00ff9c] sm:text-xs">
-            ALL AGENT RESULTS COMMITTED
-          </div>
+          <div className="text-sm font-bold tracking-[0.35em] text-[#00ff9c]">ALL AGENT RESULTS COMMITTED</div>
           <h1 className="final-title mt-2 font-dotGothic text-3xl tracking-[0.12em] text-white sm:text-5xl">
             RESULTS LOCKED
           </h1>
         </section>
 
-        <section className="mx-auto mt-10 grid max-w-4xl grid-cols-1 items-end gap-3 md:mt-14 md:grid-cols-3 md:gap-4">
+        <section className="mx-auto mt-10 grid max-w-5xl grid-cols-1 items-end gap-3 md:mt-14 md:grid-cols-3 md:gap-4">
           {ranked.slice(0, 3).map((agent, i) => (
             <FinalistCard key={agent.id} agent={agent} place={(i + 1) as PodiumPlace} />
           ))}
         </section>
 
         {rest.length > 0 && (
-          <section className="mx-auto mt-8 max-w-5xl pb-5 md:mt-10">
-            <div className="mb-3 flex items-center gap-3 text-[11px] font-bold tracking-[0.24em] text-[#00FBFF]/45 sm:text-xs">
+          <section className="mx-auto mt-8 max-w-6xl pb-5 md:mt-10">
+            <div className="mb-3 flex items-center gap-3 text-sm font-bold tracking-[0.24em] text-[#00FBFF]/70">
               <span>FINAL STANDINGS</span>
               <span className="h-px flex-1 bg-[#00FBFF]/15" />
               <span>{ranked.length} RESULTS</span>
@@ -479,20 +477,20 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
                         className="final-result-in flex min-h-16 items-center gap-2 rounded-md border border-[#00FBFF]/15 bg-[#001014]/60 px-3 sm:gap-3 sm:px-4"
                         style={{ animationDelay: `${1.15 + (place - 4) * 0.08}s` }}
                       >
-                        <span className="race-final-position w-7 text-center font-dotGothic text-base text-[#00ff9c] sm:text-lg">
+                        <span className="race-final-position w-8 text-center font-dotGothic text-xl text-[#00ff9c]">
                           {place}
                         </span>
                         <AgentBlockieLink agent={agent} />
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-bold text-white">{agent.handle}</div>
-                          <div className="mt-0.5 truncate text-[11px] text-[#00FBFF]/40 sm:text-xs">
+                          <div className="truncate text-lg font-bold text-white">{agent.handle}</div>
+                          <div className="mt-0.5 truncate text-sm text-[#00FBFF]/70">
                             {agent.harness} · {agent.model}
                           </div>
                         </div>
-                        <span className="hidden shrink-0 text-xs text-[#00FBFF]/40 min-[430px]:inline">
+                        <span className="hidden shrink-0 text-base text-[#00FBFF]/70 min-[430px]:inline">
                           {agent.solved.length} FLAGS
                         </span>
-                        <span className="w-[78px] shrink-0 text-right text-sm font-bold tabular-nums text-[#00ff9c] sm:text-base">
+                        <span className="w-[104px] shrink-0 text-right text-lg font-bold tabular-nums text-[#00ff9c]">
                           {agent.finishedAt === null ? "—" : fmtClock(agent.finishedAt)}
                         </span>
                       </div>
@@ -532,7 +530,7 @@ function FinalistCard({ agent, place }: { agent: Agent; place: PodiumPlace }) {
       >
         <div className="absolute inset-x-0 top-0 h-0.5" style={{ background: podium.tone }} />
         <div className="flex min-h-10 items-start justify-between gap-3 text-left">
-          <div className="text-[9px] font-bold tracking-[0.28em]" style={{ color: podium.tone }}>
+          <div className="text-xs font-bold tracking-[0.28em]" style={{ color: podium.tone }}>
             {winner ? PODIUM_RESULT[1] : `FINAL PLACE ${place}`}
           </div>
           <PodiumMedal place={place} size={winner ? "lg" : "md"} animate />
@@ -556,20 +554,18 @@ function FinalistCard({ agent, place }: { agent: Agent; place: PodiumPlace }) {
             )}
           </div>
         </div>
-        <div className={`mt-3 truncate font-bold text-white ${winner ? "text-base sm:text-lg" : "text-sm"}`}>
-          {agent.handle}
-        </div>
-        <div className="mt-0.5 truncate text-[10px] text-[#00FBFF]/40">
+        <div className={`mt-3 truncate font-bold text-white ${winner ? "text-2xl" : "text-lg"}`}>{agent.handle}</div>
+        <div className="mt-0.5 truncate text-sm text-[#00FBFF]/70">
           {agent.harness} · {agent.model}
         </div>
         <div
           className={`mt-3 font-dotGothic tabular-nums ${
-            winner ? "text-xl text-[#FFBE00]" : "text-base text-[#00ff9c]"
+            winner ? "text-3xl text-[#FFBE00]" : "text-xl text-[#00ff9c]"
           }`}
         >
           {agent.finishedAt === null ? "—" : fmtClock(agent.finishedAt)}
         </div>
-        <div className="mt-1 text-[9px] tracking-[0.16em] text-[#00FBFF]/30">
+        <div className="mt-1 text-sm tracking-[0.16em] text-[#00FBFF]/60">
           {agent.solved.length}/{CHALLENGES.length} FLAGS ·{" "}
           {agent.cost === null ? "COST N/A" : `$${agent.cost.toFixed(2)}`}
         </div>
@@ -679,7 +675,7 @@ function TopBar({
   onViewResults?: () => void;
 }) {
   return (
-    <div className="flex items-center gap-4 px-5 h-14 border-b border-[#00FBFF]/25 bg-gradient-to-r from-[#020808] to-[#001014] shrink-0">
+    <div className="flex items-center gap-4 px-5 h-16 border-b border-[#00FBFF]/25 bg-gradient-to-r from-[#020808] to-[#001014] shrink-0">
       <span
         className={`flex items-center gap-2 font-bold tracking-widest ${
           allFinished ? "text-[#00ff9c]" : "text-[#FF5861]"
@@ -695,34 +691,33 @@ function TopBar({
       <div className="hidden sm:block font-dotGothic text-xl md:text-2xl text-[#00FBFF] tracking-wide title-glow">
         BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · AGENT ARENA
       </div>
-      <div className="hidden 2xl:flex items-center gap-1 text-xs text-[#00FBFF]/50">
+      <div className="hidden 2xl:flex items-center gap-1 text-sm text-[#00FBFF]/70">
         <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{agentCount} AGENTS</span>
         <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{CHALLENGES.length} CHALLENGES</span>
       </div>
       {timeUp && (
-        <span className="animate-pulse rounded border border-[#FF5861] bg-[#FF5861]/15 px-3 py-1 text-xs font-bold tracking-widest text-[#FF5861]">
+        <span className="animate-pulse rounded border border-[#FF5861] bg-[#FF5861]/15 px-3 py-1 text-sm font-bold tracking-widest text-[#FF5861]">
           TIME&apos;S UP · OPERATOR: STOP THE RACE
         </span>
       )}
-      <div className="ml-auto flex items-center gap-4 text-sm">
+      <div className="ml-auto flex items-center gap-4 text-lg">
         {onViewResults && (
           <button
             onClick={onViewResults}
-            className="px-2.5 py-1 rounded border border-[#FFBE00]/50 text-[#FFBE00] text-[10px] font-bold tracking-[0.12em] hover:bg-[#FFBE00]/10 transition"
+            className="px-2.5 py-1 rounded border border-[#FFBE00]/50 text-[#FFBE00] text-sm font-bold tracking-[0.12em] hover:bg-[#FFBE00]/10 transition"
           >
             ◆ RESULTS
           </button>
         )}
-        <span className="hidden md:inline text-[#00FBFF]/60">
+        <span className="hidden md:inline text-[#00FBFF]/75">
           🏁 <span className="text-[#00ff9c] font-bold">{totalSolved}</span> flags
         </span>
-        <span className={finishedCount ? "text-[#00ff9c] font-bold" : "text-[#00FBFF]/45"}>
+        <span className={finishedCount ? "text-[#00ff9c] font-bold" : "text-[#00FBFF]/70"}>
           ◆ {finishedCount}/{agentCount}
         </span>
-        <span className="hidden xl:inline text-[10px] uppercase tracking-wider text-[#00FBFF]/35">
-          {connectionStatus}
-        </span>
-        <span className={`tabular-nums font-bold ${timeUp ? "text-[#FF5861]" : "text-[#FFBE00]"}`}>
+        <span className="hidden xl:inline text-sm uppercase tracking-wider text-[#00FBFF]/55">{connectionStatus}</span>
+        {/* The race clock is the one number the stream never stops reading. */}
+        <span className={`text-3xl tabular-nums font-bold ${timeUp ? "text-[#FF5861]" : "text-[#FFBE00]"}`}>
           {countdown ? "⏳" : "⏱"} {fmtClock(clock)}
         </span>
       </div>
@@ -739,23 +734,23 @@ const STAGE_TABS: { id: OverviewTab; label: string }[] = [
 
 function StageTabs({ tab, onTab }: { tab: OverviewTab; onTab: (t: OverviewTab) => void }) {
   return (
-    <div className="flex items-center gap-2 px-4 h-11 border-b border-[#00FBFF]/20 bg-[#001417] shrink-0">
-      <span className="font-dotGothic text-[#00FBFF]/70 mr-2">WIDE SHOT</span>
+    <div className="flex items-center gap-2 px-4 h-12 border-b border-[#00FBFF]/20 bg-[#001417] shrink-0">
+      <span className="font-dotGothic text-lg text-[#00FBFF]/70 mr-2">WIDE SHOT</span>
       {STAGE_TABS.map(t => (
         <button
           key={t.id}
           onClick={() => onTab(t.id)}
           title={t.label}
-          className={`px-3 py-1 rounded text-xs font-bold tracking-wider transition ${
+          className={`px-3 py-1 rounded text-sm font-bold tracking-wider transition ${
             tab === t.id
               ? "bg-[#00FBFF]/15 text-[#00FBFF] border border-[#00FBFF]/50"
-              : "text-[#00FBFF]/45 border border-transparent hover:text-[#00FBFF]"
+              : "text-[#00FBFF]/60 border border-transparent hover:text-[#00FBFF]"
           }`}
         >
           {t.label}
         </button>
       ))}
-      <span className="ml-auto text-[10px] text-[#00FBFF]/35">click any agent → observe its log ▸</span>
+      <span className="ml-auto text-sm text-[#00FBFF]/55">click any agent → observe its log ▸</span>
     </div>
   );
 }
@@ -775,35 +770,39 @@ function AgentLog({ focused, onClose }: { focused: Agent; onClose: () => void })
 
   return (
     <div className="flex-1 min-h-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#020a0c]">
-      <div className="flex items-center gap-2 px-3 h-9 border-b border-[#00FBFF]/15 bg-[#00141733] shrink-0 text-xs">
-        <AgentBlockieLink agent={focused} />
-        <span className="flex-1 min-w-0 text-sm font-bold text-white truncate">{focused.handle}</span>
-        <StatusChip status={focused.status} />
-        {focused.finishedAt !== null ? (
-          <span className="px-1.5 py-0.5 rounded font-bold shrink-0 text-[10px] text-[#00ff9c] border border-[#00ff9c]/40">
-            CLEARED · {fmtClock(focused.finishedAt)}
+      {/* Two rows, not one: at broadcast sizes the badges crowd the handle off
+          the end of a single line, and the observed agent's name is the whole
+          point of this panel. */}
+      <div className="flex flex-col gap-1 px-3 py-1.5 border-b border-[#00FBFF]/15 bg-[#00141733] shrink-0 text-base">
+        <div className="flex items-center gap-2">
+          <AgentBlockieLink agent={focused} />
+          <span className="flex-1 min-w-0 text-lg font-bold text-white truncate">{focused.handle}</span>
+          <button
+            onClick={onClose}
+            title="back to arena feed"
+            className="w-7 h-7 shrink-0 rounded border border-[#00FBFF]/25 text-[#00FBFF]/60 hover:text-[#00FBFF] hover:border-[#00FBFF] transition"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          <StatusChip status={focused.status} />
+          {focused.finishedAt !== null ? (
+            <span className="px-1.5 py-0.5 rounded font-bold shrink-0 text-sm text-[#00ff9c] border border-[#00ff9c]/40">
+              CLEARED · {fmtClock(focused.finishedAt)}
+            </span>
+          ) : (
+            <span className="px-1.5 py-0.5 rounded font-bold shrink-0 text-sm text-[#00FBFF]/70 border border-[#00FBFF]/20">
+              TARGET UNREPORTED
+            </span>
+          )}
+          <span className="ml-auto text-[#00ff9c] font-bold shrink-0">
+            {focused.solved.length}/{CHALLENGES.length}
           </span>
-        ) : (
-          <span className="px-1.5 py-0.5 rounded font-bold shrink-0 text-[10px] text-[#00FBFF]/55 border border-[#00FBFF]/20">
-            TARGET UNREPORTED
-          </span>
-        )}
-        <span className="ml-auto text-[#00ff9c] font-bold shrink-0">
-          {focused.solved.length}/{CHALLENGES.length}
-        </span>
-        <button
-          onClick={onClose}
-          title="back to arena feed"
-          className="w-6 h-6 shrink-0 rounded border border-[#00FBFF]/25 text-[#00FBFF]/60 hover:text-[#00FBFF] hover:border-[#00FBFF] transition"
-        >
-          ✕
-        </button>
+        </div>
       </div>
 
-      <div
-        ref={scrollRef}
-        className="flex-1 min-h-0 overflow-y-auto px-3 py-2 text-[12px] leading-relaxed console-scroll"
-      >
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-3 py-2 text-base leading-snug console-scroll">
         {lines.map(l => (
           <ConsoleRow key={l.id} line={l} />
         ))}
@@ -876,11 +875,11 @@ function ConsoleRow({ line }: { line: ConsoleEntry }) {
           </span>
         </button>
         {expanded && (
-          <div className={`pl-4 break-all ${state === "fail" ? "text-[#FF5861]/70" : "text-[#00FBFF]/55"}`}>
-            {line.truncated?.["detail"] && <div className="text-[#00FBFF]/35">command trimmed by backend</div>}
+          <div className={`pl-4 break-all ${state === "fail" ? "text-[#FF5861]/85" : "text-[#00FBFF]/75"}`}>
+            {line.truncated?.["detail"] && <div className="text-[#00FBFF]/55">command trimmed by backend</div>}
             <div className="whitespace-pre-wrap">→ {line.result.detail}</div>
             {truncation && trimmedChars > 0 && (
-              <div className="text-[#00FBFF]/35">
+              <div className="text-[#00FBFF]/55">
                 output trimmed by backend ({trimmedChars.toLocaleString()} chars cut
                 {hasOriginalLines && ` · ${originalLines.toLocaleString()} original lines`})
               </div>
@@ -892,9 +891,9 @@ function ConsoleRow({ line }: { line: ConsoleEntry }) {
   }
   // A result with no matching call — kept rather than dropped, same as upstream.
   return (
-    <div className="text-[#00FBFF]/55 pl-4 break-all">
+    <div className="text-[#00FBFF]/75 pl-4 break-all">
       → {line.text}
-      {line.truncated?.["detail"] && <span className="text-[#00FBFF]/35"> · trimmed</span>}
+      {line.truncated?.["detail"] && <span className="text-[#00FBFF]/55"> · trimmed</span>}
     </div>
   );
 }
@@ -936,8 +935,8 @@ function RaceView({
   compact?: boolean;
 }) {
   const total = CHALLENGES.length;
-  const rowGap = compact ? "gap-2" : "gap-3";
-  const cellH = compact ? "h-4" : "h-5";
+  const rowGap = compact ? "gap-3" : "gap-4";
+  const cellH = compact ? "h-7" : "h-9";
   const done = (a: Agent) => a.solved.length >= total;
   // Columns are mint-order slots, not fixed challenges — slot k holds the k-th
   // flag an agent minted, so a row reads left-to-right as its capture history.
@@ -1013,26 +1012,26 @@ function RaceView({
 
       {/* ruler — one column per flag minted, in capture order */}
       <div className={`flex items-center ${rowGap} px-2 pb-1`}>
-        <span className="w-8 shrink-0" />
-        <span className="w-3 shrink-0" />
-        <span className={`${compact ? "w-5" : "w-6"} shrink-0`} />
-        <span className={`${compact ? "w-40" : "w-44"} shrink-0 text-[9px] tracking-widest text-[#00FBFF]/25`}>
+        <span className="w-10 shrink-0" />
+        <span className="w-4 shrink-0" />
+        <span className={`${compact ? "w-7" : "w-8"} shrink-0`} />
+        <span className={`${compact ? "w-56" : "w-[300px]"} shrink-0 text-sm tracking-widest text-[#00FBFF]/55`}>
           AGENT · MINTS →
         </span>
-        <span className="w-12 shrink-0 text-right text-[9px] tracking-widest text-[#00FBFF]/25">TOK</span>
-        <span className="w-14 shrink-0 text-right text-[9px] tracking-widest text-[#00FBFF]/25">COST</span>
-        <div className="flex-1 flex gap-[3px]">
+        <span className="w-16 shrink-0 text-right text-sm tracking-widest text-[#00FBFF]/55">TOK</span>
+        <span className="w-20 shrink-0 text-right text-sm tracking-widest text-[#00FBFF]/55">COST</span>
+        <div className="flex-1 flex gap-1">
           {slots.map(k => (
             <span
               key={k}
               title={`${k + 1}. flag minted`}
-              className="flex-1 text-center text-[9px] font-bold tabular-nums text-[#00FBFF]/25"
+              className="flex-1 text-center text-sm font-bold tabular-nums text-[#00FBFF]/55"
             >
               {k + 1}
             </span>
           ))}
         </div>
-        <span className="w-20 shrink-0 text-right text-[9px] tracking-widest text-[#00FBFF]/25">RESULT</span>
+        <span className="w-28 shrink-0 text-right text-sm tracking-widest text-[#00FBFF]/55">RESULT</span>
       </div>
 
       {ranked.map((a, i) => {
@@ -1060,7 +1059,7 @@ function RaceView({
               }
             }}
             className={`relative w-full flex items-center ${rowGap} px-2 ${
-              compact ? "py-[2px]" : "py-1.5"
+              compact ? "py-1" : "py-2"
             } rounded hover:bg-[#00FBFF]/5 will-change-transform text-left group cursor-pointer ${
               leadTaker === a.id ? "lead-take" : ""
             } ${done(a) ? "agent-finish-row" : ""} ${place ? `race-podium-row race-podium-${place}` : ""} ${
@@ -1077,7 +1076,7 @@ function RaceView({
               />
             )}
             <span
-              className={`flex w-8 shrink-0 items-center justify-center text-center text-xs font-bold tabular-nums ${
+              className={`flex w-10 shrink-0 items-center justify-center text-center text-lg font-bold tabular-nums ${
                 place
                   ? ""
                   : done(a)
@@ -1086,7 +1085,7 @@ function RaceView({
                   ? "text-[#FFBE00]"
                   : i < 3
                   ? "text-[#00ff9c]"
-                  : "text-[#00FBFF]/40"
+                  : "text-[#00FBFF]/70"
               }`}
             >
               {place ? (
@@ -1102,20 +1101,20 @@ function RaceView({
             <StatusDot status={a.status} />
             <AgentBlockieLink agent={a} compact={compact} />
             <span
-              className={`${compact ? "w-40 text-xs" : "w-44 text-sm"} truncate font-bold text-white shrink-0`}
+              className={`${compact ? "w-56 text-lg" : "w-[300px] text-2xl"} truncate font-bold text-white shrink-0`}
               title={`${a.harness} + ${a.model}`}
             >
               {a.handle}
             </span>
-            <span className="w-12 text-right text-[11px] tabular-nums shrink-0 text-[#00FBFF]/55">
+            <span className="w-16 text-right text-base tabular-nums shrink-0 text-[#00FBFF]/75">
               {(a.tokens / 1000).toFixed(0)}k
             </span>
-            <span className="w-14 text-right text-[11px] tabular-nums shrink-0 text-[#FFBE00]/70">
+            <span className="w-20 text-right text-base tabular-nums shrink-0 text-[#FFBE00]/90">
               {a.cost === null ? "—" : `$${a.cost.toFixed(2)}`}
             </span>
 
             {/* The backend reports captures but not each entrant's active challenge. */}
-            <div className="flex-1 flex gap-[3px]">
+            <div className="flex-1 flex gap-1">
               {slots.map(k => {
                 const flagId = a.solved[k];
                 if (flagId !== undefined) {
@@ -1125,7 +1124,7 @@ function RaceView({
                     <span
                       key={k}
                       title={`#${flagId} ${ch?.name ?? ""} · minted ${k + 1} of ${total}`}
-                      className={`relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center text-[9px] font-bold tabular-nums transition-colors ${
+                      className={`relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center text-lg font-bold tabular-nums transition-colors ${
                         flashing ? "flag-pop" : ""
                       }`}
                       style={{ background: a.color, borderColor: a.color, color: "#00181c" }}
@@ -1140,7 +1139,7 @@ function RaceView({
                     <span
                       key={k}
                       title={STATUS_STYLE[a.status].label}
-                      className={`relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center text-[9px] font-bold tabular-nums ${
+                      className={`relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center text-lg font-bold tabular-nums ${
                         a.status === "working" ? "cell-working" : "opacity-40"
                       }`}
                       style={{ background: `${color}1f`, borderColor: color, color }}
@@ -1160,7 +1159,7 @@ function RaceView({
               })}
             </div>
 
-            <span className="w-20 text-right text-xs tabular-nums shrink-0 text-[#00FBFF]/70">
+            <span className="w-28 text-right text-lg tabular-nums shrink-0 text-[#00FBFF]/85">
               {done(a) ? (
                 <span className="agent-finish-time font-bold" style={{ color: podium?.tone ?? "#00ff9c" }}>
                   ◆ {fmtClock(a.finishedAt ?? 0)}
@@ -1192,15 +1191,15 @@ function RaceFinishSting({ agent, place }: { agent: Agent; place: PodiumPlace })
       <div className="relative flex items-center gap-4 px-5 py-4 sm:px-7 sm:py-5">
         <PodiumMedal place={place} size="lg" animate className="shrink-0" />
         <div className="min-w-0 flex-1">
-          <div className="text-[9px] font-bold tracking-[0.32em] sm:text-[10px]" style={{ color: podium.tone }}>
+          <div className="text-xs font-bold tracking-[0.32em]" style={{ color: podium.tone }}>
             {podium.label} FINISH · RESULT LOCKED
           </div>
           <div className="mt-1 truncate font-dotGothic text-xl tracking-wide text-white sm:text-2xl">
             {PODIUM_RESULT[place]}
           </div>
-          <div className="mt-1 flex items-center gap-2 text-xs sm:text-sm">
+          <div className="mt-1 flex items-center gap-2 text-base">
             <span className="truncate font-bold text-white">{agent.handle}</span>
-            <span className="text-[#00FBFF]/30">/</span>
+            <span className="text-[#00FBFF]/50">/</span>
             <span className="shrink-0 font-dotGothic tabular-nums" style={{ color: podium.tone }}>
               {fmtClock(agent.finishedAt ?? 0)}
             </span>
@@ -1210,7 +1209,7 @@ function RaceFinishSting({ agent, place }: { agent: Agent; place: PodiumPlace })
           <div className="font-dotGothic text-4xl leading-none" style={{ color: podium.tone }}>
             0{place}
           </div>
-          <div className="mt-1 text-[8px] font-bold tracking-[0.24em] text-[#00FBFF]/35">PODIUM</div>
+          <div className="mt-1 text-[11px] font-bold tracking-[0.24em] text-[#00FBFF]/55">PODIUM</div>
         </div>
       </div>
     </div>
@@ -1245,33 +1244,33 @@ function GridCard({ agent, onPick }: { agent: Agent; onPick: (id: string) => voi
         agent.status === "blocked" ? "border-[#FFBE00]/60" : "border-[#00FBFF]/15"
       }`}
     >
-      <div className="flex items-center gap-1.5 px-2 h-8 shrink-0 border-b border-[#00FBFF]/10 bg-[#001417]">
+      <div className="flex items-center gap-1.5 px-2 h-10 shrink-0 border-b border-[#00FBFF]/10 bg-[#001417]">
         <AgentBlockieLink agent={agent} />
-        <span className="text-[13px] font-bold text-white truncate flex-1">{agent.handle}</span>
+        <span className="text-base font-bold text-white truncate flex-1">{agent.handle}</span>
         <StatusDot status={agent.status} />
       </div>
-      <div className="flex items-center gap-2 px-2 h-6 shrink-0 text-[11px] border-b border-[#00FBFF]/[0.07] bg-[#000d0f]">
+      <div className="flex items-center gap-2 px-2 h-8 shrink-0 text-sm border-b border-[#00FBFF]/[0.07] bg-[#000d0f]">
         <span className="truncate" style={{ color: finished ? "#00ff9c" : STATUS_STYLE[agent.status].color }}>
           {agent.finishedAt !== null ? `◆ CLEARED · ${fmtClock(agent.finishedAt)}` : STATUS_STYLE[agent.status].label}
         </span>
-        <span className="ml-auto shrink-0 text-[#00FBFF]/45 tabular-nums">
+        <span className="ml-auto shrink-0 text-[#00FBFF]/70 tabular-nums">
           {agent.solved.length}/{CHALLENGES.length}
         </span>
       </div>
       <div
-        className={`flex-1 min-h-0 flex flex-col justify-end overflow-hidden px-2 py-1 text-[11px] leading-[1.5] ${
+        className={`flex-1 min-h-0 flex flex-col justify-end overflow-hidden px-2 py-1 text-sm leading-[1.45] ${
           finished ? "agent-terminal-locked" : ""
         }`}
       >
         {finished ? (
           <>
-            <div className="text-[#00FBFF]/35">agent process exited</div>
+            <div className="text-[#00FBFF]/55">agent process exited</div>
             <div className="text-[#00ff9c] font-bold">result committed ✓</div>
           </>
         ) : (
           <>
             {preview.map((line, index) => (
-              <div key={`${index}:${line}`} className="truncate text-[#7fd8dd]/80">
+              <div key={`${index}:${line}`} className="truncate text-[#7fd8dd]/90">
                 {line}
               </div>
             ))}
@@ -1302,7 +1301,7 @@ function ChallengeBoard({
 }) {
   const solvedCount = (id: number) => agents.filter(a => a.solved.includes(id)).length;
   return (
-    <div className="h-48 shrink-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#010607]">
+    <div className="h-56 shrink-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#010607]">
       <SectionHead label="CHALLENGE BOARD" hint="click for details" />
       <div className="flex-1 min-h-0 overflow-y-auto console-scroll p-2 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-1.5 content-start">
         {CHALLENGES.map(c => {
@@ -1312,7 +1311,7 @@ function ChallengeBoard({
             <button
               key={c.id}
               onClick={() => onOpen(c.id)}
-              className={`px-2 py-1.5 rounded border text-[11px] text-left transition hover:border-[#00FBFF] ${
+              className={`px-2 py-1.5 rounded border text-base text-left transition hover:border-[#00FBFF] ${
                 mine ? "bg-[#00ff9c]/10 border-[#00ff9c]/50" : "border-[#00FBFF]/15 bg-[#00FBFF]/[0.02]"
               }`}
             >
@@ -1323,7 +1322,7 @@ function ChallengeBoard({
                 {mine && <span className="text-[#00ff9c]">✓</span>}
               </div>
               <div className="text-white/80 truncate">{c.name}</div>
-              <div className="text-[#00FBFF]/40">
+              <div className="text-sm text-[#00FBFF]/70">
                 {count}/{agents.length} cleared
               </div>
             </button>
@@ -1360,7 +1359,7 @@ function ChallengeDetails({
 
   const AgentChips = ({ list, empty }: { list: Agent[]; empty: string }) =>
     list.length === 0 ? (
-      <div className="text-[#00FBFF]/30 italic text-xs">{empty}</div>
+      <div className="text-[#00FBFF]/50 italic text-base">{empty}</div>
     ) : (
       <div className="flex flex-wrap gap-1.5">
         {list.map(a => (
@@ -1370,7 +1369,7 @@ function ChallengeDetails({
               onPickAgent(a.id);
               onClose();
             }}
-            className="flex items-center gap-1.5 px-2 py-1 rounded border text-xs hover:bg-white/5 transition"
+            className="flex items-center gap-1.5 px-2 py-1 rounded border text-base hover:bg-white/5 transition"
             style={{ borderColor: `${a.color}55`, color: a.color }}
             title={`observe ${a.handle}`}
           >
@@ -1388,14 +1387,14 @@ function ChallengeDetails({
     >
       <div
         onClick={e => e.stopPropagation()}
-        className="toast-in w-[520px] max-w-[92%] max-h-[80%] overflow-y-auto console-scroll rounded-lg border bg-[#020a0c] shadow-2xl"
+        className="toast-in w-[720px] max-w-[92%] max-h-[80%] overflow-y-auto console-scroll rounded-lg border bg-[#020a0c] shadow-2xl"
         style={{ borderColor: `${dc}66` }}
       >
-        <div className="flex items-center gap-3 px-4 h-12 border-b" style={{ borderColor: `${dc}33` }}>
-          <span className="text-lg font-bold" style={{ color: dc }}>
+        <div className="flex items-center gap-3 px-4 h-14 border-b" style={{ borderColor: `${dc}33` }}>
+          <span className="text-2xl font-bold" style={{ color: dc }}>
             #{challenge.id}
           </span>
-          <span className="text-lg font-bold text-white truncate">{challenge.name}</span>
+          <span className="text-2xl font-bold text-white truncate">{challenge.name}</span>
           <button
             onClick={onClose}
             className="ml-auto w-7 h-7 shrink-0 rounded border border-[#00FBFF]/25 text-[#00FBFF]/60 hover:text-[#00FBFF] hover:border-[#00FBFF] transition"
@@ -1405,7 +1404,7 @@ function ChallengeDetails({
           </button>
         </div>
 
-        <div className="p-4 space-y-4 text-xs">
+        <div className="p-4 space-y-4 text-base">
           <div className="flex items-center gap-2">
             <span
               className="px-2 py-0.5 rounded font-bold uppercase tracking-wider"
@@ -1413,18 +1412,18 @@ function ChallengeDetails({
             >
               {challenge.difficulty}
             </span>
-            <span className="text-[#00FBFF]/45">[{challenge.tag}]</span>
+            <span className="text-[#00FBFF]/70">[{challenge.tag}]</span>
           </div>
 
-          <p className="text-[13px] leading-relaxed text-[#00FBFF]/75">{challenge.description}</p>
+          <p className="text-lg leading-relaxed text-[#00FBFF]/85">{challenge.description}</p>
 
           {challenge.hints.length > 0 && (
             <div className="space-y-1.5">
-              <div className="tracking-widest text-[10px] text-[#00FBFF]/45">HINTS</div>
+              <div className="tracking-widest text-sm text-[#00FBFF]/70">HINTS</div>
               <ul className="space-y-1">
                 {challenge.hints.map((hint, i) => (
-                  <li key={i} className="flex gap-2 text-[#00FBFF]/55">
-                    <span className="shrink-0 text-[#FFBE00]/70">›</span>
+                  <li key={i} className="flex gap-2 text-[#00FBFF]/75">
+                    <span className="shrink-0 text-[#FFBE00]/90">›</span>
                     <span>{hint}</span>
                   </li>
                 ))}
@@ -1433,8 +1432,8 @@ function ChallengeDetails({
           )}
 
           <div>
-            <div className="flex items-center justify-between mb-1.5 text-[#00FBFF]/45">
-              <span className="tracking-widest text-[10px]">FIELD PROGRESS</span>
+            <div className="flex items-center justify-between mb-1.5 text-[#00FBFF]/70">
+              <span className="tracking-widest text-sm">FIELD PROGRESS</span>
               <span className="tabular-nums">
                 {cleared.length}/{agents.length} cleared
               </span>
@@ -1448,13 +1447,11 @@ function ChallengeDetails({
           </div>
 
           <div className="space-y-1.5">
-            <div className="tracking-widest text-[10px] text-[#00FBFF]/45">CAPTURED BY</div>
+            <div className="tracking-widest text-sm text-[#00FBFF]/70">CAPTURED BY</div>
             <AgentChips list={cleared} empty="nobody has cracked this one yet" />
           </div>
 
-          <div className="pt-1 text-[10px] text-[#00FBFF]/30">
-            click an agent to jump to its close-up · Esc to close
-          </div>
+          <div className="pt-1 text-sm text-[#00FBFF]/55">click an agent to jump to its close-up · Esc to close</div>
         </div>
       </div>
     </div>
@@ -1500,17 +1497,17 @@ function ArenaStream() {
 
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-[#010607]">
-      <div className="flex items-center gap-2 px-3 h-9 border-b border-[#00FBFF]/15 bg-[#00141733] shrink-0">
-        <span className="text-xs font-bold text-[#00FBFF] tracking-widest">ARENA</span>
+      <div className="flex items-center gap-2 px-3 h-11 border-b border-[#00FBFF]/15 bg-[#00141733] shrink-0">
+        <span className="text-base font-bold text-[#00FBFF] tracking-widest">ARENA</span>
         <div className="ml-auto flex items-center gap-1">
           {STREAM_FILTERS.map(f => (
             <button
               key={f.id}
               onClick={() => setFilter(f.id)}
-              className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider transition ${
+              className={`px-2 py-0.5 rounded text-sm font-bold tracking-wider transition ${
                 filter === f.id
                   ? "bg-[#00FBFF]/15 text-[#00FBFF] border border-[#00FBFF]/40"
-                  : "text-[#00FBFF]/40 border border-transparent hover:text-[#00FBFF]"
+                  : "text-[#00FBFF]/60 border border-transparent hover:text-[#00FBFF]"
               }`}
             >
               {f.label}
@@ -1519,8 +1516,8 @@ function ArenaStream() {
         </div>
       </div>
 
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto console-scroll px-3 py-1.5 text-xs space-y-1">
-        {rows.length === 0 && <div className="text-[#00FBFF]/30 italic">waiting for real arena events…</div>}
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto console-scroll px-3 py-1.5 text-base space-y-1">
+        {rows.length === 0 && <div className="text-[#00FBFF]/50 italic">waiting for real arena events…</div>}
         {rows.map(r =>
           r.group === "chat" ? <ChatRow key={r.id} msg={r.msg} /> : <FeedRow key={r.id} item={r.item} />,
         )}
@@ -1597,12 +1594,12 @@ function OperatorStrip({
     <div
       className={`shrink-0 border-t px-2 py-2 ${timeUp ? "border-[#FF5861] bg-[#FF5861]/10" : "border-[#00FBFF]/15"}`}
     >
-      <div className="mb-1 flex items-center gap-2 text-[10px] font-bold text-[#FFBE00]">
+      <div className="mb-1 flex items-center gap-2 text-sm font-bold text-[#FFBE00]">
         <span>🎬 OPERATOR</span>
-        <span className="truncate text-[#00FBFF]/40">focused: {focused.handle}</span>
+        <span className="truncate text-[#00FBFF]/70">focused: {focused.handle}</span>
         <div className="ml-auto flex items-center gap-2">
           <OperatorAddress address={address} />
-          <button onClick={() => void onSignOut()} className="text-[#00FBFF]/35 hover:text-[#00FBFF]">
+          <button onClick={() => void onSignOut()} className="text-[#00FBFF]/55 hover:text-[#00FBFF]">
             SIGN OUT
           </button>
         </div>
@@ -1616,26 +1613,26 @@ function OperatorStrip({
           }}
           disabled={busy || archived}
           placeholder={archived ? "run ended · controls locked" : "send an operator message…"}
-          className="flex-1 min-w-0 bg-[#00181c] border border-[#00FBFF]/20 rounded px-2 py-1 text-xs text-white placeholder-[#00FBFF]/25 focus:outline-none focus:border-[#FFBE00]/60 disabled:cursor-not-allowed disabled:opacity-55"
+          className="flex-1 min-w-0 bg-[#00181c] border border-[#00FBFF]/20 rounded px-2 py-1 text-base text-white placeholder-[#00FBFF]/45 focus:outline-none focus:border-[#FFBE00]/60 disabled:cursor-not-allowed disabled:opacity-55"
         />
         <button
           onClick={() => void send(onSteer)}
           disabled={busy || archived || !draft.trim()}
-          className="px-2 py-1 rounded border border-[#00FBFF]/40 text-[#00FBFF] text-[10px] font-bold disabled:opacity-40"
+          className="px-2 py-1 rounded border border-[#00FBFF]/40 text-[#00FBFF] text-sm font-bold disabled:opacity-40"
         >
           STEER
         </button>
         <button
           onClick={() => void send(onBroadcast)}
           disabled={busy || archived || !draft.trim()}
-          className="px-2 py-1 rounded border border-[#FFBE00]/50 text-[#FFBE00] text-[10px] font-bold disabled:opacity-40"
+          className="px-2 py-1 rounded border border-[#FFBE00]/50 text-[#FFBE00] text-sm font-bold disabled:opacity-40"
         >
           ALL
         </button>
         <button
           onClick={() => void stop()}
           disabled={busy || archived}
-          className={`px-2 py-1 rounded border text-[10px] font-bold disabled:opacity-40 ${
+          className={`px-2 py-1 rounded border text-sm font-bold disabled:opacity-40 ${
             stopArmed || timeUp
               ? "animate-pulse border-[#FF5861] bg-[#FF5861] text-black"
               : "border-[#FF5861]/60 text-[#FF5861]"
@@ -1644,7 +1641,7 @@ function OperatorStrip({
           {stopArmed ? "CONFIRM STOP" : "STOP"}
         </button>
       </div>
-      {error && <div className="mt-1 text-[10px] text-[#FF5861]">{error}</div>}
+      {error && <div className="mt-1 text-sm text-[#FF5861]">{error}</div>}
     </div>
   );
 }
@@ -1662,7 +1659,7 @@ function FeedRow({ item }: { item: FeedItem }) {
   const { icon, cls } = FEED_STYLE[item.type] ?? { icon: "💬", cls: "text-[#00FBFF]/70" };
   return (
     <div className="flex items-start gap-2 feed-in">
-      <span className="w-2 h-2 mt-1 rounded-sm shrink-0" style={{ background: item.color }} />
+      <span className="w-2.5 h-2.5 mt-1.5 rounded-sm shrink-0" style={{ background: item.color }} />
       <span className={cls}>
         {icon} {item.text}
       </span>
@@ -1683,7 +1680,7 @@ function ChatRow({ msg }: { msg: ChatItem }) {
   }
   return (
     <div className="flex items-start gap-2 feed-in">
-      <span className="w-2 h-2 mt-1 rounded-sm shrink-0" style={{ background: msg.color }} />
+      <span className="w-2.5 h-2.5 mt-1.5 rounded-sm shrink-0" style={{ background: msg.color }} />
       <span className="text-white/85 leading-snug">
         <span className="font-bold" style={{ color: msg.color }}>
           {msg.fromHandle}
@@ -1728,7 +1725,7 @@ function StatusDot({ status }: { status: AgentStatus }) {
   return (
     <span
       title={s.label}
-      className={`w-3 shrink-0 text-center text-[10px] leading-none ${status === "blocked" ? "blocked-pulse" : ""}`}
+      className={`w-4 shrink-0 text-center text-sm leading-none ${status === "blocked" ? "blocked-pulse" : ""}`}
       style={{ color: s.color }}
     >
       {s.glyph}
@@ -1745,7 +1742,7 @@ function StatusChip({ status }: { status: AgentStatus }) {
   return (
     <span
       title={s.label}
-      className={`px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider shrink-0 ${
+      className={`px-1.5 py-0.5 rounded text-sm font-bold tracking-wider shrink-0 ${
         status === "blocked" ? "blocked-pulse" : ""
       }`}
       style={{ color: s.color, border: `1px solid ${s.color}55`, background: `${s.color}12` }}
@@ -1761,11 +1758,11 @@ function StatusChip({ status }: { status: AgentStatus }) {
 function AgentBlockieLink({ agent, compact }: { agent: Agent; compact?: boolean }) {
   const { targetNetwork } = useTargetNetwork();
   const runChainId = useArenaStore(selectRunChainId);
-  const className = `${compact ? "w-5 h-5" : "w-6 h-6"} shrink-0 rounded overflow-hidden transition`;
+  const className = `${compact ? "w-7 h-7" : "w-8 h-8"} shrink-0 rounded overflow-hidden transition`;
   const badge = agent.address ? (
-    <BlockieAvatar address={agent.address} ensImage={null} size={compact ? 20 : 24} />
+    <BlockieAvatar address={agent.address} ensImage={null} size={compact ? 28 : 32} />
   ) : (
-    <span className="flex h-full items-center justify-center text-[8px] font-bold" style={{ color: agent.color }}>
+    <span className="flex h-full items-center justify-center text-xs font-bold" style={{ color: agent.color }}>
       {agent.short}
     </span>
   );
@@ -1799,9 +1796,9 @@ function AgentBlockieLink({ agent, compact }: { agent: Agent; compact?: boolean 
 
 function SectionHead({ label, hint }: { label: string; hint?: string }) {
   return (
-    <div className="flex items-center gap-2 px-3 h-8 border-b border-[#00FBFF]/15 bg-[#00141733] shrink-0">
-      <span className="text-xs font-bold text-[#00FBFF] tracking-widest">{label}</span>
-      {hint && <span className="ml-auto text-[10px] text-[#00FBFF]/35">{hint}</span>}
+    <div className="flex items-center gap-2 px-3 h-10 border-b border-[#00FBFF]/15 bg-[#00141733] shrink-0">
+      <span className="text-base font-bold text-[#00FBFF] tracking-widest">{label}</span>
+      {hint && <span className="ml-auto text-sm text-[#00FBFF]/55">{hint}</span>}
     </div>
   );
 }
@@ -1822,13 +1819,16 @@ function ArenaStyles() {
         background-image: radial-gradient(circle at 50% 18%, rgba(255, 190, 0, 0.13) 0%, transparent 34%),
           radial-gradient(circle at 18% 0%, #001a1f 0%, #000 58%);
       }
+      /* A tight scanline period is close to the worst case for a video encoder:
+         a full-screen high-frequency pattern that burns bitrate away from the
+         text. Widened and faded so the texture survives the stream cheaply. */
       .scanlines {
         background: repeating-linear-gradient(
           to bottom,
-          rgba(0, 251, 255, 0.03) 0px,
-          rgba(0, 251, 255, 0.03) 1px,
-          transparent 1px,
-          transparent 3px
+          rgba(0, 251, 255, 0.015) 0px,
+          rgba(0, 251, 255, 0.015) 2px,
+          transparent 2px,
+          transparent 5px
         );
         mix-blend-mode: overlay;
       }

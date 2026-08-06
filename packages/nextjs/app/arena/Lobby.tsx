@@ -321,8 +321,8 @@ export function ArenaLobby({
       <div className="pointer-events-none absolute inset-0 z-[70] lobby-scanlines" />
 
       {/* header */}
-      <div className="flex items-center gap-4 px-5 h-14 border-b border-[#00FBFF]/25 bg-gradient-to-r from-[#020808] to-[#001014] shrink-0">
-        <span className="flex items-center gap-2 text-[#00FBFF]/70 font-bold tracking-widest text-sm">
+      <div className="flex items-center gap-4 px-5 h-16 border-b border-[#00FBFF]/25 bg-gradient-to-r from-[#020808] to-[#001014] shrink-0">
+        <span className="flex items-center gap-2 text-[#00FBFF]/80 font-bold tracking-widest text-base">
           <span
             className="w-2.5 h-2.5 rounded-full"
             style={{ background: phase === "idle" ? "#3a4a4d" : phase === "ready" ? GREEN : YELLOW }}
@@ -346,13 +346,13 @@ export function ArenaLobby({
         <div className="font-dotGothic text-xl md:text-2xl tracking-wide lobby-title-glow">
           BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · AGENT ARENA
         </div>
-        <div className="hidden lg:flex items-center gap-1 text-xs text-[#00FBFF]/50">
+        <div className="hidden lg:flex items-center gap-1 text-sm text-[#00FBFF]/70">
           <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{agents.length} AGENTS</span>
           <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{CHALLENGES.length} CHALLENGES</span>
         </div>
         <button
           onClick={() => setMuted(m => !m)}
-          className="ml-auto text-xs px-2 py-1 rounded border border-[#00FBFF]/25 text-[#00FBFF]/60 hover:text-[#00FBFF] hover:border-[#00FBFF]/60 transition"
+          className="ml-auto text-sm px-2 py-1 rounded border border-[#00FBFF]/25 text-[#00FBFF]/75 hover:text-[#00FBFF] hover:border-[#00FBFF]/60 transition"
           title={muted ? "unmute lobby SFX" : "mute lobby SFX"}
         >
           {muted ? "🔇 SFX OFF" : "🔊 SFX ON"}
@@ -363,7 +363,7 @@ export function ArenaLobby({
         {operator.authenticated && (
           <button
             onClick={() => void operator.signOut()}
-            className="text-xs px-2 py-1 rounded border border-[#00FBFF]/25 text-[#00FBFF]/60 hover:text-[#00FBFF] hover:border-[#00FBFF]/60 transition"
+            className="text-sm px-2 py-1 rounded border border-[#00FBFF]/25 text-[#00FBFF]/75 hover:text-[#00FBFF] hover:border-[#00FBFF]/60 transition"
           >
             SIGN OUT
           </button>
@@ -371,7 +371,7 @@ export function ArenaLobby({
         {isConnected && (
           <button
             onClick={() => disconnect()}
-            className="text-xs px-2 py-1 rounded border border-[#00FBFF]/25 text-[#00FBFF]/60 hover:text-[#00FBFF] hover:border-[#00FBFF]/60 transition"
+            className="text-sm px-2 py-1 rounded border border-[#00FBFF]/25 text-[#00FBFF]/75 hover:text-[#00FBFF] hover:border-[#00FBFF]/60 transition"
           >
             DISCONNECT
           </button>
@@ -426,7 +426,7 @@ export function ArenaLobby({
 
           {phase === "idle" && (
             <div className="mb-8 flex flex-col items-center gap-3">
-              <label className="flex items-center gap-2 text-xs tracking-widest text-[#00FBFF]/55">
+              <label className="flex items-center gap-2 text-base tracking-widest text-[#00FBFF]/75">
                 RACE DURATION
                 <input
                   value={durationMinutes}
@@ -456,13 +456,13 @@ export function ArenaLobby({
                 </button>
               )}
               {!operator.configured && (
-                <span className="text-[11px] text-[#FFBE00]/80">wallet operator login is not configured</span>
+                <span className="text-base text-[#FFBE00]/90">wallet operator login is not configured</span>
               )}
             </div>
           )}
 
           {error && phase !== "failed" && (
-            <div className="mb-4 max-w-3xl rounded border border-[#FF5861]/40 bg-[#FF5861]/10 px-3 py-2 text-xs text-[#FF5861]">
+            <div className="mb-4 max-w-3xl rounded border border-[#FF5861]/40 bg-[#FF5861]/10 px-3 py-2 text-base text-[#FF5861]">
               {error}
             </div>
           )}
@@ -558,27 +558,27 @@ export function ArenaLobby({
           </div>
 
           {phase === "ready" && (
-            <div className="mt-3 text-[11px] text-[#00FBFF]/40 tracking-wide">
+            <div className="mt-3 text-base text-[#00FBFF]/70 tracking-wide">
               the backend will begin the race after its readiness gates pass
             </div>
           )}
           {phase === "funding" && (
-            <div className="mt-3 text-[11px] text-[#00FBFF]/40 tracking-wide">
+            <div className="mt-3 text-base text-[#00FBFF]/70 tracking-wide">
               backend funding events control readiness; the amount above controls manual top-ups
             </div>
           )}
         </div>
 
         {/* netcode log */}
-        <div className="hidden md:flex w-[320px] shrink-0 flex-col border-l border-[#00FBFF]/20 bg-[#00090b]/70">
-          <div className="px-4 h-10 flex items-center text-xs font-bold tracking-widest text-[#00FBFF]/60 border-b border-[#00FBFF]/15 bg-[#001417]">
+        <div className="hidden md:flex w-[400px] shrink-0 flex-col border-l border-[#00FBFF]/20 bg-[#00090b]/70">
+          <div className="px-4 h-11 flex items-center text-base font-bold tracking-widest text-[#00FBFF]/75 border-b border-[#00FBFF]/15 bg-[#001417]">
             ▤ CONNECTION LOG
           </div>
-          <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 text-[12px] leading-relaxed space-y-1">
-            {log.length === 0 && <div className="text-[#00FBFF]/25 italic">{connectionStatus} · no run events yet</div>}
+          <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 text-sm leading-snug space-y-1">
+            {log.length === 0 && <div className="text-[#00FBFF]/55 italic">{connectionStatus} · no run events yet</div>}
             {log.map(l => (
               <div key={l.id} className="lobby-log-in flex gap-2">
-                <span className="text-[#00FBFF]/25 shrink-0">›</span>
+                <span className="text-[#00FBFF]/55 shrink-0">›</span>
                 <span style={{ color: l.color }}>{l.text}</span>
               </div>
             ))}
@@ -634,9 +634,9 @@ function FundingBoard({
   return (
     <div className="w-full max-w-4xl">
       <div className="flex flex-wrap items-center gap-3 mb-3">
-        <span className="text-xs font-bold tracking-widest text-[#00FBFF]/60">▤ AGENT WALLETS</span>
+        <span className="text-base font-bold tracking-widest text-[#00FBFF]/75">▤ AGENT WALLETS</span>
         <div className="ml-auto flex items-center gap-2">
-          <label className="flex items-center gap-1.5 text-xs text-[#00FBFF]/50">
+          <label className="flex items-center gap-1.5 text-base text-[#00FBFF]/70">
             <span className="tracking-widest">EACH</span>
             <input
               value={amount}
@@ -644,7 +644,7 @@ function FundingBoard({
               disabled={funding || locked}
               className="w-24 px-2 py-1 bg-black/60 border border-[#00FBFF]/30 rounded text-right text-[#00FBFF] tabular-nums focus:outline-none focus:border-[#00FBFF]/70 disabled:opacity-40"
             />
-            <span className="text-[#00FBFF]/40">ETH</span>
+            <span className="text-[#00FBFF]/70">ETH</span>
           </label>
           {wrongNetwork ? (
             // The arena covers the site header, so its network switcher is out of
@@ -681,7 +681,7 @@ function FundingBoard({
       </div>
 
       {balancesUnreachable && (
-        <div className="mb-3 px-3 py-2 rounded border border-[#FF5861]/40 bg-[#FF5861]/10 text-xs text-[#FF5861]">
+        <div className="mb-3 px-3 py-2 rounded border border-[#FF5861]/40 bg-[#FF5861]/10 text-base text-[#FF5861]">
           {mode === "local"
             ? "cannot reach the local chain — balances below are stale, start a node with `yarn chain`"
             : `cannot reach ${networkName} — balances below are stale`}
@@ -689,7 +689,7 @@ function FundingBoard({
       )}
 
       {(!canFund || balancesUnreachable) && (
-        <div className="mb-3 flex flex-wrap items-center gap-3 px-3 py-2 rounded border border-[#00FBFF]/25 bg-[#00FBFF]/5 text-xs text-[#00FBFF]/60">
+        <div className="mb-3 flex flex-wrap items-center gap-3 px-3 py-2 rounded border border-[#00FBFF]/25 bg-[#00FBFF]/5 text-base text-[#00FBFF]/75">
           <span>
             {mode === "none"
               ? `funding is not available on ${networkName} — these wallets are generated per run and their keys are discarded, so funds sent where they matter would be unrecoverable`
@@ -737,30 +737,34 @@ function FundingRow({
   const status: FundingStatus = backendFunded ? "funded" : balanceStatus === "funded" ? "partial" : balanceStatus;
 
   return (
-    <div className="flex items-center gap-3 px-3 py-2 text-xs">
-      <span className="w-6 shrink-0 text-[10px] text-[#00FBFF]/30 tabular-nums">P{index + 1}</span>
+    <div className="flex items-center gap-3 px-3 py-2 text-base">
+      <span className="w-8 shrink-0 text-sm text-[#00FBFF]/55 tabular-nums">P{index + 1}</span>
 
-      <span className="w-6 h-6 shrink-0 rounded-full overflow-hidden" style={{ border: `1px solid ${agent.color}` }}>
+      <span className="w-8 h-8 shrink-0 rounded-full overflow-hidden" style={{ border: `1px solid ${agent.color}` }}>
         {agent.address ? (
-          <BlockieAvatar address={agent.address} ensImage={null} size={24} />
+          <BlockieAvatar address={agent.address} ensImage={null} size={32} />
         ) : (
-          <span className="flex h-full items-center justify-center text-[9px]" style={{ color: agent.color }}>
+          <span className="flex h-full items-center justify-center text-xs" style={{ color: agent.color }}>
             {agent.short}
           </span>
         )}
       </span>
 
-      <span className="w-40 shrink-0 truncate font-bold" style={{ color: agent.color }}>
+      <span className="w-56 shrink-0 truncate font-bold" style={{ color: agent.color }}>
         {agent.model}
       </span>
 
       <span className="hidden sm:flex items-center text-[#00FBFF]/70">
-        {agent.address ? <Address address={agent.address} hideBlockie openLinkInNewTab size="xs" /> : "address pending"}
+        {agent.address ? (
+          <Address address={agent.address} hideBlockie openLinkInNewTab size="base" />
+        ) : (
+          "address pending"
+        )}
       </span>
 
       <span className="ml-auto tabular-nums text-[#00FBFF]/70">{formatEther(balance ?? 0n)} ETH</span>
 
-      <span className="w-40 shrink-0 text-right text-[10px] font-bold tracking-widest">
+      <span className="w-52 shrink-0 text-right text-sm font-bold tracking-widest">
         {status === "funded" ? (
           <span style={{ color: GREEN }}>FUNDED ✓</span>
         ) : status === "partial" ? (
@@ -793,7 +797,7 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
       }}
     >
       {/* slot number */}
-      <span className="absolute top-1.5 left-2 text-[10px] text-[#00FBFF]/30 tabular-nums">P{index + 1}</span>
+      <span className="absolute top-1.5 left-2 text-sm text-[#00FBFF]/55 tabular-nums">P{index + 1}</span>
 
       {/* avatar — blockie of the agent wallet, ringed in the agent color */}
       <div
@@ -824,15 +828,15 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
             <div className="text-base font-bold leading-tight" style={{ color: agent.color }}>
               {agent.model}
             </div>
-            <div className="text-sm text-[#00FBFF]/55 leading-tight">{agent.harness}</div>
+            <div className="text-base text-[#00FBFF]/75 leading-tight">{agent.harness}</div>
           </>
         ) : (
-          <div className="text-xs text-[#00FBFF]/30 tracking-widest">{idle ? "AWAITING" : "———"}</div>
+          <div className="text-base text-[#00FBFF]/55 tracking-widest">{idle ? "AWAITING" : "———"}</div>
         )}
       </div>
 
       {/* status pill */}
-      <div className="text-[10px] font-bold tracking-widest">
+      <div className="text-sm font-bold tracking-widest">
         {ready ? (
           <span style={{ color: GREEN }}>READY ✓</span>
         ) : joining ? (
