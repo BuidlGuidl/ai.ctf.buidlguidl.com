@@ -1,14 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArenaConnectButton } from "./ArenaConnectButton";
 import { FundingMode, MULTICALL3_ABI, MULTICALL3_ADDRESS, fundingMode, localTestClient } from "./funding";
 import { Agent, CHALLENGES, FUNDING_AMOUNT_ETH } from "./mockData";
 import { type FundingStatus, fundingStatus, useAgentBalances } from "./useAgentBalances";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { encodeFunctionData, formatEther, parseEther } from "viem";
 import { useAccount, useSwitchChain } from "wagmi";
-import { Address, BlockieAvatar } from "~~/components/scaffold-eth";
+import { Address, BlockieAvatar, RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import { useTransactor } from "~~/hooks/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 import { arenaClient } from "~~/services/arena/client";
@@ -356,7 +355,7 @@ export function ArenaLobby({
         >
           {muted ? "🔇 SFX OFF" : "🔊 SFX ON"}
         </button>
-        <ArenaConnectButton />
+        <RainbowKitCustomConnectButton />
       </div>
 
       {/* stage */}

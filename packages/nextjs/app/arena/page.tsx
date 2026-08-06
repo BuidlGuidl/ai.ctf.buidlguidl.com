@@ -1,12 +1,11 @@
 "use client";
 
 import { type CSSProperties, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArenaConnectButton } from "./ArenaConnectButton";
 import { ArenaLobby } from "./Lobby";
 import { OperatorAddress } from "./OperatorAddress";
 import { Agent, AgentStatus, CHALLENGES, Challenge, DIFFICULTY_COLOR } from "./mockData";
 import type { Address } from "viem";
-import { BlockieAvatar } from "~~/components/scaffold-eth";
+import { BlockieAvatar, RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 import type { EntrantSummary, RunState } from "~~/services/arena/arena-types";
 import { ArenaApiError, arenaClient } from "~~/services/arena/client";
@@ -405,7 +404,7 @@ function RunExitPanel({ title, message, onBack }: { title: string; message: stri
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black px-6 text-[#00FBFF] font-mono">
       <div className="absolute right-5 top-4">
-        <ArenaConnectButton />
+        <RainbowKitCustomConnectButton />
       </div>
       <div className="w-full max-w-xl rounded-lg border border-[#FF5861]/50 bg-[#FF5861]/10 p-6 text-center">
         <h1 className="font-dotGothic text-3xl tracking-widest text-[#FF5861]">{title}</h1>
@@ -445,7 +444,7 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
           BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · FINAL TRANSMISSION
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          <ArenaConnectButton />
+          <RainbowKitCustomConnectButton />
           <button
             onClick={onViewData}
             className="rounded border border-[#00FBFF]/30 px-2.5 py-1 text-[10px] font-bold tracking-[0.12em] text-[#00FBFF]/60 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
@@ -735,7 +734,7 @@ function TopBar({
         <span className={`tabular-nums font-bold ${timeUp ? "text-[#FF5861]" : "text-[#FFBE00]"}`}>
           {countdown ? "⏳" : "⏱"} {fmtClock(clock)}
         </span>
-        <ArenaConnectButton />
+        <RainbowKitCustomConnectButton />
       </div>
     </div>
   );
