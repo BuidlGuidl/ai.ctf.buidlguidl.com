@@ -1148,7 +1148,6 @@ function RaceView({
               {a.cost === null ? "—" : `$${a.cost.toFixed(2)}`}
             </span>
 
-            {/* The backend reports captures but not each entrant's active challenge. */}
             <div className="flex-1 flex gap-[3px]">
               {slots.map(k => {
                 const flagId = a.solved[k];
@@ -1170,16 +1169,23 @@ function RaceView({
                 }
                 if (k === a.solved.length && !done(a)) {
                   const color = STATUS_STYLE[a.status].color;
+                  const target = a.currentChallengeId;
+                  // The in-flight slot names the entrant's reported target — an
+                  // outlined number, so it can't read as a minted flag.
                   return (
                     <span
                       key={k}
-                      title={STATUS_STYLE[a.status].label}
+                      title={
+                        target !== null
+                          ? `working on #${target} ${CHALLENGES[target - 1]?.name ?? ""}`
+                          : STATUS_STYLE[a.status].label
+                      }
                       className={`relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center text-[9px] font-bold tabular-nums ${
                         a.status === "working" ? "cell-working" : "opacity-40"
                       }`}
                       style={{ background: `${color}1f`, borderColor: color, color }}
                     >
-                      …
+                      {target ?? "…"}
                     </span>
                   );
                 }
@@ -1292,6 +1298,14 @@ function GridCard({ agent, onPick }: { agent: Agent; onPick: (id: string) => voi
         <span className="truncate" style={{ color: finished ? "#00ff9c" : STATUS_STYLE[agent.status].color }}>
           {agent.finishedAt !== null ? `◆ CLEARED · ${fmtClock(agent.finishedAt)}` : STATUS_STYLE[agent.status].label}
         </span>
+        {!finished && agent.finishedAt === null && agent.currentChallengeId !== null && (
+          <span
+            className="shrink-0 font-bold text-[#FFBE00]"
+            title={`working on #${agent.currentChallengeId} ${CHALLENGES[agent.currentChallengeId - 1]?.name ?? ""}`}
+          >
+            ▸ #{agent.currentChallengeId}
+          </span>
+        )}
         <span className="ml-auto shrink-0 text-[#00FBFF]/45 tabular-nums">
           {agent.solved.length}/{CHALLENGES.length}
         </span>
@@ -1342,13 +1356,18 @@ function ChallengeBoard({
       <div className="flex-1 min-h-0 overflow-y-auto console-scroll p-2 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-1.5 content-start">
         {CHALLENGES.map(c => {
           const mine = focused.solved.includes(c.id);
+          const target = !mine && focused.currentChallengeId === c.id;
           const count = solvedCount(c.id);
           return (
             <button
               key={c.id}
               onClick={() => onOpen(c.id)}
               className={`px-2 py-1.5 rounded border text-[11px] text-left transition hover:border-[#00FBFF] ${
-                mine ? "bg-[#00ff9c]/10 border-[#00ff9c]/50" : "border-[#00FBFF]/15 bg-[#00FBFF]/[0.02]"
+                mine
+                  ? "bg-[#00ff9c]/10 border-[#00ff9c]/50"
+                  : target
+                  ? "bg-[#FFBE00]/10 border-[#FFBE00]/50"
+                  : "border-[#00FBFF]/15 bg-[#00FBFF]/[0.02]"
               }`}
             >
               <div className="flex items-center gap-1">
@@ -1356,6 +1375,14 @@ function ChallengeBoard({
                   #{c.id}
                 </span>
                 {mine && <span className="text-[#00ff9c]">✓</span>}
+                {target && (
+                  <span
+                    className="text-[9px] font-bold tracking-wider text-[#FFBE00]"
+                    title="the agent's reported target"
+                  >
+                    ◎ TARGET
+                  </span>
+                )}
               </div>
               <div className="text-white/80 truncate">{c.name}</div>
               <div className="text-[#00FBFF]/40">
