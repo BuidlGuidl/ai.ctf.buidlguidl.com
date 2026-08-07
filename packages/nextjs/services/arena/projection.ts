@@ -426,7 +426,13 @@ function singleLine(text: string): string {
 // The never parameter keeps the switch exhaustive at compile time, but a newer
 // backend can emit types this build has not copied yet. Those must advance the
 // cursor and render nothing — throwing here kills the whole SSE batch mid-reduce.
+// Warned once per type: unknown events arrive in bursts, not once.
+const warnedUnknownTypes = new Set<string>();
 function skipUnknown(state: ProjectionState, event: never): ProjectionState {
-  console.warn(`Skipping unknown arena event type: ${(event as { type: string }).type}`);
+  const type = (event as { type: string }).type;
+  if (!warnedUnknownTypes.has(type)) {
+    warnedUnknownTypes.add(type);
+    console.warn(`Skipping unknown arena event type: ${type}`);
+  }
   return state;
 }
