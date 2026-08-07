@@ -70,7 +70,7 @@ export function useWalletSessionWatcher(): void {
   const session = useOperatorSessionStore(state => state.session);
 
   useEffect(() => {
-    if (devSigner !== undefined) return;
+    if (devSigner !== null) return;
     if (session?.authenticated !== true) return;
     if (status === "disconnected") {
       endOperatorSession();
