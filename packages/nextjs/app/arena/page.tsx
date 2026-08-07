@@ -39,6 +39,8 @@ export const dynamic = "force-dynamic";
 type FinalView = "results" | "data";
 type PodiumPlace = 1 | 2 | 3;
 
+const fmtTokens = (tokens: number) => `${(tokens / 1000).toFixed(0)}k`;
+
 const fmtClock = (s: number) => {
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
@@ -66,8 +68,7 @@ const PODIUM_RESULT: Record<PodiumPlace, string> = {
 };
 
 // Flags first, then the clock for anyone who cleared the board, then whoever
-// reached that flag count soonest — an agent with no solves at all falls in
-// behind a tied agent that has them. Then a stable id tiebreak. Cost is kept out
+// reached that flag count soonest, then a stable id tiebreak. Cost is kept out
 // of the tiebreak — it changes every tick, which would make the race rows swap
 // (and animate) constantly for no real reason.
 const rankAgents = (agents: Agent[]) =>
@@ -578,7 +579,7 @@ function FinalistCard({ agent, place }: { agent: Agent; place: PodiumPlace }) {
             so the same number doesn't print twice. */}
         <div className="mt-1 text-[9px] tracking-[0.16em] text-[#00FBFF]/30">
           {agent.finishedAt === null
-            ? `${Math.round(agent.tokens / 1000)}K TOKENS`
+            ? `${fmtTokens(agent.tokens)} TOKENS`
             : `${agent.solved.length}/${CHALLENGES.length} FLAGS`}{" "}
           · {agent.cost === null ? "COST N/A" : `$${agent.cost.toFixed(2)}`}
         </div>
@@ -1117,7 +1118,7 @@ function RaceView({
               {a.handle}
             </span>
             <span className="w-12 text-right text-[11px] tabular-nums shrink-0 text-[#00FBFF]/55">
-              {(a.tokens / 1000).toFixed(0)}k
+              {fmtTokens(a.tokens)}
             </span>
             <span className="w-14 text-right text-[11px] tabular-nums shrink-0 text-[#FFBE00]/70">
               {a.cost === null ? "—" : `$${a.cost.toFixed(2)}`}
