@@ -113,11 +113,11 @@ const ROSTER_EFFORT_BY_ID: Readonly<Record<string, RosterEffort | undefined>> = 
   ROSTER.map(entry => [entry.id, "effort" in entry ? entry.effort : undefined]),
 );
 
-// A roster preset states its own effort, so the entrant's reported one is only
-// trusted for ids we don't ship — an entrant the backend brings along.
+// The run reports what actually ran, so its effort wins when present; the preset
+// pin covers runs that predate the backend carrying effort for this harness.
 export function displayForEntrant(id: string, harness: string, model: string, effort?: RosterEffort): RosterDisplay {
   const preset = ROSTER_DISPLAY[id];
-  if (preset) return { ...preset, effort: ROSTER_EFFORT_BY_ID[id] };
+  if (preset) return { ...preset, effort: effort ?? ROSTER_EFFORT_BY_ID[id] };
   return {
     handle: id,
     color: "#00FBFF",

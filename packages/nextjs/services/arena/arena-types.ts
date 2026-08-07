@@ -1,6 +1,8 @@
 // Copied from agents-arena-backend contract/arena-types.ts (frontend-merge branch,
-// base commit a5e5485 + the chainId/durationMs/RunResponse contract delta). Do not edit
-// here — sync from the backend repo. Endpoint docs live there in contract/API.md.
+// base commit a5e5485 + the chainId/durationMs/RunResponse contract delta + the
+// effort delta from agents-arena-backend#51: "max" level and OPENCODE_EFFORTS).
+// Do not edit here — sync from the backend repo. Endpoint docs live there in
+// contract/API.md.
 
 export type RunState =
   | "created"
@@ -26,6 +28,7 @@ export const ROSTER_MODELS: Readonly<Record<HarnessId, readonly string[]>> = {
 
 export const ROSTER_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 export type RosterEffort = (typeof ROSTER_EFFORTS)[number];
+export const OPENCODE_EFFORTS = ["low", "medium", "high"] as const satisfies readonly RosterEffort[];
 
 export interface EntrantSolve {
   challengeId: number;
