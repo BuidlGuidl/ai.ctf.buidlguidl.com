@@ -93,7 +93,7 @@ export const ROSTER_DISPLAY: Readonly<Record<string, RosterDisplay>> = {
     modelLabel: "DeepSeek V4 Flash",
   },
   "gpt-56-high": {
-    handle: "codex-gpt-56-high",
+    handle: "codex-gpt-56-sol",
     color: "#A3E635",
     short: "OA",
     vendor: "OpenAI",
@@ -101,7 +101,7 @@ export const ROSTER_DISPLAY: Readonly<Record<string, RosterDisplay>> = {
     modelLabel: "GPT-5.6 Sol",
   },
   "gpt-55-xhigh": {
-    handle: "codex-gpt-55-xhigh",
+    handle: "codex-gpt-55",
     color: "#E2E8F0",
     short: "OA",
     vendor: "OpenAI",
