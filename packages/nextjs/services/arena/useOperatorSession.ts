@@ -13,23 +13,92 @@ export interface OperatorSession {
   authenticated: boolean;
   address: string | null;
   configured: boolean;
+  hadSession: boolean;
+  sessionLoaded: boolean;
+  invalidate: () => void;
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
 interface OperatorSessionState {
+  configured: boolean;
+  hadSession: boolean;
   session: SessionResponse | null;
-  setSession: (session: SessionResponse) => void;
+  setSession: (session: SessionResponse | null) => void;
 }
 
 const useOperatorSessionStore = create<OperatorSessionState>(set => ({
+  configured: false,
+  hadSession: false,
   session: null,
-  setSession: session => set({ session }),
+  setSession: session =>
+    set(state => ({
+      configured: session === null ? state.configured : session.authenticated ? true : session.configured,
+      hadSession: state.hadSession || session?.authenticated === true,
+      session,
+    })),
 }));
+
+// null here means a deliberate sign-out (the wallet left), so the sticky
+// hadSession clears too — unlike invalidate(), where the session died under a
+// still-connected operator and "sign back in" is the right offer.
+export function applySession(next: SessionResponse | null): void {
+  if (next === null) {
+    useOperatorSessionStore.setState({ session: null, hadSession: false });
+    return;
+  }
+  useOperatorSessionStore.getState().setSession(next);
+}
+
+// Deliberate exit: local auth dies first so the controls disarm immediately,
+// then the backend hears about it best-effort — a hung or failed logout must
+// not keep a disconnected operator armed.
+export function endOperatorSession(): void {
+  applySession(null);
+  void arenaClient.logout().catch(() => {
+    // The server cookie outlives an unreachable backend; the wallet watcher
+    // ends any session the loader restores while the wallet is still gone.
+  });
+}
+
+// The session follows the wallet. Mounted once in ArenaAuthProvider (which is
+// always mounted), so a disconnect on a spectator route ends the operator
+// session too. Only settled wagmi states act — 'reconnecting' on a reload must
+// not kill a valid session — and dev-signer sessions have no wallet to follow.
+export function useWalletSessionWatcher(): void {
+  const { address, status } = useAccount();
+  const session = useOperatorSessionStore(state => state.session);
+
+  useEffect(() => {
+    if (devSigner !== null) return;
+    if (session?.authenticated !== true) return;
+    if (status === "disconnected") {
+      endOperatorSession();
+      return;
+    }
+    if (
+      status === "connected" &&
+      session.address &&
+      address &&
+      session.address.toLowerCase() !== address.toLowerCase()
+    ) {
+      endOperatorSession();
+    }
+  }, [address, status, session]);
+}
+
+export function useAuthenticationStatus(): "loading" | "unauthenticated" | "authenticated" {
+  return useOperatorSessionStore(state => {
+    if (state.session === null) return "loading";
+    return state.session.authenticated ? "authenticated" : "unauthenticated";
+  });
+}
 
 let pendingSession: Promise<SessionResponse> | null = null;
 
 export function useOperatorSession(): OperatorSession {
+  const configured = useOperatorSessionStore(state => state.configured);
+  const hadSession = useOperatorSessionStore(state => state.hadSession);
   const session = useOperatorSessionStore(state => state.session);
   const setSession = useOperatorSessionStore(state => state.setSession);
   const { address: connectedAddress, chainId: connectedChainId } = useAccount();
@@ -43,17 +112,28 @@ export function useOperatorSession(): OperatorSession {
   useEffect(() => {
     if (session !== null) return;
     let active = true;
-    pendingSession ??= arenaClient
-      .getSession()
-      .catch((): SessionResponse => ({ authenticated: false, configured: false }))
-      .finally(() => {
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const loadSession = () => {
+      if (!active || useOperatorSessionStore.getState().session !== null) return;
+      pendingSession ??= arenaClient.getSession().finally(() => {
         pendingSession = null;
       });
-    void pendingSession.then(next => {
-      if (active) setSession(next);
-    });
+      void pendingSession
+        .then(next => {
+          if (active && useOperatorSessionStore.getState().session === null) setSession(next);
+        })
+        .catch(() => {
+          if (active && useOperatorSessionStore.getState().session === null) {
+            retryTimer = setTimeout(loadSession, 3000);
+          }
+        });
+    };
+
+    loadSession();
     return () => {
       active = false;
+      if (retryTimer) clearTimeout(retryTimer);
     };
   }, [session, setSession]);
 
@@ -70,20 +150,23 @@ export function useOperatorSession(): OperatorSession {
   }, [chainId, connectedAddress, setSession, signMessageAsync, signingAddress]);
 
   const signOut = useCallback(async () => {
-    await arenaClient.logout();
-    const next = await arenaClient.getSession();
-    setSession(next);
-  }, [setSession]);
+    endOperatorSession();
+  }, []);
+
+  const invalidate = useCallback(() => setSession(null), [setSession]);
 
   return useMemo(
     () => ({
       authenticated: session?.authenticated === true,
       address: session?.authenticated === true ? session.address : signingAddress ?? null,
-      configured: session === null ? false : session.authenticated ? true : session.configured,
+      configured,
+      hadSession,
+      sessionLoaded: session !== null,
+      invalidate,
       signIn,
       signOut,
     }),
-    [session, signIn, signOut, signingAddress],
+    [configured, hadSession, invalidate, session, signIn, signOut, signingAddress],
   );
 }
 

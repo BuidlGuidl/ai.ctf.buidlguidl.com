@@ -2,13 +2,14 @@
 
 import { type CSSProperties, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArenaLobby } from "./Lobby";
+import { ModelName } from "./ModelName";
 import { OperatorAddress } from "./OperatorAddress";
 import { Agent, AgentStatus, CHALLENGES, Challenge, DIFFICULTY_COLOR } from "./mockData";
 import type { Address } from "viem";
-import { BlockieAvatar } from "~~/components/scaffold-eth";
+import { BlockieAvatar, RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 import type { EntrantSummary, RunState } from "~~/services/arena/arena-types";
-import { arenaClient } from "~~/services/arena/client";
+import { ArenaApiError, arenaClient } from "~~/services/arena/client";
 import { connectRun } from "~~/services/arena/connect";
 import type { ChatItem, ConsoleEntry, FeedItem } from "~~/services/arena/projection";
 import { ROSTER, displayForEntrant } from "~~/services/arena/roster";
@@ -39,6 +40,8 @@ export const dynamic = "force-dynamic";
 type FinalView = "results" | "data";
 type PodiumPlace = 1 | 2 | 3;
 
+const fmtTokens = (tokens: number) => `${(tokens / 1000).toFixed(0)}k`;
+
 const fmtClock = (s: number) => {
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
@@ -65,8 +68,8 @@ const PODIUM_RESULT: Record<PodiumPlace, string> = {
   3: "THIRD PLACE SECURED",
 };
 
-// Flags first, then the clock for anyone who cleared the board, then who drew
-// first blood soonest, then a stable id tiebreak. Cost is deliberately kept out
+// Flags first, then the clock for anyone who cleared the board, then whoever
+// reached that flag count soonest, then a stable id tiebreak. Cost is kept out
 // of the tiebreak — it changes every tick, which would make the race rows swap
 // (and animate) constantly for no real reason.
 const rankAgents = (agents: Agent[]) =>
@@ -74,7 +77,7 @@ const rankAgents = (agents: Agent[]) =>
     (a, b) =>
       b.solved.length - a.solved.length ||
       (a.finishedAt !== null && b.finishedAt !== null ? a.finishedAt - b.finishedAt : 0) ||
-      (a.firstBloodAt ?? "\uffff").localeCompare(b.firstBloodAt ?? "\uffff") ||
+      (a.lastSolveAt ?? "\uffff").localeCompare(b.lastSolveAt ?? "\uffff") ||
       a.id.localeCompare(b.id),
   );
 
@@ -92,6 +95,7 @@ function agentsFromRun(entrants: EntrantSummary[] | null, startedAt: string | nu
         handle: display.handle,
         harness: display.harnessLabel,
         model: display.modelLabel,
+        effort: display.effort,
         vendor: display.vendor,
         color: display.color,
         short: display.short,
@@ -100,21 +104,22 @@ function agentsFromRun(entrants: EntrantSummary[] | null, startedAt: string | nu
         status: "idle",
         tokens: 0,
         cost: null,
-        firstBloodAt: null,
+        lastSolveAt: null,
         finishedAt: null,
       };
     });
   }
 
   return entrants.map(entrant => {
-    const display = displayForEntrant(entrant.id, entrant.harness, entrant.model);
-    const firstSolve = entrant.solves[0]?.ts ?? null;
-    const clearedAt = entrant.solves.length >= CHALLENGES.length ? entrant.solves.at(-1)?.ts ?? null : null;
+    const display = displayForEntrant(entrant.id, entrant.harness, entrant.model, entrant.effort);
+    const lastSolve = entrant.solves.at(-1)?.ts ?? null;
+    const clearedAt = entrant.solves.length >= CHALLENGES.length ? lastSolve : null;
     return {
       id: entrant.id,
       handle: display.handle,
       harness: display.harnessLabel,
       model: display.modelLabel,
+      effort: display.effort,
       vendor: display.vendor,
       color: display.color,
       short: display.short,
@@ -123,7 +128,7 @@ function agentsFromRun(entrants: EntrantSummary[] | null, startedAt: string | nu
       status: entrant.status,
       tokens: entrant.inputTokens + entrant.outputTokens,
       cost: entrant.costUsd,
-      firstBloodAt: firstSolve,
+      lastSolveAt: lastSolve,
       finishedAt: secondsFrom(startedAt, clearedAt),
     };
   });
@@ -145,9 +150,8 @@ function useArenaClock(
 
   const end = runFinishedAt ? Date.parse(runFinishedAt) : now;
   const elapsed = startedAt ? Math.max(0, Math.floor((end - Date.parse(startedAt)) / 1000)) : 0;
-  if (!deadlineAt) return { seconds: elapsed, countdown: false, timeUp: false };
-  const remaining = Math.max(0, Math.ceil((Date.parse(deadlineAt) - end) / 1000));
-  return { seconds: remaining, countdown: true, timeUp: remaining === 0 && runState === "running" };
+  const timeUp = deadlineAt ? end >= Date.parse(deadlineAt) && runState === "running" : false;
+  return { seconds: elapsed, timeUp };
 }
 
 export default function ArenaPage() {
@@ -313,7 +317,6 @@ export default function ArenaPage() {
       <Scanlines />
       <TopBar
         clock={clock.seconds}
-        countdown={clock.countdown}
         timeUp={clock.timeUp}
         totalSolved={totalSolved}
         finishedCount={finishedCount}
@@ -358,16 +361,21 @@ export default function ArenaPage() {
           {/* RIGHT COLUMN — the unified arena stream; the observed agent's log takes over here */}
           <div className={`w-[520px] flex-col min-h-0 min-w-0 ${gridUsesFullWidth ? "hidden 2xl:flex" : "flex"}`}>
             {stageMode === "focus" ? <AgentLog focused={focused} onClose={closeLog} /> : <ArenaStream />}
-            {operator.authenticated && (
+            {/* Run URLs are spectator-shareable, so the strip only shows for someone
+                who is (or was, mid-race) the operator — never as a sign-in invitation. */}
+            {(operator.authenticated || operator.hadSession) && (
               <OperatorStrip
                 focused={focused}
                 address={operator.address}
+                authenticated={operator.authenticated}
+                hadSession={operator.hadSession}
                 archived={runTerminal}
                 timeUp={clock.timeUp}
                 onSteer={steer}
                 onBroadcast={broadcast}
                 onStop={stopRace}
-                onSignOut={operator.signOut}
+                onInvalidate={operator.invalidate}
+                onSignIn={operator.signIn}
               />
             )}
           </div>
@@ -405,6 +413,9 @@ export default function ArenaPage() {
 function RunExitPanel({ title, message, onBack }: { title: string; message: string; onBack: () => void }) {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black px-6 text-[#00FBFF] font-mono">
+      <div className="absolute right-5 top-4">
+        <RainbowKitCustomConnectButton />
+      </div>
       <div className="w-full max-w-xl rounded-lg border border-[#FF5861]/50 bg-[#FF5861]/10 p-6 text-center">
         <h1 className="font-dotGothic text-3xl tracking-widest text-[#FF5861]">{title}</h1>
         <p className="mt-3 text-sm text-[#FF5861]/80">{message}</p>
@@ -442,12 +453,15 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
         <div className="hidden font-dotGothic text-lg tracking-wide text-[#00FBFF] lg:block lg:text-xl">
           BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · FINAL TRANSMISSION
         </div>
-        <button
-          onClick={onViewData}
-          className="ml-auto shrink-0 rounded border border-[#00FBFF]/30 px-2.5 py-1 text-sm font-bold tracking-[0.12em] text-[#00FBFF]/75 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
-        >
-          ARENA DATA ▸
-        </button>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <RainbowKitCustomConnectButton />
+          <button
+            onClick={onViewData}
+            className="rounded border border-[#00FBFF]/30 px-2.5 py-1 text-sm font-bold tracking-[0.12em] text-[#00FBFF]/75 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
+          >
+            ARENA DATA ▸
+          </button>
+        </div>
       </header>
 
       <main className="console-scroll relative z-20 flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:py-8">
@@ -489,14 +503,18 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-lg font-bold text-white">{agent.handle}</div>
                           <div className="mt-0.5 truncate text-sm text-[#00FBFF]/70">
-                            {agent.harness} · {agent.model}
+                            {agent.harness} · <ModelName name={agent.model} effort={agent.effort} />
                           </div>
                         </div>
-                        <span className="hidden shrink-0 text-base text-[#00FBFF]/70 min-[430px]:inline">
-                          {agent.solved.length} FLAGS
-                        </span>
+                        {agent.finishedAt !== null && (
+                          <span className="hidden shrink-0 text-base text-[#00FBFF]/70 min-[430px]:inline">
+                            {agent.solved.length} FLAGS
+                          </span>
+                        )}
                         <span className="w-[104px] shrink-0 text-right text-lg font-bold tabular-nums text-[#00ff9c]">
-                          {agent.finishedAt === null ? "—" : fmtClock(agent.finishedAt)}
+                          {agent.finishedAt === null
+                            ? `${agent.solved.length}/${CHALLENGES.length}`
+                            : fmtClock(agent.finishedAt)}
                         </span>
                       </div>
                     );
@@ -561,18 +579,22 @@ function FinalistCard({ agent, place }: { agent: Agent; place: PodiumPlace }) {
         </div>
         <div className={`mt-3 truncate font-bold text-white ${winner ? "text-2xl" : "text-lg"}`}>{agent.handle}</div>
         <div className="mt-0.5 truncate text-sm text-[#00FBFF]/70">
-          {agent.harness} · {agent.model}
+          {agent.harness} · <ModelName name={agent.model} effort={agent.effort} />
         </div>
         <div
           className={`mt-3 font-dotGothic tabular-nums ${
             winner ? "text-3xl text-[#FFBE00]" : "text-xl text-[#00ff9c]"
           }`}
         >
-          {agent.finishedAt === null ? "—" : fmtClock(agent.finishedAt)}
+          {agent.finishedAt === null ? `${agent.solved.length}/${CHALLENGES.length} FLAGS` : fmtClock(agent.finishedAt)}
         </div>
+        {/* When the hero slot carries the flags, the footer switches to tokens
+            so the same number doesn't print twice. */}
         <div className="mt-1 text-sm tracking-[0.16em] text-[#00FBFF]/60">
-          {agent.solved.length}/{CHALLENGES.length} FLAGS ·{" "}
-          {agent.cost === null ? "COST N/A" : `$${agent.cost.toFixed(2)}`}
+          {agent.finishedAt === null
+            ? `${fmtTokens(agent.tokens)} TOKENS`
+            : `${agent.solved.length}/${CHALLENGES.length} FLAGS`}{" "}
+          · {agent.cost === null ? "COST N/A" : `$${agent.cost.toFixed(2)}`}
         </div>
       </article>
     </div>
@@ -658,7 +680,6 @@ function PodiumMedal({
 // the signal that the board is an archive and needs a way back to the podium.
 function TopBar({
   clock,
-  countdown,
   timeUp,
   totalSolved,
   finishedCount,
@@ -669,7 +690,6 @@ function TopBar({
   onViewResults,
 }: {
   clock: number;
-  countdown: boolean;
   timeUp: boolean;
   totalSolved: number;
   finishedCount: number;
@@ -723,8 +743,9 @@ function TopBar({
         <span className="hidden xl:inline text-sm uppercase tracking-wider text-[#00FBFF]/55">{connectionStatus}</span>
         {/* The race clock is the one number the stream never stops reading. */}
         <span className={`text-3xl tabular-nums font-bold ${timeUp ? "text-[#FF5861]" : "text-[#FFBE00]"}`}>
-          {countdown ? "⏳" : "⏱"} {fmtClock(clock)}
+          ⏱ {fmtClock(clock)}
         </span>
+        <RainbowKitCustomConnectButton />
       </div>
     </div>
   );
@@ -1114,12 +1135,12 @@ function RaceView({
             <AgentBlockieLink agent={a} compact={compact} />
             <span
               className={`${compact ? "w-56 text-base" : "w-[300px] text-2xl"} truncate font-bold text-white shrink-0`}
-              title={`${a.harness} + ${a.model}`}
+              title={`${a.harness} + ${a.model}${a.effort ? ` · ${a.effort}` : ""}`}
             >
-              {a.handle}
+              <ModelName name={a.handle} effort={a.effort} />
             </span>
             <span className={`w-16 text-right ${dataText} tabular-nums shrink-0 text-[#00FBFF]/75`}>
-              {(a.tokens / 1000).toFixed(0)}k
+              {fmtTokens(a.tokens)}
             </span>
             <span className={`w-20 text-right ${dataText} tabular-nums shrink-0 text-[#FFBE00]/90`}>
               {a.cost === null ? "—" : `$${a.cost.toFixed(2)}`}
@@ -1210,7 +1231,9 @@ function RaceFinishSting({ agent, place }: { agent: Agent; place: PodiumPlace })
             {PODIUM_RESULT[place]}
           </div>
           <div className="mt-1 flex items-center gap-2 text-base">
-            <span className="truncate font-bold text-white">{agent.handle}</span>
+            <span className="truncate font-bold text-white">
+              <ModelName name={agent.handle} effort={agent.effort} />
+            </span>
             <span className="text-[#00FBFF]/50">/</span>
             <span className="shrink-0 font-dotGothic tabular-nums" style={{ color: podium.tone }}>
               {fmtClock(agent.finishedAt ?? 0)}
@@ -1258,7 +1281,9 @@ function GridCard({ agent, onPick }: { agent: Agent; onPick: (id: string) => voi
     >
       <div className="flex items-center gap-1.5 px-2 h-10 shrink-0 border-b border-[#00FBFF]/10 bg-[#001417]">
         <AgentBlockieLink agent={agent} />
-        <span className="text-base font-bold text-white truncate flex-1">{agent.handle}</span>
+        <span className="text-base font-bold text-white truncate flex-1">
+          <ModelName name={agent.handle} effort={agent.effort} />
+        </span>
         <StatusDot status={agent.status} />
       </div>
       <div className="flex items-center gap-2 px-2 h-8 shrink-0 text-sm border-b border-[#00FBFF]/[0.07] bg-[#000d0f]">
@@ -1386,7 +1411,7 @@ function ChallengeDetails({
             title={`observe ${a.handle}`}
           >
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: a.color }} />
-            {a.handle}
+            <ModelName name={a.handle} effort={a.effort} />
           </button>
         ))}
       </div>
@@ -1541,21 +1566,27 @@ function ArenaStream() {
 function OperatorStrip({
   focused,
   address,
+  authenticated,
+  hadSession,
   archived,
   timeUp,
   onSteer,
   onBroadcast,
   onStop,
-  onSignOut,
+  onInvalidate,
+  onSignIn,
 }: {
   focused: Agent;
   address: string | null;
+  authenticated: boolean;
+  hadSession: boolean;
   archived: boolean;
   timeUp: boolean;
   onSteer: (text: string) => Promise<void>;
   onBroadcast: (text: string) => Promise<void>;
   onStop: () => Promise<void>;
-  onSignOut: () => Promise<void>;
+  onInvalidate: () => void;
+  onSignIn: () => Promise<void>;
 }) {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1574,7 +1605,12 @@ function OperatorStrip({
       await action(text);
       setDraft("");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The operator command failed");
+      if (cause instanceof ArenaApiError && cause.status === 401) {
+        onInvalidate();
+        setError("operator session expired — sign in again");
+      } else {
+        setError(cause instanceof Error ? cause.message : "The operator command failed");
+      }
     } finally {
       setBusy(false);
     }
@@ -1596,7 +1632,25 @@ function OperatorStrip({
     try {
       await onStop();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The stop request failed");
+      if (cause instanceof ArenaApiError && cause.status === 401) {
+        onInvalidate();
+        setError("operator session expired — sign in again");
+      } else {
+        setError(cause instanceof Error ? cause.message : "The stop request failed");
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const signIn = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onSignIn();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The operator sign-in failed");
     } finally {
       setBusy(false);
     }
@@ -1611,48 +1665,60 @@ function OperatorStrip({
         <span className="truncate text-[#00FBFF]/70">focused: {focused.handle}</span>
         <div className="ml-auto flex items-center gap-2">
           <OperatorAddress address={address} />
-          <button onClick={() => void onSignOut()} className="text-[#00FBFF]/55 hover:text-[#00FBFF]">
-            SIGN OUT
-          </button>
         </div>
       </div>
-      <div className="flex items-center gap-1.5">
-        <input
-          value={draft}
-          onChange={event => setDraft(event.target.value)}
-          onKeyDown={event => {
-            if (event.key === "Enter") void send(onSteer);
-          }}
-          disabled={busy || archived}
-          placeholder={archived ? "run ended · controls locked" : "send an operator message…"}
-          className="flex-1 min-w-0 bg-[#00181c] border border-[#00FBFF]/20 rounded px-2 py-1 text-base text-white placeholder-[#00FBFF]/45 focus:outline-none focus:border-[#FFBE00]/60 disabled:cursor-not-allowed disabled:opacity-55"
-        />
-        <button
-          onClick={() => void send(onSteer)}
-          disabled={busy || archived || !draft.trim()}
-          className="px-2 py-1 rounded border border-[#00FBFF]/40 text-[#00FBFF] text-sm font-bold disabled:opacity-40"
-        >
-          STEER
-        </button>
-        <button
-          onClick={() => void send(onBroadcast)}
-          disabled={busy || archived || !draft.trim()}
-          className="px-2 py-1 rounded border border-[#FFBE00]/50 text-[#FFBE00] text-sm font-bold disabled:opacity-40"
-        >
-          ALL
-        </button>
-        <button
-          onClick={() => void stop()}
-          disabled={busy || archived}
-          className={`px-2 py-1 rounded border text-sm font-bold disabled:opacity-40 ${
-            stopArmed || timeUp
-              ? "animate-pulse border-[#FF5861] bg-[#FF5861] text-black"
-              : "border-[#FF5861]/60 text-[#FF5861]"
-          }`}
-        >
-          {stopArmed ? "CONFIRM STOP" : "STOP"}
-        </button>
-      </div>
+      {authenticated ? (
+        <div className="flex items-center gap-1.5">
+          <input
+            value={draft}
+            onChange={event => setDraft(event.target.value)}
+            onKeyDown={event => {
+              if (event.key === "Enter") void send(onSteer);
+            }}
+            disabled={busy || archived}
+            placeholder={archived ? "run ended · controls locked" : "send an operator message…"}
+            className="flex-1 min-w-0 bg-[#00181c] border border-[#00FBFF]/20 rounded px-2 py-1 text-base text-white placeholder-[#00FBFF]/45 focus:outline-none focus:border-[#FFBE00]/60 disabled:cursor-not-allowed disabled:opacity-55"
+          />
+          <button
+            onClick={() => void send(onSteer)}
+            disabled={busy || archived || !draft.trim()}
+            className="px-2 py-1 rounded border border-[#00FBFF]/40 text-[#00FBFF] text-sm font-bold disabled:opacity-40"
+          >
+            STEER
+          </button>
+          <button
+            onClick={() => void send(onBroadcast)}
+            disabled={busy || archived || !draft.trim()}
+            className="px-2 py-1 rounded border border-[#FFBE00]/50 text-[#FFBE00] text-sm font-bold disabled:opacity-40"
+          >
+            ALL
+          </button>
+          <button
+            onClick={() => void stop()}
+            disabled={busy || archived}
+            className={`px-2 py-1 rounded border text-sm font-bold disabled:opacity-40 ${
+              stopArmed || timeUp
+                ? "animate-pulse border-[#FF5861] bg-[#FF5861] text-black"
+                : "border-[#FF5861]/60 text-[#FF5861]"
+            }`}
+          >
+            {stopArmed ? "CONFIRM STOP" : "STOP"}
+          </button>
+        </div>
+      ) : address ? (
+        <div className="flex items-center gap-2">
+          {hadSession && <span className="text-sm text-[#FFBE00]/90">operator session expired</span>}
+          <button
+            onClick={() => void signIn()}
+            disabled={busy}
+            className="px-2 py-1 rounded border border-[#FFBE00]/50 text-[#FFBE00] text-sm font-bold disabled:opacity-40"
+          >
+            SIGN IN
+          </button>
+        </div>
+      ) : (
+        <span className="text-sm text-[#00FBFF]/70">connect a wallet — top right</span>
+      )}
       {error && <div className="mt-1 text-sm text-[#FF5861]">{error}</div>}
     </div>
   );
@@ -1782,7 +1848,9 @@ function AgentBlockieLink({ agent, compact }: { agent: Agent; compact?: boolean 
   if (!agent.address || runChainId !== targetNetwork.id) {
     return (
       <span
-        title={`${agent.harness} + ${agent.model}${agent.address ? ` · ${agent.address}` : " · address pending"}`}
+        title={`${agent.harness} + ${agent.model}${agent.effort ? ` · ${agent.effort}` : ""}${
+          agent.address ? ` · ${agent.address}` : " · address pending"
+        }`}
         className={className}
         style={{ border: `1px solid ${agent.color}55` }}
       >
@@ -1797,7 +1865,7 @@ function AgentBlockieLink({ agent, compact }: { agent: Agent; compact?: boolean 
       target="_blank"
       rel="noopener noreferrer"
       onClick={e => e.stopPropagation()}
-      title={`${agent.harness} + ${agent.model} · ${agent.address}`}
+      title={`${agent.harness} + ${agent.model}${agent.effort ? ` · ${agent.effort}` : ""} · ${agent.address}`}
       className={`${className} hover:opacity-80`}
       style={{ border: `1px solid ${agent.color}55` }}
     >

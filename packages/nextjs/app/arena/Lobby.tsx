@@ -1,14 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { OperatorAddress } from "./OperatorAddress";
+import { ModelName } from "./ModelName";
 import { FundingMode, MULTICALL3_ABI, MULTICALL3_ADDRESS, fundingMode, localTestClient } from "./funding";
 import { Agent, CHALLENGES, FUNDING_AMOUNT_ETH } from "./mockData";
 import { type FundingStatus, fundingStatus, useAgentBalances } from "./useAgentBalances";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { encodeFunctionData, formatEther, parseEther } from "viem";
-import { useAccount, useDisconnect, useSwitchChain } from "wagmi";
-import { Address, BlockieAvatar } from "~~/components/scaffold-eth";
+import { useAccount, useSwitchChain } from "wagmi";
+import { Address, BlockieAvatar, RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import { useTransactor } from "~~/hooks/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 import { arenaClient } from "~~/services/arena/client";
@@ -126,7 +126,6 @@ export function ArenaLobby({
   // network where the funds matter would be unrecoverable.
   const { chain, isConnected } = useAccount();
   const { openConnectModal } = useConnectModal();
-  const { disconnect } = useDisconnect();
   const { targetNetwork } = useTargetNetwork();
   const { switchChain } = useSwitchChain();
   const fundingChainId = run?.chainId ?? targetNetwork.id;
@@ -191,7 +190,12 @@ export function ArenaLobby({
           // No transaction and no gas on a local node: set the balances outright.
           for (const { agent, address } of pending) {
             await localTestClient.setBalance({ address, value: target });
-            pushLog(`${agent.model} · ${shortAddress(address)} set to ${amount} ETH ✓`, GREEN);
+            pushLog(
+              `${agent.model}${agent.effort ? ` · ${agent.effort}` : ""} · ${shortAddress(
+                address,
+              )} set to ${amount} ETH ✓`,
+              GREEN,
+            );
           }
           // setBalance mines nothing, and the backend reads balances one block behind
           // the head. Without a block of its own the run waits at awaiting_funding
@@ -357,25 +361,7 @@ export function ArenaLobby({
         >
           {muted ? "🔇 SFX OFF" : "🔊 SFX ON"}
         </button>
-        {/* Shown before sign-in too: the backend allowlists one operator address, so
-            seeing which account connected is the only way to catch the wrong one. */}
-        <OperatorAddress address={operator.address} />
-        {operator.authenticated && (
-          <button
-            onClick={() => void operator.signOut()}
-            className="text-sm px-2 py-1 rounded border border-[#00FBFF]/25 text-[#00FBFF]/75 hover:text-[#00FBFF] hover:border-[#00FBFF]/60 transition"
-          >
-            SIGN OUT
-          </button>
-        )}
-        {isConnected && (
-          <button
-            onClick={() => disconnect()}
-            className="text-sm px-2 py-1 rounded border border-[#00FBFF]/25 text-[#00FBFF]/75 hover:text-[#00FBFF] hover:border-[#00FBFF]/60 transition"
-          >
-            DISCONNECT
-          </button>
-        )}
+        <RainbowKitCustomConnectButton />
       </div>
 
       {/* stage */}
@@ -441,7 +427,7 @@ export function ArenaLobby({
                 // covers the site header, so this is the only way in.
                 <button
                   onClick={openConnectModal}
-                  disabled={!openConnectModal}
+                  disabled={!openConnectModal || !operator.sessionLoaded}
                   className="lobby-cta group px-10 py-3 rounded-md font-dotGothic text-lg tracking-widest border-2 border-[#00FBFF] text-[#00FBFF] hover:bg-[#00FBFF] hover:text-black transition disabled:opacity-40"
                 >
                   ▶ CONNECT WALLET
@@ -449,15 +435,17 @@ export function ArenaLobby({
               ) : (
                 <button
                   onClick={() => void openLobby()}
-                  disabled={!agents.length || !operator.configured || starting}
+                  disabled={!agents.length || !operator.sessionLoaded || !operator.configured || starting}
                   className="lobby-cta group px-10 py-3 rounded-md font-dotGothic text-lg tracking-widest border-2 border-[#00FBFF] text-[#00FBFF] hover:bg-[#00FBFF] hover:text-black transition disabled:opacity-40"
                 >
                   {starting ? "STARTING…" : operator.authenticated ? "▶ OPEN LOBBY" : "▶ SIGN IN & OPEN LOBBY"}
                 </button>
               )}
-              {!operator.configured && (
+              {!operator.sessionLoaded ? (
+                <span className="text-base text-[#FFBE00]/90">connecting to the arena backend…</span>
+              ) : !operator.configured ? (
                 <span className="text-base text-[#FFBE00]/90">wallet operator login is not configured</span>
-              )}
+              ) : null}
             </div>
           )}
 
@@ -751,7 +739,7 @@ function FundingRow({
       </span>
 
       <span className="w-56 shrink-0 truncate font-bold" style={{ color: agent.color }}>
-        {agent.model}
+        <ModelName name={agent.model} effort={agent.effort} />
       </span>
 
       <span className="hidden sm:flex items-center text-[#00FBFF]/70">
@@ -821,12 +809,13 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
         )}
       </div>
 
-      {/* identity */}
-      <div className="text-center min-h-[48px] flex flex-col justify-center">
+      {/* identity — the block reaches into the card's padding so the longest model
+          name plus its effort tail still holds one line on a 140px slot. */}
+      <div className="text-center min-h-[48px] flex flex-col justify-center -mx-1.5">
         {active ? (
           <>
             <div className="text-base font-bold leading-tight" style={{ color: agent.color }}>
-              {agent.model}
+              <ModelName name={agent.model} effort={agent.effort} />
             </div>
             <div className="text-base text-[#00FBFF]/75 leading-tight">{agent.harness}</div>
           </>
