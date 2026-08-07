@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ModelName } from "./ModelName";
 import { FundingMode, MULTICALL3_ABI, MULTICALL3_ADDRESS, fundingMode, localTestClient } from "./funding";
 import { Agent, CHALLENGES, FUNDING_AMOUNT_ETH } from "./mockData";
 import { type FundingStatus, fundingStatus, useAgentBalances } from "./useAgentBalances";
@@ -189,7 +190,12 @@ export function ArenaLobby({
           // No transaction and no gas on a local node: set the balances outright.
           for (const { agent, address } of pending) {
             await localTestClient.setBalance({ address, value: target });
-            pushLog(`${agent.model} · ${shortAddress(address)} set to ${amount} ETH ✓`, GREEN);
+            pushLog(
+              `${agent.model}${agent.effort ? ` · ${agent.effort}` : ""} · ${shortAddress(
+                address,
+              )} set to ${amount} ETH ✓`,
+              GREEN,
+            );
           }
           // setBalance mines nothing, and the backend reads balances one block behind
           // the head. Without a block of its own the run waits at awaiting_funding
@@ -733,7 +739,7 @@ function FundingRow({
       </span>
 
       <span className="w-40 shrink-0 truncate font-bold" style={{ color: agent.color }}>
-        {agent.model}
+        <ModelName name={agent.model} effort={agent.effort} />
       </span>
 
       <span className="hidden sm:flex items-center text-[#00FBFF]/70">
@@ -799,12 +805,13 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
         )}
       </div>
 
-      {/* identity */}
-      <div className="text-center min-h-[48px] flex flex-col justify-center">
+      {/* identity — the block reaches into the card's padding so the longest model
+          name plus its effort tail still holds one line on a 140px slot. */}
+      <div className="text-center min-h-[48px] flex flex-col justify-center -mx-1.5">
         {active ? (
           <>
             <div className="text-base font-bold leading-tight" style={{ color: agent.color }}>
-              {agent.model}
+              <ModelName name={agent.model} effort={agent.effort} />
             </div>
             <div className="text-sm text-[#00FBFF]/55 leading-tight">{agent.harness}</div>
           </>
