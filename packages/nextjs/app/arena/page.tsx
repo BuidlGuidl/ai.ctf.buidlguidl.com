@@ -207,6 +207,7 @@ export default function ArenaPage() {
   const runFailed = runState === "failed";
   const runTerminal = allFinished || runFailed;
   const clock = useArenaClock(runStartedAt, runDeadlineAt, runState, runFinishedAt);
+  const gridUsesFullWidth = overviewTab === "grid" && stageMode === "overview" && !operator.authenticated;
 
   const backToLobby = useCallback(() => {
     useArenaStore.getState().clear();
@@ -341,7 +342,11 @@ export default function ArenaPage() {
       <div className="flex flex-col flex-1 min-h-0">
         <div className="flex flex-1 min-h-0">
           {/* MAIN STAGE — always the wide shot, so observing an agent never hides the race */}
-          <div className="flex flex-col flex-1 min-w-0 border-r border-[#00FBFF]/20">
+          <div
+            className={`flex flex-col flex-1 min-w-0 ${
+              gridUsesFullWidth ? "2xl:border-r 2xl:border-[#00FBFF]/20" : "border-r border-[#00FBFF]/20"
+            }`}
+          >
             <div className="flex-1 min-h-0 relative p-4">
               <div className="h-full flex flex-col border border-[#00FBFF]/25 rounded-lg bg-[#020a0c]/80 overflow-hidden shadow-[0_0_40px_-12px_rgba(0,251,255,0.4)]">
                 <StageTabs tab={overviewTab} onTab={setOverviewTab} />
@@ -351,7 +356,7 @@ export default function ArenaPage() {
           </div>
 
           {/* RIGHT COLUMN — the unified arena stream; the observed agent's log takes over here */}
-          <div className="w-[520px] flex flex-col min-h-0 min-w-0">
+          <div className={`w-[520px] flex-col min-h-0 min-w-0 ${gridUsesFullWidth ? "hidden 2xl:flex" : "flex"}`}>
             {stageMode === "focus" ? <AgentLog focused={focused} onClose={closeLog} /> : <ArenaStream />}
             {operator.authenticated && (
               <OperatorStrip
@@ -373,8 +378,8 @@ export default function ArenaPage() {
             there; the race stage keeps the challenge board instead. */}
         {overviewTab === "grid" ? (
           <div className="shrink-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#010607]">
-            <SectionHead label="RACE" hint="click to observe" />
-            <div className="max-h-[38vh] overflow-y-auto console-scroll">
+            <SectionHead label="RACE" hint="showing top 5 · scroll for all" />
+            <div className="h-[190px] overflow-y-auto console-scroll">
               <RaceView ranked={ranked} onPick={goFocus} flashes={flashes} compact />
             </div>
           </div>
@@ -922,7 +927,7 @@ function OverviewStage({
 }
 
 // `compact` is the bottom-strip variant used under multiview: same track, tighter
-// rows and no harness badge so all ten agents fit without scrolling.
+// rows and no harness badge. Its viewport shows five agents and scrolls to the rest.
 function RaceView({
   ranked,
   onPick,
