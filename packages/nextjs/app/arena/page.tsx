@@ -39,6 +39,8 @@ export const dynamic = "force-dynamic";
 type FinalView = "results" | "data";
 type PodiumPlace = 1 | 2 | 3;
 
+const fmtTokens = (tokens: number) => `${(tokens / 1000).toFixed(0)}k`;
+
 const fmtClock = (s: number) => {
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
@@ -65,8 +67,8 @@ const PODIUM_RESULT: Record<PodiumPlace, string> = {
   3: "THIRD PLACE SECURED",
 };
 
-// Flags first, then the clock for anyone who cleared the board, then who drew
-// first blood soonest, then a stable id tiebreak. Cost is deliberately kept out
+// Flags first, then the clock for anyone who cleared the board, then whoever
+// reached that flag count soonest, then a stable id tiebreak. Cost is kept out
 // of the tiebreak — it changes every tick, which would make the race rows swap
 // (and animate) constantly for no real reason.
 const rankAgents = (agents: Agent[]) =>
@@ -74,7 +76,7 @@ const rankAgents = (agents: Agent[]) =>
     (a, b) =>
       b.solved.length - a.solved.length ||
       (a.finishedAt !== null && b.finishedAt !== null ? a.finishedAt - b.finishedAt : 0) ||
-      (a.firstBloodAt ?? "\uffff").localeCompare(b.firstBloodAt ?? "\uffff") ||
+      (a.lastSolveAt ?? "\uffff").localeCompare(b.lastSolveAt ?? "\uffff") ||
       a.id.localeCompare(b.id),
   );
 
@@ -100,7 +102,7 @@ function agentsFromRun(entrants: EntrantSummary[] | null, startedAt: string | nu
         status: "idle",
         tokens: 0,
         cost: null,
-        firstBloodAt: null,
+        lastSolveAt: null,
         finishedAt: null,
       };
     });
@@ -108,8 +110,8 @@ function agentsFromRun(entrants: EntrantSummary[] | null, startedAt: string | nu
 
   return entrants.map(entrant => {
     const display = displayForEntrant(entrant.id, entrant.harness, entrant.model);
-    const firstSolve = entrant.solves[0]?.ts ?? null;
-    const clearedAt = entrant.solves.length >= CHALLENGES.length ? entrant.solves.at(-1)?.ts ?? null : null;
+    const lastSolve = entrant.solves.at(-1)?.ts ?? null;
+    const clearedAt = entrant.solves.length >= CHALLENGES.length ? lastSolve : null;
     return {
       id: entrant.id,
       handle: display.handle,
@@ -123,7 +125,7 @@ function agentsFromRun(entrants: EntrantSummary[] | null, startedAt: string | nu
       status: entrant.status,
       tokens: entrant.inputTokens + entrant.outputTokens,
       cost: entrant.costUsd,
-      firstBloodAt: firstSolve,
+      lastSolveAt: lastSolve,
       finishedAt: secondsFrom(startedAt, clearedAt),
     };
   });
@@ -489,11 +491,15 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
                             {agent.harness} · {agent.model}
                           </div>
                         </div>
-                        <span className="hidden shrink-0 text-xs text-[#00FBFF]/40 min-[430px]:inline">
-                          {agent.solved.length} FLAGS
-                        </span>
+                        {agent.finishedAt !== null && (
+                          <span className="hidden shrink-0 text-xs text-[#00FBFF]/40 min-[430px]:inline">
+                            {agent.solved.length} FLAGS
+                          </span>
+                        )}
                         <span className="w-[78px] shrink-0 text-right text-sm font-bold tabular-nums text-[#00ff9c] sm:text-base">
-                          {agent.finishedAt === null ? "—" : fmtClock(agent.finishedAt)}
+                          {agent.finishedAt === null
+                            ? `${agent.solved.length}/${CHALLENGES.length}`
+                            : fmtClock(agent.finishedAt)}
                         </span>
                       </div>
                     );
@@ -567,11 +573,15 @@ function FinalistCard({ agent, place }: { agent: Agent; place: PodiumPlace }) {
             winner ? "text-xl text-[#FFBE00]" : "text-base text-[#00ff9c]"
           }`}
         >
-          {agent.finishedAt === null ? "—" : fmtClock(agent.finishedAt)}
+          {agent.finishedAt === null ? `${agent.solved.length}/${CHALLENGES.length} FLAGS` : fmtClock(agent.finishedAt)}
         </div>
+        {/* When the hero slot carries the flags, the footer switches to tokens
+            so the same number doesn't print twice. */}
         <div className="mt-1 text-[9px] tracking-[0.16em] text-[#00FBFF]/30">
-          {agent.solved.length}/{CHALLENGES.length} FLAGS ·{" "}
-          {agent.cost === null ? "COST N/A" : `$${agent.cost.toFixed(2)}`}
+          {agent.finishedAt === null
+            ? `${fmtTokens(agent.tokens)} TOKENS`
+            : `${agent.solved.length}/${CHALLENGES.length} FLAGS`}{" "}
+          · {agent.cost === null ? "COST N/A" : `$${agent.cost.toFixed(2)}`}
         </div>
       </article>
     </div>
@@ -1108,7 +1118,7 @@ function RaceView({
               {a.handle}
             </span>
             <span className="w-12 text-right text-[11px] tabular-nums shrink-0 text-[#00FBFF]/55">
-              {(a.tokens / 1000).toFixed(0)}k
+              {fmtTokens(a.tokens)}
             </span>
             <span className="w-14 text-right text-[11px] tabular-nums shrink-0 text-[#FFBE00]/70">
               {a.cost === null ? "—" : `$${a.cost.toFixed(2)}`}
