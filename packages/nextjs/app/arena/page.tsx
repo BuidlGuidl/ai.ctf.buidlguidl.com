@@ -1,8 +1,8 @@
 "use client";
 
 import { type CSSProperties, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { EffortBadge } from "./EffortBadge";
 import { ArenaLobby } from "./Lobby";
+import { ModelName } from "./ModelName";
 import { OperatorAddress } from "./OperatorAddress";
 import { Agent, AgentStatus, CHALLENGES, Challenge, DIFFICULTY_COLOR } from "./mockData";
 import type { Address } from "viem";
@@ -501,13 +501,8 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
                         <AgentBlockieLink agent={agent} />
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-sm font-bold text-white">{agent.handle}</div>
-                          <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-[#00FBFF]/40 sm:text-xs">
-                            <span className="truncate">
-                              {agent.harness} · {agent.model}
-                            </span>
-                            {/* On the narrowest screens this row truncates the model name
-                                before the badge; better to drop the badge than the name. */}
-                            <EffortBadge effort={agent.effort} className="max-[400px]:hidden" />
+                          <div className="mt-0.5 truncate text-[11px] text-[#00FBFF]/40 sm:text-xs">
+                            {agent.harness} · <ModelName model={agent.model} effort={agent.effort} />
                           </div>
                         </div>
                         {agent.finishedAt !== null && (
@@ -584,11 +579,8 @@ function FinalistCard({ agent, place }: { agent: Agent; place: PodiumPlace }) {
         <div className={`mt-3 truncate font-bold text-white ${winner ? "text-base sm:text-lg" : "text-sm"}`}>
           {agent.handle}
         </div>
-        <div className="mt-0.5 flex items-center justify-center gap-1.5 text-[10px] text-[#00FBFF]/40">
-          <span className="truncate">
-            {agent.harness} · {agent.model}
-          </span>
-          <EffortBadge effort={agent.effort} />
+        <div className="mt-0.5 truncate text-[10px] text-[#00FBFF]/40">
+          {agent.harness} · <ModelName model={agent.model} effort={agent.effort} />
         </div>
         <div
           className={`mt-3 font-dotGothic tabular-nums ${

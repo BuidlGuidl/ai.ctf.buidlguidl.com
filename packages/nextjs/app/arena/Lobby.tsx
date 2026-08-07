@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { EffortBadge } from "./EffortBadge";
+import { ModelName } from "./ModelName";
 import { FundingMode, MULTICALL3_ABI, MULTICALL3_ADDRESS, fundingMode, localTestClient } from "./funding";
 import { Agent, CHALLENGES, FUNDING_AMOUNT_ETH } from "./mockData";
 import { type FundingStatus, fundingStatus, useAgentBalances } from "./useAgentBalances";
@@ -738,9 +738,8 @@ function FundingRow({
         )}
       </span>
 
-      <span className="flex w-40 shrink-0 items-center gap-1.5 font-bold" style={{ color: agent.color }}>
-        <span className="truncate">{agent.model}</span>
-        <EffortBadge effort={agent.effort} />
+      <span className="w-40 shrink-0 truncate font-bold" style={{ color: agent.color }}>
+        <ModelName model={agent.model} effort={agent.effort} />
       </span>
 
       <span className="hidden sm:flex items-center text-[#00FBFF]/70">
@@ -806,19 +805,15 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
         )}
       </div>
 
-      {/* identity */}
-      <div className="text-center min-h-[48px] flex flex-col justify-center">
+      {/* identity — the block reaches into the card's padding so the longest model
+          name plus its effort tail still holds one line on a 140px slot. */}
+      <div className="text-center min-h-[48px] flex flex-col justify-center -mx-1.5">
         {active ? (
           <>
             <div className="text-base font-bold leading-tight" style={{ color: agent.color }}>
-              {agent.model}
+              <ModelName model={agent.model} effort={agent.effort} />
             </div>
-            {/* The card is too narrow to hold the model name and the chip on one
-                line, so the chip rides the harness line rather than wrapping. */}
-            <div className="flex items-center justify-center gap-1.5 text-sm text-[#00FBFF]/55 leading-tight">
-              {agent.harness}
-              <EffortBadge effort={agent.effort} />
-            </div>
+            <div className="text-sm text-[#00FBFF]/55 leading-tight">{agent.harness}</div>
           </>
         ) : (
           <div className="text-xs text-[#00FBFF]/30 tracking-widest">{idle ? "AWAITING" : "———"}</div>
