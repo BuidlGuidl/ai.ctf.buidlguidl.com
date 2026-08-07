@@ -107,6 +107,7 @@ function agentsFromRun(entrants: EntrantSummary[] | null, startedAt: string | nu
         cost: null,
         lastSolveAt: null,
         finishedAt: null,
+        currentChallengeId: null,
       };
     });
   }
@@ -131,6 +132,7 @@ function agentsFromRun(entrants: EntrantSummary[] | null, startedAt: string | nu
       cost: entrant.costUsd,
       lastSolveAt: lastSolve,
       finishedAt: secondsFrom(startedAt, clearedAt),
+      currentChallengeId: entrant.currentChallengeId,
     };
   });
 }
@@ -812,6 +814,10 @@ function AgentLog({ focused, onClose }: { focused: Agent; onClose: () => void })
         {focused.finishedAt !== null ? (
           <span className="px-1.5 py-0.5 rounded font-bold shrink-0 text-[10px] text-[#00ff9c] border border-[#00ff9c]/40">
             CLEARED · {fmtClock(focused.finishedAt)}
+          </span>
+        ) : focused.currentChallengeId !== null ? (
+          <span className="px-1.5 py-0.5 rounded font-bold shrink-0 text-[10px] text-[#FFBE00] border border-[#FFBE00]/40">
+            TARGET #{focused.currentChallengeId}
           </span>
         ) : (
           <span className="px-1.5 py-0.5 rounded font-bold shrink-0 text-[10px] text-[#00FBFF]/55 border border-[#00FBFF]/20">

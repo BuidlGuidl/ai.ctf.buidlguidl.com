@@ -1,8 +1,8 @@
-// Copied from agents-arena-backend contract/arena-types.ts (frontend-merge branch,
-// base commit a5e5485 + the chainId/durationMs/RunResponse contract delta + the
-// effort delta from agents-arena-backend#51: "max" level and OPENCODE_EFFORTS).
-// Do not edit here — sync from the backend repo. Endpoint docs live there in
-// contract/API.md.
+// Copied from agents-arena-backend contract/arena-types.ts (master as of 2026-08-07:
+// currentChallengeId + entrant.challenge from #40, parentToolCallId from #37) plus
+// the steer-delivery delta from agents-arena-backend#52 (SteerDelivery, SteerResponse,
+// BroadcastResponse.queued). Do not edit here — sync from the backend repo. Endpoint
+// docs live there in contract/API.md.
 
 export type RunState =
   | "created"
@@ -50,6 +50,10 @@ export interface EntrantSummary {
   // USD across the turns that carried a cost; null when none did. Display only —
   // harnesses on a subscription login report tokens without a price.
   costUsd: number | null;
+  // The latest of the agent's own announcement (POST /agent/progress) and the
+  // backend's guess from its commands — see entrant.challenge. Null until
+  // either source names one.
+  currentChallengeId: number | null;
 }
 
 export interface RunSnapshot {
@@ -81,13 +85,24 @@ export type ArenaEvent =
   | (ArenaEventBase & { type: "entrant.status"; payload: { entrantId: string; status: EntrantStatus } })
   | (ArenaEventBase & { type: "agent.message"; payload: { entrantId: string; text: string } })
   | (ArenaEventBase & { type: "agent.reasoning"; payload: { entrantId: string; text: string } })
+  // `parentToolCallId` is set when the call came from a subagent the entrant
+  // delegated to: it holds the `toolCallId` of the outer call that spawned it
+  // (claude's Task). Absent on the entrant's own calls. Nested calls arrive in
+  // the same lane, in order — a client may badge or nest them, or ignore it (#37).
   | (ArenaEventBase & {
       type: "tool.call";
-      payload: { entrantId: string; tool: string; toolCallId: string; detail: string };
+      payload: { entrantId: string; tool: string; toolCallId: string; detail: string; parentToolCallId?: string };
     })
   | (ArenaEventBase & {
       type: "tool.result";
-      payload: { entrantId: string; tool: string; toolCallId: string; ok: boolean; detail: string };
+      payload: {
+        entrantId: string;
+        tool: string;
+        toolCallId: string;
+        ok: boolean;
+        detail: string;
+        parentToolCallId?: string;
+      };
     })
   | (ArenaEventBase & { type: "entrant.steered"; payload: { entrantId: string; text: string } })
   | (ArenaEventBase & { type: "entrant.prompt"; payload: { entrantId: string; text: string } })

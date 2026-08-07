@@ -263,10 +263,13 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         lastFlagEvent: event,
       };
     }
-    // Nothing in this view renders the tracked challenge yet; the case exists so
-    // a known event is not mistaken for an unknown one below.
+    // Append-only from two sources (self-announce and command guess); the
+    // snapshot field takes the latest one per entrant.
     case "entrant.challenge":
-      return next;
+      return updateEntrant(next, event.payload.entrantId, entrant => ({
+        ...entrant,
+        currentChallengeId: event.payload.challengeId,
+      }));
     case "entrant.error":
       return appendConsole(next, event.payload.entrantId, {
         id: event.id,
