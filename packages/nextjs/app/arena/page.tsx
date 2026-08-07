@@ -1703,7 +1703,7 @@ function OperatorStrip({
                 disabled={busy || archived || !draft.trim()}
                 className="px-2 py-1 rounded border border-[#00FBFF]/40 text-[#00FBFF] text-[10px] font-bold disabled:opacity-40"
               >
-                NEXT TURN
+                SEND
               </button>
             )}
             <button
