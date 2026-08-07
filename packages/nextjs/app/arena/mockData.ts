@@ -28,7 +28,7 @@ export interface Agent {
   status: AgentStatus;
   tokens: number;
   cost: number | null;
-  firstBloodAt: string | null;
+  lastSolveAt: string | null;
   finishedAt: number | null;
 }
 

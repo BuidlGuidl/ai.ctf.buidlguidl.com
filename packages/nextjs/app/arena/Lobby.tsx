@@ -2,14 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EffortBadge } from "./EffortBadge";
-import { OperatorAddress } from "./OperatorAddress";
 import { FundingMode, MULTICALL3_ABI, MULTICALL3_ADDRESS, fundingMode, localTestClient } from "./funding";
 import { Agent, CHALLENGES, FUNDING_AMOUNT_ETH } from "./mockData";
 import { type FundingStatus, fundingStatus, useAgentBalances } from "./useAgentBalances";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { encodeFunctionData, formatEther, parseEther } from "viem";
-import { useAccount, useDisconnect, useSwitchChain } from "wagmi";
-import { Address, BlockieAvatar } from "~~/components/scaffold-eth";
+import { useAccount, useSwitchChain } from "wagmi";
+import { Address, BlockieAvatar, RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import { useTransactor } from "~~/hooks/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 import { arenaClient } from "~~/services/arena/client";
@@ -127,7 +126,6 @@ export function ArenaLobby({
   // network where the funds matter would be unrecoverable.
   const { chain, isConnected } = useAccount();
   const { openConnectModal } = useConnectModal();
-  const { disconnect } = useDisconnect();
   const { targetNetwork } = useTargetNetwork();
   const { switchChain } = useSwitchChain();
   const fundingChainId = run?.chainId ?? targetNetwork.id;
@@ -363,25 +361,7 @@ export function ArenaLobby({
         >
           {muted ? "🔇 SFX OFF" : "🔊 SFX ON"}
         </button>
-        {/* Shown before sign-in too: the backend allowlists one operator address, so
-            seeing which account connected is the only way to catch the wrong one. */}
-        <OperatorAddress address={operator.address} />
-        {operator.authenticated && (
-          <button
-            onClick={() => void operator.signOut()}
-            className="text-xs px-2 py-1 rounded border border-[#00FBFF]/25 text-[#00FBFF]/60 hover:text-[#00FBFF] hover:border-[#00FBFF]/60 transition"
-          >
-            SIGN OUT
-          </button>
-        )}
-        {isConnected && (
-          <button
-            onClick={() => disconnect()}
-            className="text-xs px-2 py-1 rounded border border-[#00FBFF]/25 text-[#00FBFF]/60 hover:text-[#00FBFF] hover:border-[#00FBFF]/60 transition"
-          >
-            DISCONNECT
-          </button>
-        )}
+        <RainbowKitCustomConnectButton />
       </div>
 
       {/* stage */}
@@ -447,7 +427,7 @@ export function ArenaLobby({
                 // covers the site header, so this is the only way in.
                 <button
                   onClick={openConnectModal}
-                  disabled={!openConnectModal}
+                  disabled={!openConnectModal || !operator.sessionLoaded}
                   className="lobby-cta group px-10 py-3 rounded-md font-dotGothic text-lg tracking-widest border-2 border-[#00FBFF] text-[#00FBFF] hover:bg-[#00FBFF] hover:text-black transition disabled:opacity-40"
                 >
                   ▶ CONNECT WALLET
@@ -455,15 +435,17 @@ export function ArenaLobby({
               ) : (
                 <button
                   onClick={() => void openLobby()}
-                  disabled={!agents.length || !operator.configured || starting}
+                  disabled={!agents.length || !operator.sessionLoaded || !operator.configured || starting}
                   className="lobby-cta group px-10 py-3 rounded-md font-dotGothic text-lg tracking-widest border-2 border-[#00FBFF] text-[#00FBFF] hover:bg-[#00FBFF] hover:text-black transition disabled:opacity-40"
                 >
                   {starting ? "STARTING…" : operator.authenticated ? "▶ OPEN LOBBY" : "▶ SIGN IN & OPEN LOBBY"}
                 </button>
               )}
-              {!operator.configured && (
+              {!operator.sessionLoaded ? (
+                <span className="text-[11px] text-[#FFBE00]/80">connecting to the arena backend…</span>
+              ) : !operator.configured ? (
                 <span className="text-[11px] text-[#FFBE00]/80">wallet operator login is not configured</span>
-              )}
+              ) : null}
             </div>
           )}
 
