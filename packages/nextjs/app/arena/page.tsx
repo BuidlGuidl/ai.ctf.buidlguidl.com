@@ -5,10 +5,10 @@ import { ArenaLobby } from "./Lobby";
 import { OperatorAddress } from "./OperatorAddress";
 import { Agent, AgentStatus, CHALLENGES, Challenge, DIFFICULTY_COLOR } from "./mockData";
 import type { Address } from "viem";
-import { BlockieAvatar } from "~~/components/scaffold-eth";
+import { BlockieAvatar, RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 import type { EntrantSummary, RunState } from "~~/services/arena/arena-types";
-import { arenaClient } from "~~/services/arena/client";
+import { ArenaApiError, arenaClient } from "~~/services/arena/client";
 import { connectRun } from "~~/services/arena/connect";
 import type { ChatItem, ConsoleEntry, FeedItem } from "~~/services/arena/projection";
 import { ROSTER, displayForEntrant } from "~~/services/arena/roster";
@@ -355,16 +355,21 @@ export default function ArenaPage() {
           {/* RIGHT COLUMN — the unified arena stream; the observed agent's log takes over here */}
           <div className="w-[400px] flex flex-col min-h-0 min-w-0">
             {stageMode === "focus" ? <AgentLog focused={focused} onClose={closeLog} /> : <ArenaStream />}
-            {operator.authenticated && (
+            {/* Run URLs are spectator-shareable, so the strip only shows for someone
+                who is (or was, mid-race) the operator — never as a sign-in invitation. */}
+            {(operator.authenticated || operator.hadSession) && (
               <OperatorStrip
                 focused={focused}
                 address={operator.address}
+                authenticated={operator.authenticated}
+                hadSession={operator.hadSession}
                 archived={runTerminal}
                 timeUp={clock.timeUp}
                 onSteer={steer}
                 onBroadcast={broadcast}
                 onStop={stopRace}
-                onSignOut={operator.signOut}
+                onInvalidate={operator.invalidate}
+                onSignIn={operator.signIn}
               />
             )}
           </div>
@@ -402,6 +407,9 @@ export default function ArenaPage() {
 function RunExitPanel({ title, message, onBack }: { title: string; message: string; onBack: () => void }) {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black px-6 text-[#00FBFF] font-mono">
+      <div className="absolute right-5 top-4">
+        <RainbowKitCustomConnectButton />
+      </div>
       <div className="w-full max-w-xl rounded-lg border border-[#FF5861]/50 bg-[#FF5861]/10 p-6 text-center">
         <h1 className="font-dotGothic text-3xl tracking-widest text-[#FF5861]">{title}</h1>
         <p className="mt-3 text-sm text-[#FF5861]/80">{message}</p>
@@ -439,12 +447,15 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
         <div className="hidden font-dotGothic text-lg tracking-wide text-[#00FBFF] lg:block lg:text-xl">
           BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · FINAL TRANSMISSION
         </div>
-        <button
-          onClick={onViewData}
-          className="ml-auto shrink-0 rounded border border-[#00FBFF]/30 px-2.5 py-1 text-[10px] font-bold tracking-[0.12em] text-[#00FBFF]/60 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
-        >
-          ARENA DATA ▸
-        </button>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <RainbowKitCustomConnectButton />
+          <button
+            onClick={onViewData}
+            className="rounded border border-[#00FBFF]/30 px-2.5 py-1 text-[10px] font-bold tracking-[0.12em] text-[#00FBFF]/60 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
+          >
+            ARENA DATA ▸
+          </button>
+        </div>
       </header>
 
       <main className="console-scroll relative z-20 flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:py-8">
@@ -735,6 +746,7 @@ function TopBar({
         <span className={`tabular-nums font-bold ${timeUp ? "text-[#FF5861]" : "text-[#FFBE00]"}`}>
           {countdown ? "⏳" : "⏱"} {fmtClock(clock)}
         </span>
+        <RainbowKitCustomConnectButton />
       </div>
     </div>
   );
@@ -1542,21 +1554,27 @@ function ArenaStream() {
 function OperatorStrip({
   focused,
   address,
+  authenticated,
+  hadSession,
   archived,
   timeUp,
   onSteer,
   onBroadcast,
   onStop,
-  onSignOut,
+  onInvalidate,
+  onSignIn,
 }: {
   focused: Agent;
   address: string | null;
+  authenticated: boolean;
+  hadSession: boolean;
   archived: boolean;
   timeUp: boolean;
   onSteer: (text: string) => Promise<void>;
   onBroadcast: (text: string) => Promise<void>;
   onStop: () => Promise<void>;
-  onSignOut: () => Promise<void>;
+  onInvalidate: () => void;
+  onSignIn: () => Promise<void>;
 }) {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1575,7 +1593,12 @@ function OperatorStrip({
       await action(text);
       setDraft("");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The operator command failed");
+      if (cause instanceof ArenaApiError && cause.status === 401) {
+        onInvalidate();
+        setError("operator session expired — sign in again");
+      } else {
+        setError(cause instanceof Error ? cause.message : "The operator command failed");
+      }
     } finally {
       setBusy(false);
     }
@@ -1597,7 +1620,25 @@ function OperatorStrip({
     try {
       await onStop();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The stop request failed");
+      if (cause instanceof ArenaApiError && cause.status === 401) {
+        onInvalidate();
+        setError("operator session expired — sign in again");
+      } else {
+        setError(cause instanceof Error ? cause.message : "The stop request failed");
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const signIn = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onSignIn();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The operator sign-in failed");
     } finally {
       setBusy(false);
     }
@@ -1612,48 +1653,60 @@ function OperatorStrip({
         <span className="truncate text-[#00FBFF]/40">focused: {focused.handle}</span>
         <div className="ml-auto flex items-center gap-2">
           <OperatorAddress address={address} />
-          <button onClick={() => void onSignOut()} className="text-[#00FBFF]/35 hover:text-[#00FBFF]">
-            SIGN OUT
-          </button>
         </div>
       </div>
-      <div className="flex items-center gap-1.5">
-        <input
-          value={draft}
-          onChange={event => setDraft(event.target.value)}
-          onKeyDown={event => {
-            if (event.key === "Enter") void send(onSteer);
-          }}
-          disabled={busy || archived}
-          placeholder={archived ? "run ended · controls locked" : "send an operator message…"}
-          className="flex-1 min-w-0 bg-[#00181c] border border-[#00FBFF]/20 rounded px-2 py-1 text-xs text-white placeholder-[#00FBFF]/25 focus:outline-none focus:border-[#FFBE00]/60 disabled:cursor-not-allowed disabled:opacity-55"
-        />
-        <button
-          onClick={() => void send(onSteer)}
-          disabled={busy || archived || !draft.trim()}
-          className="px-2 py-1 rounded border border-[#00FBFF]/40 text-[#00FBFF] text-[10px] font-bold disabled:opacity-40"
-        >
-          STEER
-        </button>
-        <button
-          onClick={() => void send(onBroadcast)}
-          disabled={busy || archived || !draft.trim()}
-          className="px-2 py-1 rounded border border-[#FFBE00]/50 text-[#FFBE00] text-[10px] font-bold disabled:opacity-40"
-        >
-          ALL
-        </button>
-        <button
-          onClick={() => void stop()}
-          disabled={busy || archived}
-          className={`px-2 py-1 rounded border text-[10px] font-bold disabled:opacity-40 ${
-            stopArmed || timeUp
-              ? "animate-pulse border-[#FF5861] bg-[#FF5861] text-black"
-              : "border-[#FF5861]/60 text-[#FF5861]"
-          }`}
-        >
-          {stopArmed ? "CONFIRM STOP" : "STOP"}
-        </button>
-      </div>
+      {authenticated ? (
+        <div className="flex items-center gap-1.5">
+          <input
+            value={draft}
+            onChange={event => setDraft(event.target.value)}
+            onKeyDown={event => {
+              if (event.key === "Enter") void send(onSteer);
+            }}
+            disabled={busy || archived}
+            placeholder={archived ? "run ended · controls locked" : "send an operator message…"}
+            className="flex-1 min-w-0 bg-[#00181c] border border-[#00FBFF]/20 rounded px-2 py-1 text-xs text-white placeholder-[#00FBFF]/25 focus:outline-none focus:border-[#FFBE00]/60 disabled:cursor-not-allowed disabled:opacity-55"
+          />
+          <button
+            onClick={() => void send(onSteer)}
+            disabled={busy || archived || !draft.trim()}
+            className="px-2 py-1 rounded border border-[#00FBFF]/40 text-[#00FBFF] text-[10px] font-bold disabled:opacity-40"
+          >
+            STEER
+          </button>
+          <button
+            onClick={() => void send(onBroadcast)}
+            disabled={busy || archived || !draft.trim()}
+            className="px-2 py-1 rounded border border-[#FFBE00]/50 text-[#FFBE00] text-[10px] font-bold disabled:opacity-40"
+          >
+            ALL
+          </button>
+          <button
+            onClick={() => void stop()}
+            disabled={busy || archived}
+            className={`px-2 py-1 rounded border text-[10px] font-bold disabled:opacity-40 ${
+              stopArmed || timeUp
+                ? "animate-pulse border-[#FF5861] bg-[#FF5861] text-black"
+                : "border-[#FF5861]/60 text-[#FF5861]"
+            }`}
+          >
+            {stopArmed ? "CONFIRM STOP" : "STOP"}
+          </button>
+        </div>
+      ) : address ? (
+        <div className="flex items-center gap-2">
+          {hadSession && <span className="text-[10px] text-[#FFBE00]/80">operator session expired</span>}
+          <button
+            onClick={() => void signIn()}
+            disabled={busy}
+            className="px-2 py-1 rounded border border-[#FFBE00]/50 text-[#FFBE00] text-[10px] font-bold disabled:opacity-40"
+          >
+            SIGN IN
+          </button>
+        </div>
+      ) : (
+        <span className="text-[10px] text-[#00FBFF]/40">connect a wallet — top right</span>
+      )}
       {error && <div className="mt-1 text-[10px] text-[#FF5861]">{error}</div>}
     </div>
   );
