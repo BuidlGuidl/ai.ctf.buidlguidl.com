@@ -739,7 +739,7 @@ function FundingRow({
       </span>
 
       <span className="w-40 shrink-0 truncate font-bold" style={{ color: agent.color }}>
-        <ModelName model={agent.model} effort={agent.effort} />
+        <ModelName name={agent.model} effort={agent.effort} />
       </span>
 
       <span className="hidden sm:flex items-center text-[#00FBFF]/70">
@@ -811,7 +811,7 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
         {active ? (
           <>
             <div className="text-base font-bold leading-tight" style={{ color: agent.color }}>
-              <ModelName model={agent.model} effort={agent.effort} />
+              <ModelName name={agent.model} effort={agent.effort} />
             </div>
             <div className="text-sm text-[#00FBFF]/55 leading-tight">{agent.harness}</div>
           </>

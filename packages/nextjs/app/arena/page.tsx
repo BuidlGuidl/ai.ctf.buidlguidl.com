@@ -502,7 +502,7 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-sm font-bold text-white">{agent.handle}</div>
                           <div className="mt-0.5 truncate text-[11px] text-[#00FBFF]/40 sm:text-xs">
-                            {agent.harness} · <ModelName model={agent.model} effort={agent.effort} />
+                            {agent.harness} · <ModelName name={agent.model} effort={agent.effort} />
                           </div>
                         </div>
                         {agent.finishedAt !== null && (
@@ -580,7 +580,7 @@ function FinalistCard({ agent, place }: { agent: Agent; place: PodiumPlace }) {
           {agent.handle}
         </div>
         <div className="mt-0.5 truncate text-[10px] text-[#00FBFF]/40">
-          {agent.harness} · <ModelName model={agent.model} effort={agent.effort} />
+          {agent.harness} · <ModelName name={agent.model} effort={agent.effort} />
         </div>
         <div
           className={`mt-3 font-dotGothic tabular-nums ${
@@ -1127,10 +1127,10 @@ function RaceView({
             <StatusDot status={a.status} />
             <AgentBlockieLink agent={a} compact={compact} />
             <span
-              className={`${compact ? "w-40 text-xs" : "w-44 text-sm"} truncate font-bold text-white shrink-0`}
+              className={`${compact ? "w-[184px] text-xs" : "w-52 text-sm"} truncate font-bold text-white shrink-0`}
               title={`${a.harness} + ${a.model}${a.effort ? ` · ${a.effort}` : ""}`}
             >
-              {a.handle}
+              <ModelName name={a.handle} effort={a.effort} />
             </span>
             <span className="w-12 text-right text-[11px] tabular-nums shrink-0 text-[#00FBFF]/55">
               {fmtTokens(a.tokens)}
@@ -1224,7 +1224,9 @@ function RaceFinishSting({ agent, place }: { agent: Agent; place: PodiumPlace })
             {PODIUM_RESULT[place]}
           </div>
           <div className="mt-1 flex items-center gap-2 text-xs sm:text-sm">
-            <span className="truncate font-bold text-white">{agent.handle}</span>
+            <span className="truncate font-bold text-white">
+              <ModelName name={agent.handle} effort={agent.effort} />
+            </span>
             <span className="text-[#00FBFF]/30">/</span>
             <span className="shrink-0 font-dotGothic tabular-nums" style={{ color: podium.tone }}>
               {fmtClock(agent.finishedAt ?? 0)}
@@ -1272,7 +1274,9 @@ function GridCard({ agent, onPick }: { agent: Agent; onPick: (id: string) => voi
     >
       <div className="flex items-center gap-1.5 px-2 h-8 shrink-0 border-b border-[#00FBFF]/10 bg-[#001417]">
         <AgentBlockieLink agent={agent} />
-        <span className="text-[13px] font-bold text-white truncate flex-1">{agent.handle}</span>
+        <span className="text-[13px] font-bold text-white truncate flex-1">
+          <ModelName name={agent.handle} effort={agent.effort} />
+        </span>
         <StatusDot status={agent.status} />
       </div>
       <div className="flex items-center gap-2 px-2 h-6 shrink-0 text-[11px] border-b border-[#00FBFF]/[0.07] bg-[#000d0f]">
@@ -1400,7 +1404,7 @@ function ChallengeDetails({
             title={`observe ${a.handle}`}
           >
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: a.color }} />
-            {a.handle}
+            <ModelName name={a.handle} effort={a.effort} />
           </button>
         ))}
       </div>
