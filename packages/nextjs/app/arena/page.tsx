@@ -2,6 +2,7 @@
 
 import { type CSSProperties, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArenaLobby } from "./Lobby";
+import { ModelName } from "./ModelName";
 import { OperatorAddress } from "./OperatorAddress";
 import { Agent, AgentStatus, CHALLENGES, Challenge, DIFFICULTY_COLOR } from "./mockData";
 import type { Address } from "viem";
@@ -94,6 +95,7 @@ function agentsFromRun(entrants: EntrantSummary[] | null, startedAt: string | nu
         handle: display.handle,
         harness: display.harnessLabel,
         model: display.modelLabel,
+        effort: display.effort,
         vendor: display.vendor,
         color: display.color,
         short: display.short,
@@ -109,7 +111,7 @@ function agentsFromRun(entrants: EntrantSummary[] | null, startedAt: string | nu
   }
 
   return entrants.map(entrant => {
-    const display = displayForEntrant(entrant.id, entrant.harness, entrant.model);
+    const display = displayForEntrant(entrant.id, entrant.harness, entrant.model, entrant.effort);
     const lastSolve = entrant.solves.at(-1)?.ts ?? null;
     const clearedAt = entrant.solves.length >= CHALLENGES.length ? lastSolve : null;
     return {
@@ -117,6 +119,7 @@ function agentsFromRun(entrants: EntrantSummary[] | null, startedAt: string | nu
       handle: display.handle,
       harness: display.harnessLabel,
       model: display.modelLabel,
+      effort: display.effort,
       vendor: display.vendor,
       color: display.color,
       short: display.short,
@@ -499,7 +502,7 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-sm font-bold text-white">{agent.handle}</div>
                           <div className="mt-0.5 truncate text-[11px] text-[#00FBFF]/40 sm:text-xs">
-                            {agent.harness} · {agent.model}
+                            {agent.harness} · <ModelName name={agent.model} effort={agent.effort} />
                           </div>
                         </div>
                         {agent.finishedAt !== null && (
@@ -577,7 +580,7 @@ function FinalistCard({ agent, place }: { agent: Agent; place: PodiumPlace }) {
           {agent.handle}
         </div>
         <div className="mt-0.5 truncate text-[10px] text-[#00FBFF]/40">
-          {agent.harness} · {agent.model}
+          {agent.harness} · <ModelName name={agent.model} effort={agent.effort} />
         </div>
         <div
           className={`mt-3 font-dotGothic tabular-nums ${
@@ -1124,10 +1127,10 @@ function RaceView({
             <StatusDot status={a.status} />
             <AgentBlockieLink agent={a} compact={compact} />
             <span
-              className={`${compact ? "w-40 text-xs" : "w-44 text-sm"} truncate font-bold text-white shrink-0`}
-              title={`${a.harness} + ${a.model}`}
+              className={`${compact ? "w-[184px] text-xs" : "w-52 text-sm"} truncate font-bold text-white shrink-0`}
+              title={`${a.harness} + ${a.model}${a.effort ? ` · ${a.effort}` : ""}`}
             >
-              {a.handle}
+              <ModelName name={a.handle} effort={a.effort} />
             </span>
             <span className="w-12 text-right text-[11px] tabular-nums shrink-0 text-[#00FBFF]/55">
               {fmtTokens(a.tokens)}
@@ -1221,7 +1224,9 @@ function RaceFinishSting({ agent, place }: { agent: Agent; place: PodiumPlace })
             {PODIUM_RESULT[place]}
           </div>
           <div className="mt-1 flex items-center gap-2 text-xs sm:text-sm">
-            <span className="truncate font-bold text-white">{agent.handle}</span>
+            <span className="truncate font-bold text-white">
+              <ModelName name={agent.handle} effort={agent.effort} />
+            </span>
             <span className="text-[#00FBFF]/30">/</span>
             <span className="shrink-0 font-dotGothic tabular-nums" style={{ color: podium.tone }}>
               {fmtClock(agent.finishedAt ?? 0)}
@@ -1269,7 +1274,9 @@ function GridCard({ agent, onPick }: { agent: Agent; onPick: (id: string) => voi
     >
       <div className="flex items-center gap-1.5 px-2 h-8 shrink-0 border-b border-[#00FBFF]/10 bg-[#001417]">
         <AgentBlockieLink agent={agent} />
-        <span className="text-[13px] font-bold text-white truncate flex-1">{agent.handle}</span>
+        <span className="text-[13px] font-bold text-white truncate flex-1">
+          <ModelName name={agent.handle} effort={agent.effort} />
+        </span>
         <StatusDot status={agent.status} />
       </div>
       <div className="flex items-center gap-2 px-2 h-6 shrink-0 text-[11px] border-b border-[#00FBFF]/[0.07] bg-[#000d0f]">
@@ -1397,7 +1404,7 @@ function ChallengeDetails({
             title={`observe ${a.handle}`}
           >
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: a.color }} />
-            {a.handle}
+            <ModelName name={a.handle} effort={a.effort} />
           </button>
         ))}
       </div>
@@ -1836,7 +1843,9 @@ function AgentBlockieLink({ agent, compact }: { agent: Agent; compact?: boolean 
   if (!agent.address || runChainId !== targetNetwork.id) {
     return (
       <span
-        title={`${agent.harness} + ${agent.model}${agent.address ? ` · ${agent.address}` : " · address pending"}`}
+        title={`${agent.harness} + ${agent.model}${agent.effort ? ` · ${agent.effort}` : ""}${
+          agent.address ? ` · ${agent.address}` : " · address pending"
+        }`}
         className={className}
         style={{ border: `1px solid ${agent.color}55` }}
       >
@@ -1851,7 +1860,7 @@ function AgentBlockieLink({ agent, compact }: { agent: Agent; compact?: boolean 
       target="_blank"
       rel="noopener noreferrer"
       onClick={e => e.stopPropagation()}
-      title={`${agent.harness} + ${agent.model} · ${agent.address}`}
+      title={`${agent.harness} + ${agent.model}${agent.effort ? ` · ${agent.effort}` : ""} · ${agent.address}`}
       className={`${className} hover:opacity-80`}
       style={{ border: `1px solid ${agent.color}55` }}
     >
