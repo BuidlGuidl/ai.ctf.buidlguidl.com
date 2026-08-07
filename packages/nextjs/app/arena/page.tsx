@@ -1694,7 +1694,7 @@ function OperatorStrip({
                 if (event.key === "Enter") void send(focusMode ? onSteer : onBroadcast);
               }}
               disabled={busy || archived}
-              placeholder={archived ? "run ended · controls locked" : "send an operator message…"}
+              placeholder={archived ? "run ended · controls locked" : "message for the next turn…"}
               className="flex-1 min-w-0 bg-[#00181c] border border-[#00FBFF]/20 rounded px-2 py-1 text-xs text-white placeholder-[#00FBFF]/25 focus:outline-none focus:border-[#FFBE00]/60 disabled:cursor-not-allowed disabled:opacity-55"
             />
             {focusMode && (
@@ -1703,7 +1703,7 @@ function OperatorStrip({
                 disabled={busy || archived || !draft.trim()}
                 className="px-2 py-1 rounded border border-[#00FBFF]/40 text-[#00FBFF] text-[10px] font-bold disabled:opacity-40"
               >
-                STEER
+                NEXT ▸
               </button>
             )}
             <button
@@ -1728,8 +1728,8 @@ function OperatorStrip({
           {focusMode && pendingSteers.length > 0 && (
             <div className="mt-1 animate-pulse text-[10px] text-[#FFBE00]">
               {pendingSteers.length === 1
-                ? `◆ queued · lands when ${focused.handle} finishes this turn`
-                : `◆ ${pendingSteers.length} queued · land when ${focused.handle} finishes this turn`}
+                ? `◆ queued for ${focused.handle}'s next turn`
+                : `◆ ${pendingSteers.length} queued for ${focused.handle}'s next turn`}
             </div>
           )}
         </>
