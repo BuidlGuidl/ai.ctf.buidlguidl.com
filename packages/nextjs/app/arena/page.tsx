@@ -1697,21 +1697,16 @@ function OperatorStrip({
               placeholder={archived ? "run ended · controls locked" : "message for the next turn…"}
               className="flex-1 min-w-0 bg-[#00181c] border border-[#00FBFF]/20 rounded px-2 py-1 text-xs text-white placeholder-[#00FBFF]/25 focus:outline-none focus:border-[#FFBE00]/60 disabled:cursor-not-allowed disabled:opacity-55"
             />
-            {focusMode && (
-              <button
-                onClick={() => void send(onSteer)}
-                disabled={busy || archived || !draft.trim()}
-                className="px-2 py-1 rounded border border-[#00FBFF]/40 text-[#00FBFF] text-[10px] font-bold disabled:opacity-40"
-              >
-                SEND
-              </button>
-            )}
+            {/* One button; the stage picks the target. Cyan when directed at the
+                observed agent, gold when the overview broadcasts to everyone. */}
             <button
-              onClick={() => void send(onBroadcast)}
+              onClick={() => void send(focusMode ? onSteer : onBroadcast)}
               disabled={busy || archived || !draft.trim()}
-              className="px-2 py-1 rounded border border-[#FFBE00]/50 text-[#FFBE00] text-[10px] font-bold disabled:opacity-40"
+              className={`px-2 py-1 rounded border text-[10px] font-bold disabled:opacity-40 ${
+                focusMode ? "border-[#00FBFF]/40 text-[#00FBFF]" : "border-[#FFBE00]/50 text-[#FFBE00]"
+              }`}
             >
-              ALL
+              SEND
             </button>
             <button
               onClick={() => void stop()}
