@@ -1,16 +1,17 @@
 import type { RosterEffort, RosterEntry } from "./arena-types";
 
-// Claude Code has no effort flag; "high" is its documented default, pinned here so
-// the badge states what the entrant actually runs. OpenCode exposes no knob at all.
+// Every preset pins an explicit effort so the label states what the entrant runs and
+// vendor-default drift can't change a race. Claude's "high" is its documented default;
+// opencode levels are an explicit override (openrouter caps that harness at high).
 export const ROSTER = [
   { id: "gpt-56-sol", harness: "codex", model: "gpt-5.6-sol", effort: "xhigh" },
   { id: "opus-5", harness: "claude", model: "claude-opus-5", effort: "high" },
-  { id: "glm-52", harness: "opencode", model: "openrouter/z-ai/glm-5.2" },
+  { id: "glm-52", harness: "opencode", model: "openrouter/z-ai/glm-5.2", effort: "high" },
   { id: "gpt-55", harness: "codex", model: "gpt-5.5", effort: "high" },
   { id: "sonnet-5", harness: "claude", model: "claude-sonnet-5", effort: "high" },
-  { id: "kimi-k3", harness: "opencode", model: "openrouter/moonshotai/kimi-k3" },
+  { id: "kimi-k3", harness: "opencode", model: "openrouter/moonshotai/kimi-k3", effort: "high" },
   { id: "opus-48", harness: "claude", model: "claude-opus-4-8", effort: "high" },
-  { id: "deepseek-v4", harness: "opencode", model: "openrouter/deepseek/deepseek-v4-flash-0731" },
+  { id: "deepseek-v4", harness: "opencode", model: "openrouter/deepseek/deepseek-v4-flash-0731", effort: "high" },
   { id: "gpt-56-high", harness: "codex", model: "gpt-5.6-sol", effort: "high" },
   { id: "gpt-55-xhigh", harness: "codex", model: "gpt-5.5", effort: "xhigh" },
 ] as const satisfies readonly RosterEntry[];
