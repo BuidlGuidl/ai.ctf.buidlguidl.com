@@ -370,6 +370,7 @@ export default function ArenaPage() {
             {(operator.authenticated || operator.hadSession) && (
               <OperatorStrip
                 focused={focused}
+                focusMode={stageMode === "focus"}
                 address={operator.address}
                 authenticated={operator.authenticated}
                 hadSession={operator.hadSession}
@@ -1572,6 +1573,7 @@ function ArenaStream() {
 
 function OperatorStrip({
   focused,
+  focusMode,
   address,
   authenticated,
   hadSession,
@@ -1584,6 +1586,9 @@ function OperatorStrip({
   onSignIn,
 }: {
   focused: Agent;
+  // On the overview no target was chosen, so the composer speaks to everyone;
+  // a directed steer only exists once an agent is actually being observed.
+  focusMode: boolean;
   address: string | null;
   authenticated: boolean;
   hadSession: boolean;
@@ -1670,7 +1675,11 @@ function OperatorStrip({
     >
       <div className="mb-1 flex items-center gap-2 text-[10px] font-bold text-[#FFBE00]">
         <span>🎬 OPERATOR</span>
-        <span className="truncate text-[#00FBFF]/40">focused: {focused.handle}</span>
+        {focusMode ? (
+          <span className="truncate text-[#00FBFF]/40">focused: {focused.handle}</span>
+        ) : (
+          <span className="truncate text-[#FFBE00]/60">→ all agents</span>
+        )}
         <div className="ml-auto flex items-center gap-2">
           <OperatorAddress address={address} />
         </div>
@@ -1682,19 +1691,21 @@ function OperatorStrip({
               value={draft}
               onChange={event => setDraft(event.target.value)}
               onKeyDown={event => {
-                if (event.key === "Enter") void send(onSteer);
+                if (event.key === "Enter") void send(focusMode ? onSteer : onBroadcast);
               }}
               disabled={busy || archived}
               placeholder={archived ? "run ended · controls locked" : "send an operator message…"}
               className="flex-1 min-w-0 bg-[#00181c] border border-[#00FBFF]/20 rounded px-2 py-1 text-xs text-white placeholder-[#00FBFF]/25 focus:outline-none focus:border-[#FFBE00]/60 disabled:cursor-not-allowed disabled:opacity-55"
             />
-            <button
-              onClick={() => void send(onSteer)}
-              disabled={busy || archived || !draft.trim()}
-              className="px-2 py-1 rounded border border-[#00FBFF]/40 text-[#00FBFF] text-[10px] font-bold disabled:opacity-40"
-            >
-              STEER
-            </button>
+            {focusMode && (
+              <button
+                onClick={() => void send(onSteer)}
+                disabled={busy || archived || !draft.trim()}
+                className="px-2 py-1 rounded border border-[#00FBFF]/40 text-[#00FBFF] text-[10px] font-bold disabled:opacity-40"
+              >
+                STEER
+              </button>
+            )}
             <button
               onClick={() => void send(onBroadcast)}
               disabled={busy || archived || !draft.trim()}
@@ -1714,7 +1725,7 @@ function OperatorStrip({
               {stopArmed ? "CONFIRM STOP" : "STOP"}
             </button>
           </div>
-          {pendingSteers.length > 0 && (
+          {focusMode && pendingSteers.length > 0 && (
             <div className="mt-1 animate-pulse text-[10px] text-[#FFBE00]">
               {pendingSteers.length === 1
                 ? `◆ queued · lands when ${focused.handle} finishes this turn`
