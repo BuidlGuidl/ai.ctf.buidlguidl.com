@@ -102,6 +102,12 @@ export type ArenaEvent =
       type: "score.flag";
       payload: { entrantId: string; challengeId: number; txHash: string; tokenId: string };
     })
+  // Optional because rows journalled before the guesser existed carry neither;
+  // every one of those was an announcement, so readers treat absence as "self".
+  | (ArenaEventBase & {
+      type: "entrant.challenge";
+      payload: { entrantId: string; challengeId: number; via?: "self" | "command"; evidence?: string };
+    })
   | (ArenaEventBase & { type: "entrant.error"; payload: { entrantId: string; message: string } })
   | (ArenaEventBase & { type: "run.error"; payload: { message: string } })
   // Tokens count only what this event covers — codex emits one per turn, opencode

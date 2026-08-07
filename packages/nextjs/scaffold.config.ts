@@ -11,7 +11,7 @@ export type ScaffoldConfig = {
 
 const scaffoldConfig = {
   // The networks on which your DApp is live
-  targetNetworks: [chains.base],
+  targetNetworks: [chains.hardhat],
 
   // startBlock for indexer
   startBlock: 41714573,

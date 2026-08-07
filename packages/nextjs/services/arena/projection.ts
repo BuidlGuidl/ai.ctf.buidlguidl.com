@@ -263,6 +263,10 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         lastFlagEvent: event,
       };
     }
+    // Nothing in this view renders the tracked challenge yet; the case exists so
+    // a known event is not mistaken for an unknown one below.
+    case "entrant.challenge":
+      return next;
     case "entrant.error":
       return appendConsole(next, event.payload.entrantId, {
         id: event.id,
@@ -280,7 +284,7 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         costUsd: event.payload.costUsd === null ? entrant.costUsd : (entrant.costUsd ?? 0) + event.payload.costUsd,
       }));
     default:
-      return assertNever(event);
+      return skipUnknown(next, event);
   }
 }
 
@@ -419,6 +423,10 @@ function singleLine(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
-function assertNever(event: never): never {
-  throw new Error(`Unhandled arena event: ${JSON.stringify(event)}`);
+// The never parameter keeps the switch exhaustive at compile time, but a newer
+// backend can emit types this build has not copied yet. Those must advance the
+// cursor and render nothing — throwing here kills the whole SSE batch mid-reduce.
+function skipUnknown(state: ProjectionState, event: never): ProjectionState {
+  console.warn(`Skipping unknown arena event type: ${(event as { type: string }).type}`);
+  return state;
 }
