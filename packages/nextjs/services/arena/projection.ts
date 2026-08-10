@@ -271,12 +271,13 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         currentChallengeId: event.payload.challengeId,
       }));
     case "entrant.error":
-      return appendConsole(next, event.payload.entrantId, {
+      next = appendConsole(next, event.payload.entrantId, {
         id: event.id,
         source: event.source,
         kind: "error",
         text: event.payload.message,
       });
+      return appendPreview(next, event.payload.entrantId, `⚠ ${singleLine(event.payload.message)}`);
     case "run.error":
       return { ...next, runError: event.payload.message };
     case "usage":

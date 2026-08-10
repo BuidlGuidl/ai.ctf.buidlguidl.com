@@ -1301,20 +1301,17 @@ function GridCard({ agent, onPick }: { agent: Agent; onPick: (id: string) => voi
           finished ? "agent-terminal-locked" : ""
         }`}
       >
+        {preview.map((line, index) => (
+          <div key={`${index}:${line}`} className="truncate text-[#7fd8dd]/80">
+            {line}
+          </div>
+        ))}
         {finished ? (
-          <>
-            <div className="text-[#00FBFF]/35">agent process exited</div>
-            <div className="text-[#00ff9c] font-bold">result committed ✓</div>
-          </>
+          <div className="shrink-0 border-t border-[#00ff9c]/20 pt-0.5 text-[#00ff9c] font-bold">
+            result committed ✓
+          </div>
         ) : (
-          <>
-            {preview.map((line, index) => (
-              <div key={`${index}:${line}`} className="truncate text-[#7fd8dd]/80">
-                {line}
-              </div>
-            ))}
-            <div className="text-[#00ff9c] animate-pulse shrink-0">▋</div>
-          </>
+          <div className="text-[#00ff9c] animate-pulse shrink-0">▋</div>
         )}
       </div>
       <div className="h-1 shrink-0 bg-[#00FBFF]/10">
