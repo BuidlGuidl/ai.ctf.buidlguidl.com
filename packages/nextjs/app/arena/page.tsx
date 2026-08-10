@@ -449,7 +449,7 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
       <header className="relative z-20 flex h-14 shrink-0 items-center gap-3 border-b border-[#FFBE00]/25 bg-black/65 px-4 sm:px-5">
         <span className="flex items-center gap-2 text-sm font-bold tracking-[0.18em] text-[#00ff9c]">
           <span className="h-2.5 w-2.5 rounded-full bg-[#00ff9c] shadow-[0_0_10px_#00ff9c]" />
-          MATCH COMPLETE
+          RUN COMPLETE
         </span>
         <div className="hidden font-dotGothic text-lg tracking-wide text-[#00FBFF] lg:block lg:text-xl">
           BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · RUN SUMMARY
@@ -1517,8 +1517,8 @@ type StreamRow =
 const STREAM_FILTERS: { id: StreamFilter; label: string }[] = [
   { id: "logs", label: "LOGS" },
   { id: "output", label: "OUTPUT" },
-  { id: "injections", label: "INJECTIONS" },
-  { id: "captures", label: "CAPTURES" },
+  { id: "injections", label: "INJECT" },
+  { id: "captures", label: "FLAGS" },
   { id: "status", label: "STATUS" },
 ];
 
@@ -1552,13 +1552,13 @@ function ArenaStream() {
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-[#010607]">
       <div className="flex items-center gap-2 px-3 h-11 border-b border-[#00FBFF]/15 bg-[#00141733] shrink-0">
-        <span className="text-base font-bold text-[#00FBFF] tracking-widest">RUN LOG</span>
-        <div className="ml-auto flex items-center gap-1">
+        <span className="shrink-0 text-base font-bold text-[#00FBFF] tracking-widest">RUN LOG</span>
+        <div className="console-scroll ml-auto flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap">
           {STREAM_FILTERS.map(f => (
             <button
               key={f.id}
               onClick={() => setFilter(f.id)}
-              className={`px-2 py-0.5 rounded text-sm font-bold tracking-wider transition ${
+              className={`shrink-0 px-2 py-0.5 rounded text-sm font-bold tracking-wider transition ${
                 filter === f.id
                   ? "bg-[#00FBFF]/15 text-[#00FBFF] border border-[#00FBFF]/40"
                   : "text-[#00FBFF]/60 border border-transparent hover:text-[#00FBFF]"
@@ -1766,8 +1766,10 @@ function ChatRow({ msg }: { msg: ChatItem }) {
   if (msg.director) {
     return (
       <div className="flex items-start gap-2 feed-in rounded bg-[#FFBE00]/10 border border-[#FFBE00]/30 px-2 py-1">
-        <span className="text-[#FFBE00] font-bold shrink-0">🎬 {msg.fromHandle}</span>
-        <span className="text-[#ffe9a8]">{msg.text}</span>
+        <span title={msg.fromHandle} className="max-w-[55%] min-w-0 truncate text-[#FFBE00] font-bold">
+          🎬 inject → {msg.fromHandle}
+        </span>
+        <span className="min-w-0 break-words text-[#ffe9a8]">{msg.text}</span>
       </div>
     );
   }

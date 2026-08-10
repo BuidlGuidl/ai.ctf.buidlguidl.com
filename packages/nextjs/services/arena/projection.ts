@@ -173,7 +173,7 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
       return appendChat(next, {
         id: event.id,
         fromId: "director",
-        fromHandle: `OPERATOR INJECTION → ${displayFor(event.payload.entrantId).handle}`,
+        fromHandle: displayFor(event.payload.entrantId).handle,
         color: "#FFBE00",
         text: event.payload.text,
         director: true,
@@ -202,7 +202,7 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         {
           id: event.id,
           fromId: "director",
-          fromHandle: "OPERATOR INJECTION",
+          fromHandle: "ALL AGENTS",
           color: "#FFBE00",
           text: event.payload.text,
           director: true,

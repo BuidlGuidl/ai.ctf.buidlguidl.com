@@ -77,7 +77,7 @@ export function ArenaLobby({
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
   const logId = useRef(0);
-  const restoredLiveRun = useRef(run?.state === "running" || run?.state === "finished");
+  const restoredLiveRun = useRef(run?.state === "running" || run?.state === "stopping" || run?.state === "finished");
   const lastRunState = useRef<string | null>(null);
 
   const operator = useOperatorSession();
