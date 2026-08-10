@@ -82,6 +82,15 @@ const rankAgents = (agents: Agent[]) =>
       a.id.localeCompare(b.id),
   );
 
+// The announced target only means something while the agent is still chasing it:
+// `done` keeps the last announce forever, `score.flag` never clears it, and the id
+// is self-reported so it can land off the board. Every surface reads it through here.
+const activeTarget = (a: Agent): number | null => {
+  const id = a.currentChallengeId;
+  if (id === null || a.status === "done" || a.solved.includes(id)) return null;
+  return CHALLENGES.some(c => c.id === id) ? id : null;
+};
+
 function secondsFrom(start: string | null, end: string | null): number | null {
   if (!start || !end) return null;
   return Math.max(0, Math.floor((Date.parse(end) - Date.parse(start)) / 1000));
@@ -801,6 +810,7 @@ function AgentLog({ focused, onClose }: { focused: Agent; onClose: () => void })
   }, [lines]);
 
   const finished = focused.status === "done";
+  const target = activeTarget(focused);
 
   return (
     <div className="flex-1 min-h-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#020a0c]">
@@ -812,9 +822,9 @@ function AgentLog({ focused, onClose }: { focused: Agent; onClose: () => void })
           <span className="px-1.5 py-0.5 rounded font-bold shrink-0 text-[10px] text-[#00ff9c] border border-[#00ff9c]/40">
             CLEARED · {fmtClock(focused.finishedAt)}
           </span>
-        ) : focused.currentChallengeId !== null ? (
+        ) : target !== null ? (
           <span className="px-1.5 py-0.5 rounded font-bold shrink-0 text-[10px] text-[#FFBE00] border border-[#FFBE00]/40">
-            TARGET #{focused.currentChallengeId}
+            TARGET #{target}
           </span>
         ) : (
           <span className="px-1.5 py-0.5 rounded font-bold shrink-0 text-[10px] text-[#00FBFF]/55 border border-[#00FBFF]/20">
@@ -1169,7 +1179,7 @@ function RaceView({
                 }
                 if (k === a.solved.length && !done(a)) {
                   const color = STATUS_STYLE[a.status].color;
-                  const target = a.currentChallengeId;
+                  const target = activeTarget(a);
                   // The in-flight slot names the entrant's reported target — an
                   // outlined number, so it can't read as a minted flag.
                   return (
@@ -1177,7 +1187,7 @@ function RaceView({
                       key={k}
                       title={
                         target !== null
-                          ? `working on #${target} ${CHALLENGES[target - 1]?.name ?? ""}`
+                          ? `${STATUS_STYLE[a.status].label} · target #${target} ${CHALLENGES[target - 1]?.name ?? ""}`
                           : STATUS_STYLE[a.status].label
                       }
                       className={`relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center text-[9px] font-bold tabular-nums ${
@@ -1272,6 +1282,7 @@ function GridView({ ranked, onPick }: { ranked: Agent[]; onPick: (id: string) =>
 function GridCard({ agent, onPick }: { agent: Agent; onPick: (id: string) => void }) {
   const preview = useArenaStore(selectPreviewFor(agent.id));
   const finished = agent.status === "done";
+  const target = activeTarget(agent);
   return (
     <div
       role="button"
@@ -1298,12 +1309,12 @@ function GridCard({ agent, onPick }: { agent: Agent; onPick: (id: string) => voi
         <span className="truncate" style={{ color: finished ? "#00ff9c" : STATUS_STYLE[agent.status].color }}>
           {agent.finishedAt !== null ? `◆ CLEARED · ${fmtClock(agent.finishedAt)}` : STATUS_STYLE[agent.status].label}
         </span>
-        {!finished && agent.finishedAt === null && agent.currentChallengeId !== null && (
+        {agent.finishedAt === null && target !== null && (
           <span
             className="shrink-0 font-bold text-[#FFBE00]"
-            title={`working on #${agent.currentChallengeId} ${CHALLENGES[agent.currentChallengeId - 1]?.name ?? ""}`}
+            title={`working on #${target} ${CHALLENGES[target - 1]?.name ?? ""}`}
           >
-            ▸ #{agent.currentChallengeId}
+            ▸ #{target}
           </span>
         )}
         <span className="ml-auto shrink-0 text-[#00FBFF]/45 tabular-nums">
@@ -1350,13 +1361,14 @@ function ChallengeBoard({
   onOpen: (id: number) => void;
 }) {
   const solvedCount = (id: number) => agents.filter(a => a.solved.includes(id)).length;
+  const focusedTarget = activeTarget(focused);
   return (
     <div className="h-48 shrink-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#010607]">
       <SectionHead label="CHALLENGE BOARD" hint="click for details" />
       <div className="flex-1 min-h-0 overflow-y-auto console-scroll p-2 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-1.5 content-start">
         {CHALLENGES.map(c => {
           const mine = focused.solved.includes(c.id);
-          const target = !mine && focused.currentChallengeId === c.id;
+          const target = focusedTarget === c.id;
           const count = solvedCount(c.id);
           return (
             <button
