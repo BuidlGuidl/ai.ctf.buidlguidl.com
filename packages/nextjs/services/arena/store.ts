@@ -67,9 +67,13 @@ export const useArenaStore = create<ArenaStore>(set => ({
   dispatchEvents: events =>
     set(current => {
       if (current.projection === null) return current;
+      const cursor = current.projection.lastEventId;
       const projection = events.reduce(applyEvent, current.projection);
       if (projection === current.projection) return current;
-      return { projection, pendingSteers: events.reduce(resolvePendingSteers, current.pendingSteers) };
+      // A reconnect replays events the cursor already dropped; an old steered
+      // event with the same text must not settle a currently-queued hint.
+      const fresh = events.filter(event => event.id > cursor);
+      return { projection, pendingSteers: fresh.reduce(resolvePendingSteers, current.pendingSteers) };
     }),
   addPendingSteer: (entrantId, text, sinceEventId) =>
     set(current => {
@@ -94,7 +98,7 @@ export const useArenaStore = create<ArenaStore>(set => ({
 // backend journals anything — and a broadcast the projection dedupes for chat
 // still clears the entrant's hint here.
 function resolvePendingSteers(pending: Record<string, string[]>, event: ArenaEvent): Record<string, string[]> {
-  if (event.type === "run.state" && event.payload.state === "finished") return {};
+  if (event.type === "run.state" && (event.payload.state === "finished" || event.payload.state === "failed")) return {};
   // A done entrant takes no more turns, so its queue can only have been dropped.
   if (event.type === "entrant.status" && event.payload.status === "done" && pending[event.payload.entrantId]) {
     return { ...pending, [event.payload.entrantId]: [] };
