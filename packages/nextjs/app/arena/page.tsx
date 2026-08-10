@@ -289,6 +289,13 @@ export default function ArenaPage() {
     [runId],
   );
 
+  // Recovery for the observed lane only. The backend rebuilds the opening prompt
+  // and the events come back over SSE, so there is nothing to sync here.
+  const restart = useCallback(async () => {
+    if (!runId || !focused) return;
+    await arenaClient.restartEntrant(runId, focused.id);
+  }, [focused, runId]);
+
   if (!mounted) {
     return (
       <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black text-[#00FBFF] font-dotGothic text-2xl tracking-widest">
@@ -382,9 +389,11 @@ export default function ArenaPage() {
                 authenticated={operator.authenticated}
                 hadSession={operator.hadSession}
                 archived={runTerminal}
+                restartable={runState === "running"}
                 timeUp={clock.timeUp}
                 onSteer={steer}
                 onBroadcast={broadcast}
+                onRestart={restart}
                 onStop={stopRace}
                 onInvalidate={operator.invalidate}
                 onSignIn={operator.signIn}
@@ -1610,9 +1619,11 @@ function OperatorStrip({
   authenticated,
   hadSession,
   archived,
+  restartable,
   timeUp,
   onSteer,
   onBroadcast,
+  onRestart,
   onStop,
   onInvalidate,
   onSignIn,
@@ -1625,9 +1636,12 @@ function OperatorStrip({
   authenticated: boolean;
   hadSession: boolean;
   archived: boolean;
+  // The backend only replaces a session while the run is running.
+  restartable: boolean;
   timeUp: boolean;
   onSteer: (text: string) => Promise<void>;
   onBroadcast: (text: string) => Promise<void>;
+  onRestart: () => Promise<void>;
   onStop: () => Promise<void>;
   onInvalidate: () => void;
   onSignIn: () => Promise<void>;
@@ -1637,9 +1651,19 @@ function OperatorStrip({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stopArmed, setStopArmed] = useState(false);
+  const [restartArmed, setRestartArmed] = useState(false);
   const stopArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const restartArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => () => clearTimeout(stopArmTimer.current ?? undefined), []);
+  useEffect(() => () => clearTimeout(restartArmTimer.current ?? undefined), []);
+
+  // Leaving the lane must not leave a live arm behind that a later click would
+  // fire at whoever is observed next.
+  useEffect(() => {
+    clearTimeout(restartArmTimer.current ?? undefined);
+    setRestartArmed(false);
+  }, [focused.id, focusMode]);
 
   const send = async (action: (text: string) => Promise<void>) => {
     const text = draft.trim();
@@ -1682,6 +1706,33 @@ function OperatorStrip({
         setError("operator session expired — sign in again");
       } else {
         setError(cause instanceof Error ? cause.message : "The stop request failed");
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Throws away everything the agent worked out so far, so it arms like STOP —
+  // except this one only ever hits the observed lane.
+  const restart = async () => {
+    if (busy || archived || !restartable) return;
+    if (!restartArmed) {
+      setRestartArmed(true);
+      restartArmTimer.current = setTimeout(() => setRestartArmed(false), STOP_ARM_MS);
+      return;
+    }
+    clearTimeout(restartArmTimer.current ?? undefined);
+    setRestartArmed(false);
+    setBusy(true);
+    setError(null);
+    try {
+      await onRestart();
+    } catch (cause) {
+      if (cause instanceof ArenaApiError && cause.status === 401) {
+        onInvalidate();
+        setError("operator session expired — sign in again");
+      } else {
+        setError(cause instanceof Error ? cause.message : "The restart request failed");
       }
     } finally {
       setBusy(false);
@@ -1740,6 +1791,22 @@ function OperatorStrip({
             >
               SEND
             </button>
+            {/* Only in focus mode: a restart names one lane, and the overview
+                has no target to name. */}
+            {focusMode && (
+              <button
+                onClick={() => void restart()}
+                disabled={busy || archived || !restartable}
+                title={`drop ${focused.handle}'s session and re-feed its opening prompt`}
+                className={`shrink-0 whitespace-nowrap rounded border px-2 py-1 text-[10px] font-bold disabled:opacity-40 ${
+                  restartArmed
+                    ? "animate-pulse border-[#FFBE00] bg-[#FFBE00] text-black"
+                    : "border-[#FFBE00]/50 text-[#FFBE00]"
+                }`}
+              >
+                {restartArmed ? "CONFIRM RESTART" : "RESTART"}
+              </button>
+            )}
             <button
               onClick={() => void stop()}
               disabled={busy || archived}
@@ -1783,6 +1850,7 @@ const FEED_STYLE: Record<FeedItem["type"], { icon: string; cls: string }> = {
   flag: { icon: "🏁", cls: "text-[#00ff9c] font-bold" },
   blocked: { icon: "⚠", cls: "text-[#FFBE00] font-bold" },
   resumed: { icon: "▶", cls: "text-[#00FBFF]/70" },
+  restarted: { icon: "↻", cls: "text-[#FFBE00] font-bold" },
   // Clearing the board is the loudest thing an agent can do, so it outranks a
   // single flag capture in the stream.
   done: { icon: "◆", cls: "text-[#FFBE00] font-bold" },

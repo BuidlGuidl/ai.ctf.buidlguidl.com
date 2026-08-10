@@ -1,8 +1,9 @@
 // Copied from agents-arena-backend contract/arena-types.ts (master as of 2026-08-07:
 // currentChallengeId + entrant.challenge from #40, parentToolCallId from #37) plus
 // the steer-delivery delta from agents-arena-backend#52 (SteerDelivery, SteerResponse,
-// BroadcastResponse.queued). Do not edit here — sync from the backend repo. Endpoint
-// docs live there in contract/API.md.
+// BroadcastResponse.queued) and the entrant-restart delta from agents-arena-backend#49
+// (entrant.restarted, RestartResponse). Do not edit here — sync from the backend repo.
+// Endpoint docs live there in contract/API.md.
 
 export type RunState =
   | "created"
@@ -106,6 +107,9 @@ export type ArenaEvent =
     })
   | (ArenaEventBase & { type: "entrant.steered"; payload: { entrantId: string; text: string } })
   | (ArenaEventBase & { type: "entrant.prompt"; payload: { entrantId: string; text: string } })
+  // The operator abandoned this lane's session and opened a fresh one. The
+  // opening prompt that follows arrives as the usual `entrant.prompt`.
+  | (ArenaEventBase & { type: "entrant.restarted"; payload: { entrantId: string } })
   | (ArenaEventBase & { type: "entrant.nudged"; payload: { entrantId: string; text: string; flags: number } })
   | (ArenaEventBase & { type: "director.broadcast"; payload: { text: string; targetEntrantIds: string[] } })
   | (ArenaEventBase & { type: "wallet.assigned"; payload: { entrantId: string; address: string } })
@@ -185,6 +189,11 @@ export type SteerDelivery = "queued" | "injected";
 export interface SteerResponse {
   accepted: boolean;
   status: SteerDelivery;
+}
+
+// Restart takes no body: the opening prompt is rebuilt by the backend, not sent.
+export interface RestartResponse {
+  accepted: boolean;
 }
 
 export interface BroadcastRequest {
