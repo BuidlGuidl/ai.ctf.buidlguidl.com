@@ -11,7 +11,7 @@ import { useAccount, useSwitchChain } from "wagmi";
 import { Address, BlockieAvatar, RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import { useTransactor } from "~~/hooks/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
-import { arenaClient } from "~~/services/arena/client";
+import { ArenaApiError, arenaClient } from "~~/services/arena/client";
 import type { FundingProjection } from "~~/services/arena/projection";
 import { ROSTER } from "~~/services/arena/roster";
 import {
@@ -25,14 +25,26 @@ import { useOperatorSession, useSeedSigner } from "~~/services/arena/useOperator
 
 type Phase = "idle" | "connecting" | "signature" | "preparing" | "funding" | "ready" | "launching" | "failed";
 type SlotState = "waiting" | "joining" | "ready";
+type ActiveRunConflict = { id: string; state: string };
 
 const CY = "#00FBFF";
 const GREEN = "#00ff9c";
 const YELLOW = "#FFBE00";
 const RED = "#FF5861";
+const STOP_ARM_MS = 6000;
 
 function shortAddress(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
+}
+
+function activeRunConflict(cause: unknown): ActiveRunConflict | null {
+  if (!(cause instanceof ArenaApiError) || cause.status !== 409 || !cause.body || typeof cause.body !== "object") {
+    return null;
+  }
+  const { activeRunId, activeRunState } = cause.body as Record<string, unknown>;
+  return typeof activeRunId === "string" && typeof activeRunState === "string"
+    ? { id: activeRunId, state: activeRunState }
+    : null;
 }
 
 function tone(ctx: AudioContext, freq: number, dur = 0.09, type: OscillatorType = "square", gain = 0.05) {
@@ -65,8 +77,11 @@ export function ArenaLobby({
   const [funding, setFunding] = useState(false);
   const [starting, setStarting] = useState(false);
   const [signingSeed, setSigningSeed] = useState(false);
+  const [stoppingRun, setStoppingRun] = useState(false);
+  const [stopArmed, setStopArmed] = useState(false);
   const [durationMinutes, setDurationMinutes] = useState("60");
   const [error, setError] = useState<string | null>(null);
+  const [blockingRun, setBlockingRun] = useState<ActiveRunConflict | null>(null);
 
   const run = useArenaStore(selectRun);
   const fundingProjection = useArenaStore(selectFunding);
@@ -79,10 +94,18 @@ export function ArenaLobby({
   const logId = useRef(0);
   const restoredLiveRun = useRef(run?.state === "running" || run?.state === "finished");
   const lastRunState = useRef<string | null>(null);
+  const stopArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const operator = useOperatorSession();
   const needsWallet = !operator.authenticated && !operator.address;
   const signSeed = useSeedSigner();
+  const canStopRun =
+    run?.state === "awaiting_signature" ||
+    run?.state === "preparing" ||
+    run?.state === "awaiting_funding" ||
+    run?.state === "ready";
+
+  useEffect(() => () => clearTimeout(stopArmTimer.current ?? undefined), []);
 
   const phase: Phase = !run
     ? starting
@@ -249,6 +272,7 @@ export function ArenaLobby({
     audioRef.current?.resume();
     setStarting(true);
     setError(null);
+    setBlockingRun(null);
     try {
       if (!operator.authenticated) await operator.signIn();
       const minutes = Number(durationMinutes);
@@ -260,14 +284,20 @@ export function ArenaLobby({
         roster: [...ROSTER],
         durationMs: Math.round(minutes * 60_000),
       });
-      useArenaStore.getState().seedSnapshot(created);
-      const url = new URL(window.location.href);
-      url.searchParams.set("run", created.id);
-      window.history.replaceState(null, "", url);
       pushLog(`created run ${created.id}`, GREEN);
       const started = await arenaClient.startRun(created.id);
       useArenaStore.getState().syncSnapshot(started);
+      const url = new URL(window.location.href);
+      url.searchParams.set("run", created.id);
+      window.history.replaceState(null, "", url);
+      pushLog(`started run ${created.id}`, GREEN);
     } catch (cause) {
+      const conflict = activeRunConflict(cause);
+      if (conflict) {
+        setBlockingRun(conflict);
+        pushLog(`start blocked by run ${conflict.id}`, RED);
+        return;
+      }
       const message = cause instanceof Error ? cause.message : "Could not start the arena";
       setError(message);
       pushLog(message, RED);
@@ -280,6 +310,7 @@ export function ArenaLobby({
     if (!run || run.state !== "awaiting_signature") return;
     setSigningSeed(true);
     setError(null);
+    setBlockingRun(null);
     try {
       const signature = await signSeed(run.id, run.chainId);
       const updated = await arenaClient.seedRun(run.id, { signature });
@@ -293,6 +324,32 @@ export function ArenaLobby({
       setSigningSeed(false);
     }
   }, [pushLog, run, signSeed]);
+
+  const stopLoadedRun = useCallback(async () => {
+    if (!run || !canStopRun || stoppingRun) return;
+    if (!stopArmed) {
+      setStopArmed(true);
+      stopArmTimer.current = setTimeout(() => setStopArmed(false), STOP_ARM_MS);
+      return;
+    }
+    clearTimeout(stopArmTimer.current ?? undefined);
+    setStopArmed(false);
+    setStoppingRun(true);
+    setError(null);
+    setBlockingRun(null);
+    try {
+      if (!operator.authenticated) await operator.signIn();
+      await arenaClient.stopRun(run.id);
+      onStartOver();
+      pushLog(`stopped run ${run.id}`, GREEN);
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Could not stop the arena run";
+      setError(message);
+      pushLog(message, RED);
+    } finally {
+      setStoppingRun(false);
+    }
+  }, [canStopRun, onStartOver, operator, pushLog, run, stopArmed, stoppingRun]);
 
   useEffect(() => {
     if (phase !== "launching") return;
@@ -449,9 +506,27 @@ export function ArenaLobby({
             </div>
           )}
 
-          {error && phase !== "failed" && (
+          {(blockingRun || error) && phase !== "failed" && (
             <div className="mb-4 max-w-3xl rounded border border-[#FF5861]/40 bg-[#FF5861]/10 px-3 py-2 text-xs text-[#FF5861]">
-              {error}
+              {blockingRun ? (
+                <>
+                  <div>
+                    run {shortAddress(blockingRun.id)} is already {blockingRun.state.replaceAll("_", " ")}
+                  </div>
+                  <div className="mt-1">
+                    <a
+                      href={`/arena?run=${encodeURIComponent(blockingRun.id)}`}
+                      title={blockingRun.id}
+                      className="font-bold underline underline-offset-2 hover:text-white"
+                    >
+                      open that run
+                    </a>
+                    {blockingRun.state === "stopping" ? " and wait for it to finish" : " and stop it, then start yours"}
+                  </div>
+                </>
+              ) : (
+                error
+              )}
             </div>
           )}
 
@@ -497,7 +572,7 @@ export function ArenaLobby({
           )}
 
           {/* primary action */}
-          <div className="mt-10 h-16 flex items-center justify-center">
+          <div className="mt-10 h-16 flex items-center justify-center gap-3">
             {phase === "connecting" && (
               <div className="text-[#00FBFF]/50 text-sm tracking-widest font-dotGothic lobby-blink">
                 ● ● ● CONNECTING AGENTS ● ● ●
@@ -541,6 +616,17 @@ export function ArenaLobby({
                 className="lobby-cta px-10 py-3 rounded-md font-dotGothic text-lg tracking-widest border-2 border-[#FF5861] text-[#FF5861] hover:bg-[#FF5861] hover:text-black transition"
               >
                 ◀ START OVER
+              </button>
+            )}
+            {canStopRun && (
+              <button
+                onClick={() => void stopLoadedRun()}
+                disabled={stoppingRun}
+                className={`lobby-cta px-10 py-3 rounded-md font-dotGothic text-lg tracking-widest border-2 border-[#FF5861] hover:bg-[#FF5861] hover:text-black transition disabled:opacity-40 ${
+                  stopArmed ? "animate-pulse bg-[#FF5861] text-black" : "text-[#FF5861]"
+                }`}
+              >
+                {stoppingRun ? "STOPPING…" : stopArmed ? "CONFIRM STOP" : "■ STOP THIS RUN"}
               </button>
             )}
           </div>
