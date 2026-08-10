@@ -4,7 +4,7 @@ import { displayForEntrant } from "./roster";
 export interface ConsoleEntry {
   id: number;
   source: string;
-  kind: "think" | "message" | "flag" | "error" | "tool" | "tool-result";
+  kind: "think" | "message" | "flag" | "error" | "steer" | "tool" | "tool-result";
   text: string;
   tool?: string;
   toolCallId?: string;
@@ -161,6 +161,14 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         `${event.payload.ok ? "✓" : "✗"} ${event.payload.tool} ${singleLine(event.payload.detail)}`,
       );
     case "entrant.steered": {
+      // The console shows the steer even when the chat dedupe below drops it:
+      // the entrant was told this, whoever the message was addressed to.
+      next = appendConsole(next, event.payload.entrantId, {
+        id: event.id,
+        source: event.source,
+        kind: "steer",
+        text: event.payload.text,
+      });
       const pending = next.pendingBroadcast;
       if (
         pending !== null &&
@@ -255,6 +263,13 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         lastFlagEvent: event,
       };
     }
+    // Append-only from two sources (self-announce and command guess); the
+    // snapshot field takes the latest one per entrant.
+    case "entrant.challenge":
+      return updateEntrant(next, event.payload.entrantId, entrant => ({
+        ...entrant,
+        currentChallengeId: event.payload.challengeId,
+      }));
     case "entrant.error":
       return appendConsole(next, event.payload.entrantId, {
         id: event.id,
@@ -272,7 +287,7 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         costUsd: event.payload.costUsd === null ? entrant.costUsd : (entrant.costUsd ?? 0) + event.payload.costUsd,
       }));
     default:
-      return assertNever(event);
+      return skipUnknown(next, event);
   }
 }
 
@@ -411,6 +426,16 @@ function singleLine(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
-function assertNever(event: never): never {
-  throw new Error(`Unhandled arena event: ${JSON.stringify(event)}`);
+// The never parameter keeps the switch exhaustive at compile time, but a newer
+// backend can emit types this build has not copied yet. Those must advance the
+// cursor and render nothing — throwing here kills the whole SSE batch mid-reduce.
+// Warned once per type: unknown events arrive in bursts, not once.
+const warnedUnknownTypes = new Set<string>();
+function skipUnknown(state: ProjectionState, event: never): ProjectionState {
+  const type = (event as { type: string }).type;
+  if (!warnedUnknownTypes.has(type)) {
+    warnedUnknownTypes.add(type);
+    console.warn(`Skipping unknown arena event type: ${type}`);
+  }
+  return state;
 }

@@ -8,6 +8,7 @@ import type {
   RunSnapshot,
   SessionResponse,
   SteerRequest,
+  SteerResponse,
   VerifyRequest,
   VerifyResponse,
 } from "./arena-types";
@@ -65,7 +66,7 @@ export const arenaClient = {
     runFetch(`/runs/${encodeURIComponent(runId)}/seed`, { method: "POST", body }),
   stopRun: (runId: string) => runFetch(`/runs/${encodeURIComponent(runId)}/stop`, { method: "POST" }),
   steerEntrant: (runId: string, entrantId: string, body: SteerRequest) =>
-    arenaFetch<{ accepted: boolean }>(
+    arenaFetch<SteerResponse>(
       `/runs/${encodeURIComponent(runId)}/entrants/${encodeURIComponent(entrantId)}/steer`,
       { method: "POST", body },
     ),

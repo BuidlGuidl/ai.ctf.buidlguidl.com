@@ -21,6 +21,7 @@ import {
   selectConsoleFor,
   selectFeed,
   selectLastFlagEvent,
+  selectPendingSteersFor,
   selectPreviewFor,
   selectRunChainId,
   selectRunDeadlineAt,
@@ -106,6 +107,7 @@ function agentsFromRun(entrants: EntrantSummary[] | null, startedAt: string | nu
         cost: null,
         lastSolveAt: null,
         finishedAt: null,
+        currentChallengeId: null,
       };
     });
   }
@@ -130,6 +132,7 @@ function agentsFromRun(entrants: EntrantSummary[] | null, startedAt: string | nu
       cost: entrant.costUsd,
       lastSolveAt: lastSolve,
       finishedAt: secondsFrom(startedAt, clearedAt),
+      currentChallengeId: entrant.currentChallengeId,
     };
   });
 }
@@ -260,7 +263,11 @@ export default function ArenaPage() {
   const steer = useCallback(
     async (text: string) => {
       if (!runId || !focused) return;
-      await arenaClient.steerEntrant(runId, focused.id, { text });
+      const sinceEventId = useArenaStore.getState().projection?.lastEventId ?? 0;
+      const { status } = await arenaClient.steerEntrant(runId, focused.id, { text });
+      // An injected steer is already on its way back as an event; only a queued
+      // one needs the hint to stand in until the agent's turn ends.
+      if (status === "queued") useArenaStore.getState().addPendingSteer(focused.id, text, sinceEventId);
     },
     [focused, runId],
   );
@@ -361,6 +368,7 @@ export default function ArenaPage() {
             {(operator.authenticated || operator.hadSession) && (
               <OperatorStrip
                 focused={focused}
+                focusMode={stageMode === "focus"}
                 address={operator.address}
                 authenticated={operator.authenticated}
                 hadSession={operator.hadSession}
@@ -804,6 +812,10 @@ function AgentLog({ focused, onClose }: { focused: Agent; onClose: () => void })
           <span className="px-1.5 py-0.5 rounded font-bold shrink-0 text-[10px] text-[#00ff9c] border border-[#00ff9c]/40">
             CLEARED · {fmtClock(focused.finishedAt)}
           </span>
+        ) : focused.currentChallengeId !== null ? (
+          <span className="px-1.5 py-0.5 rounded font-bold shrink-0 text-[10px] text-[#FFBE00] border border-[#FFBE00]/40">
+            TARGET #{focused.currentChallengeId}
+          </span>
         ) : (
           <span className="px-1.5 py-0.5 rounded font-bold shrink-0 text-[10px] text-[#00FBFF]/55 border border-[#00FBFF]/20">
             TARGET UNREPORTED
@@ -851,6 +863,7 @@ function ConsoleRow({ line }: { line: ConsoleEntry }) {
   if (line.kind === "message") return <div className="text-white/85">› {line.text}</div>;
   if (line.kind === "error") return <div className="text-[#FF5861] font-bold">⚠ {line.text}</div>;
   if (line.kind === "flag") return <div className="text-[#00ff9c] font-bold">🏁 {line.text}</div>;
+  if (line.kind === "steer") return <div className="text-[#FFBE00] font-bold">◆ DIRECTOR: {line.text}</div>;
   if (line.kind === "tool") {
     const state = !line.result ? "running" : line.result.ok ? "ok" : "fail";
     const color = state === "running" ? "#FFBE00" : state === "ok" ? "#00ff9c" : "#FF5861";
@@ -1556,6 +1569,7 @@ function ArenaStream() {
 
 function OperatorStrip({
   focused,
+  focusMode,
   address,
   authenticated,
   hadSession,
@@ -1568,6 +1582,9 @@ function OperatorStrip({
   onSignIn,
 }: {
   focused: Agent;
+  // On the overview no target was chosen, so the composer speaks to everyone;
+  // a directed steer only exists once an agent is actually being observed.
+  focusMode: boolean;
   address: string | null;
   authenticated: boolean;
   hadSession: boolean;
@@ -1579,6 +1596,7 @@ function OperatorStrip({
   onInvalidate: () => void;
   onSignIn: () => Promise<void>;
 }) {
+  const pendingSteers = useArenaStore(selectPendingSteersFor(focused.id));
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1653,49 +1671,59 @@ function OperatorStrip({
     >
       <div className="mb-1 flex items-center gap-2 text-[10px] font-bold text-[#FFBE00]">
         <span>🎬 OPERATOR</span>
-        <span className="truncate text-[#00FBFF]/40">focused: {focused.handle}</span>
+        {focusMode ? (
+          <span className="truncate text-[#00FBFF]/40">focused: {focused.handle}</span>
+        ) : (
+          <span className="truncate text-[#FFBE00]/60">→ all agents</span>
+        )}
         <div className="ml-auto flex items-center gap-2">
           <OperatorAddress address={address} />
         </div>
       </div>
       {authenticated ? (
-        <div className="flex items-center gap-1.5">
-          <input
-            value={draft}
-            onChange={event => setDraft(event.target.value)}
-            onKeyDown={event => {
-              if (event.key === "Enter") void send(onSteer);
-            }}
-            disabled={busy || archived}
-            placeholder={archived ? "run ended · controls locked" : "send an operator message…"}
-            className="flex-1 min-w-0 bg-[#00181c] border border-[#00FBFF]/20 rounded px-2 py-1 text-xs text-white placeholder-[#00FBFF]/25 focus:outline-none focus:border-[#FFBE00]/60 disabled:cursor-not-allowed disabled:opacity-55"
-          />
-          <button
-            onClick={() => void send(onSteer)}
-            disabled={busy || archived || !draft.trim()}
-            className="px-2 py-1 rounded border border-[#00FBFF]/40 text-[#00FBFF] text-[10px] font-bold disabled:opacity-40"
-          >
-            STEER
-          </button>
-          <button
-            onClick={() => void send(onBroadcast)}
-            disabled={busy || archived || !draft.trim()}
-            className="px-2 py-1 rounded border border-[#FFBE00]/50 text-[#FFBE00] text-[10px] font-bold disabled:opacity-40"
-          >
-            ALL
-          </button>
-          <button
-            onClick={() => void stop()}
-            disabled={busy || archived}
-            className={`px-2 py-1 rounded border text-[10px] font-bold disabled:opacity-40 ${
-              stopArmed || timeUp
-                ? "animate-pulse border-[#FF5861] bg-[#FF5861] text-black"
-                : "border-[#FF5861]/60 text-[#FF5861]"
-            }`}
-          >
-            {stopArmed ? "CONFIRM STOP" : "STOP"}
-          </button>
-        </div>
+        <>
+          <div className="flex items-center gap-1.5">
+            <input
+              value={draft}
+              onChange={event => setDraft(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === "Enter") void send(focusMode ? onSteer : onBroadcast);
+              }}
+              disabled={busy || archived}
+              placeholder={archived ? "run ended · controls locked" : "message for the next turn…"}
+              className="flex-1 min-w-0 bg-[#00181c] border border-[#00FBFF]/20 rounded px-2 py-1 text-xs text-white placeholder-[#00FBFF]/25 focus:outline-none focus:border-[#FFBE00]/60 disabled:cursor-not-allowed disabled:opacity-55"
+            />
+            {/* One button; the stage picks the target. Cyan when directed at the
+                observed agent, gold when the overview broadcasts to everyone. */}
+            <button
+              onClick={() => void send(focusMode ? onSteer : onBroadcast)}
+              disabled={busy || archived || !draft.trim()}
+              className={`px-2 py-1 rounded border text-[10px] font-bold disabled:opacity-40 ${
+                focusMode ? "border-[#00FBFF]/40 text-[#00FBFF]" : "border-[#FFBE00]/50 text-[#FFBE00]"
+              }`}
+            >
+              SEND
+            </button>
+            <button
+              onClick={() => void stop()}
+              disabled={busy || archived}
+              className={`px-2 py-1 rounded border text-[10px] font-bold disabled:opacity-40 ${
+                stopArmed || timeUp
+                  ? "animate-pulse border-[#FF5861] bg-[#FF5861] text-black"
+                  : "border-[#FF5861]/60 text-[#FF5861]"
+              }`}
+            >
+              {stopArmed ? "CONFIRM STOP" : "STOP"}
+            </button>
+          </div>
+          {focusMode && pendingSteers.length > 0 && (
+            <div className="mt-1 animate-pulse text-[10px] text-[#FFBE00]">
+              {pendingSteers.length === 1
+                ? `◆ queued for ${focused.handle}'s next turn`
+                : `◆ ${pendingSteers.length} queued for ${focused.handle}'s next turn`}
+            </div>
+          )}
+        </>
       ) : address ? (
         <div className="flex items-center gap-2">
           {hadSession && <span className="text-[10px] text-[#FFBE00]/80">operator session expired</span>}
