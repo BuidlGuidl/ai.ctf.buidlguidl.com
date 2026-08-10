@@ -370,7 +370,7 @@ export function ArenaLobby({
           <div className="text-center mb-6">
             <div className="font-dotGothic text-3xl md:text-4xl tracking-widest lobby-title-glow">
               {phase === "idle"
-                ? "GAME NOT STARTED"
+                ? "NO RUN CREATED"
                 : phase === "signature"
                 ? "SEED SIGNATURE REQUIRED"
                 : phase === "preparing"
@@ -378,16 +378,26 @@ export function ArenaLobby({
                 : phase === "funding"
                 ? "WAITING FOR FUNDING"
                 : phase === "ready"
-                ? "ARENA READY"
+                ? "RUN READY"
                 : phase === "launching"
-                ? "ARENA IS LIVE"
+                ? run?.state === "stopping"
+                  ? "RUN STOPPING"
+                  : run?.state === "finished"
+                  ? "RUN FINISHED"
+                  : "RACE RUNNING"
                 : phase === "failed"
-                ? "ARENA START FAILED"
+                ? "RUN FAILED"
                 : "WAITING FOR AGENTS"}
             </div>
             <div className="mt-2 text-sm text-[#00FBFF]/55 tracking-wide">
               {phase === "idle" ? null : phase === "launching" ? (
-                <span className="text-[#00ff9c] animate-pulse">backend confirmed the race is running</span>
+                <span className="text-[#00ff9c] animate-pulse">
+                  {run?.state === "stopping"
+                    ? "the backend is stopping this run"
+                    : run?.state === "finished"
+                    ? "the backend finished this run"
+                    : "the backend confirmed the race is running"}
+                </span>
               ) : phase === "signature" ? (
                 <span className="text-[#FFBE00]">the funder must authorize deterministic agent wallets</span>
               ) : phase === "failed" ? (
@@ -438,7 +448,7 @@ export function ArenaLobby({
                   disabled={!agents.length || !operator.sessionLoaded || !operator.configured || starting}
                   className="lobby-cta group px-10 py-3 rounded-md font-dotGothic text-lg tracking-widest border-2 border-[#00FBFF] text-[#00FBFF] hover:bg-[#00FBFF] hover:text-black transition disabled:opacity-40"
                 >
-                  {starting ? "STARTING…" : operator.authenticated ? "▶ OPEN LOBBY" : "▶ SIGN IN & OPEN LOBBY"}
+                  {starting ? "CREATING RUN…" : operator.authenticated ? "▶ CREATE RUN" : "▶ SIGN IN & CREATE RUN"}
                 </button>
               )}
               {!operator.sessionLoaded ? (
@@ -557,13 +567,15 @@ export function ArenaLobby({
           )}
         </div>
 
-        {/* netcode log */}
+        {/* setup activity log */}
         <div className="hidden md:flex w-[400px] shrink-0 flex-col border-l border-[#00FBFF]/20 bg-[#00090b]/70">
           <div className="px-4 h-11 flex items-center text-base font-bold tracking-widest text-[#00FBFF]/75 border-b border-[#00FBFF]/15 bg-[#001417]">
-            ▤ CONNECTION LOG
+            ▤ SETUP LOG
           </div>
           <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 text-sm leading-snug space-y-1">
-            {log.length === 0 && <div className="text-[#00FBFF]/55 italic">{connectionStatus} · no run events yet</div>}
+            {log.length === 0 && (
+              <div className="text-[#00FBFF]/55 italic">{connectionStatus} · waiting for setup activity…</div>
+            )}
             {log.map(l => (
               <div key={l.id} className="lobby-log-in flex gap-2">
                 <span className="text-[#00FBFF]/55 shrink-0">›</span>
@@ -820,7 +832,7 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
             <div className="text-base text-[#00FBFF]/75 leading-tight">{agent.harness}</div>
           </>
         ) : (
-          <div className="text-base text-[#00FBFF]/55 tracking-widest">{idle ? "AWAITING" : "———"}</div>
+          <div className="text-base text-[#00FBFF]/55 tracking-widest">{idle ? "NOT STARTED" : "———"}</div>
         )}
       </div>
 
