@@ -1650,20 +1650,31 @@ function OperatorStrip({
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [stopArmed, setStopArmed] = useState(false);
-  const [restartArmed, setRestartArmed] = useState(false);
-  const stopArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const restartArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // One arm for both destructive buttons. Two independent ones let you arm STOP,
+  // change your mind, arm and confirm RESTART, and leave STOP live for the rest
+  // of its window — where the next click ends the race outright.
+  const [armed, setArmed] = useState<"stop" | "restart" | null>(null);
+  const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => () => clearTimeout(stopArmTimer.current ?? undefined), []);
-  useEffect(() => () => clearTimeout(restartArmTimer.current ?? undefined), []);
+  const disarm = useCallback(() => {
+    clearTimeout(armTimer.current ?? undefined);
+    setArmed(null);
+  }, []);
 
-  // Leaving the lane must not leave a live arm behind that a later click would
-  // fire at whoever is observed next.
+  const arm = (action: "stop" | "restart") => {
+    clearTimeout(armTimer.current ?? undefined);
+    setArmed(action);
+    armTimer.current = setTimeout(() => setArmed(null), STOP_ARM_MS);
+  };
+
+  useEffect(() => () => clearTimeout(armTimer.current ?? undefined), []);
+
+  // An arm must not outlive the button that took it: switching lanes would aim
+  // it at whoever is observed next, and a run leaving `running` mid-arm would
+  // leave a disabled button pulsing CONFIRM for the rest of the window.
   useEffect(() => {
-    clearTimeout(restartArmTimer.current ?? undefined);
-    setRestartArmed(false);
-  }, [focused.id, focusMode]);
+    disarm();
+  }, [disarm, focused.id, focusMode, restartable, archived]);
 
   const send = async (action: (text: string) => Promise<void>) => {
     const text = draft.trim();
@@ -1685,58 +1696,41 @@ function OperatorStrip({
     }
   };
 
-  // Stopping ends the race for everyone, so it takes two clicks. The arm state
-  // lapses on its own; a native confirm dialog would cover the broadcast.
-  const stop = async () => {
-    if (busy || archived) return;
-    if (!stopArmed) {
-      setStopArmed(true);
-      stopArmTimer.current = setTimeout(() => setStopArmed(false), STOP_ARM_MS);
+  // Both destructive actions take two clicks, and arming one disarms the other.
+  // The arm lapses on its own; a native confirm dialog would cover the broadcast.
+  const confirmed = async (action: "stop" | "restart", run: () => Promise<void>, failure: string) => {
+    if (busy) return;
+    if (armed !== action) {
+      arm(action);
       return;
     }
-    clearTimeout(stopArmTimer.current ?? undefined);
-    setStopArmed(false);
+    disarm();
     setBusy(true);
     setError(null);
     try {
-      await onStop();
+      await run();
     } catch (cause) {
       if (cause instanceof ArenaApiError && cause.status === 401) {
         onInvalidate();
         setError("operator session expired — sign in again");
       } else {
-        setError(cause instanceof Error ? cause.message : "The stop request failed");
+        setError(cause instanceof Error ? cause.message : failure);
       }
     } finally {
       setBusy(false);
     }
   };
 
-  // Throws away everything the agent worked out so far, so it arms like STOP —
-  // except this one only ever hits the observed lane.
+  // Stopping ends the race for everyone.
+  const stop = async () => {
+    if (archived) return;
+    await confirmed("stop", onStop, "The stop request failed");
+  };
+
+  // Throws away everything the agent worked out so far, but only on this lane.
   const restart = async () => {
-    if (busy || archived || !restartable) return;
-    if (!restartArmed) {
-      setRestartArmed(true);
-      restartArmTimer.current = setTimeout(() => setRestartArmed(false), STOP_ARM_MS);
-      return;
-    }
-    clearTimeout(restartArmTimer.current ?? undefined);
-    setRestartArmed(false);
-    setBusy(true);
-    setError(null);
-    try {
-      await onRestart();
-    } catch (cause) {
-      if (cause instanceof ArenaApiError && cause.status === 401) {
-        onInvalidate();
-        setError("operator session expired — sign in again");
-      } else {
-        setError(cause instanceof Error ? cause.message : "The restart request failed");
-      }
-    } finally {
-      setBusy(false);
-    }
+    if (archived || !restartable) return;
+    await confirmed("restart", onRestart, "The restart request failed");
   };
 
   const signIn = async () => {
@@ -1799,24 +1793,24 @@ function OperatorStrip({
                 disabled={busy || archived || !restartable}
                 title={`drop ${focused.handle}'s session and re-feed its opening prompt`}
                 className={`shrink-0 whitespace-nowrap rounded border px-2 py-1 text-[10px] font-bold disabled:opacity-40 ${
-                  restartArmed
+                  armed === "restart"
                     ? "animate-pulse border-[#FFBE00] bg-[#FFBE00] text-black"
                     : "border-[#FFBE00]/50 text-[#FFBE00]"
                 }`}
               >
-                {restartArmed ? "CONFIRM RESTART" : "RESTART"}
+                {armed === "restart" ? "CONFIRM RESTART" : "RESTART"}
               </button>
             )}
             <button
               onClick={() => void stop()}
               disabled={busy || archived}
               className={`px-2 py-1 rounded border text-[10px] font-bold disabled:opacity-40 ${
-                stopArmed || timeUp
+                armed === "stop" || timeUp
                   ? "animate-pulse border-[#FF5861] bg-[#FF5861] text-black"
                   : "border-[#FF5861]/60 text-[#FF5861]"
               }`}
             >
-              {stopArmed ? "CONFIRM STOP" : "STOP"}
+              {armed === "stop" ? "CONFIRM STOP" : "STOP"}
             </button>
           </div>
           {focusMode && pendingSteers.length > 0 && (
