@@ -365,11 +365,22 @@ export function ArenaLobby({
     if (!run || run.state !== "created") return;
     setStarting(true);
     setError(null);
+    setBlockingRun(null);
     try {
       if (!operator.authenticated) await operator.signIn();
       const started = await arenaClient.startRun(run.id);
       useArenaStore.getState().syncSnapshot(started);
     } catch (cause) {
+      // Losing the race for the active slot is how a run ends up here in the
+      // first place, so the retry can lose it again — and needs the same box
+      // naming the blocker. The run stays in the URL: it is still `created`,
+      // and this screen is still its screen.
+      const conflict = activeRunConflict(cause);
+      if (conflict) {
+        setBlockingRun(conflict);
+        pushLog(`start blocked by run ${conflict.id}`, RED);
+        return;
+      }
       const message = cause instanceof Error ? cause.message : "Could not start the run";
       setError(message);
       pushLog(message, RED);

@@ -217,13 +217,19 @@ function ArenaScreen() {
   // back to it with the browser has to move the page with it. Every reset for a
   // change of run lives here, so there is one path in and out of a run.
   const routeRunId = route.runId;
-  const connectedRunId = useRef<string | null>(null);
+  // `undefined`, not `null`: the store outlives the page, so a mount that names
+  // no run still has to run and drop whatever the last one left behind.
+  const connectedRunId = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     if (routeRunId === connectedRunId.current) return;
     connectedRunId.current = routeRunId;
+    // The old run goes before the new one is named. Keeping it until the next
+    // snapshot lands would leave the page showing — and the operator steering —
+    // a run the URL has already left, and would hide a 404 on the new one behind
+    // the old one's id.
     const store = useArenaStore.getState();
+    store.clear();
     if (routeRunId) store.setCurrentRunId(routeRunId);
-    else store.clear();
     setLiveStarted(false);
     setCeremonyReady(false);
     podiumShown.current = false;
@@ -251,6 +257,9 @@ function ArenaScreen() {
   const allFinished = runState === "finished";
   const runFailed = runState === "failed";
   const runTerminal = allFinished || runFailed;
+  // Only while the race is actually running: a run already stopping takes no
+  // second stop, and the backend answers the retry with an error.
+  const canStopRace = (operator.authenticated || operator.hadSession) && runState === "running";
   const clock = useArenaClock(runStartedAt, runDeadlineAt, runState, runFinishedAt);
 
   useEffect(() => {
@@ -396,7 +405,7 @@ function ArenaScreen() {
         agentCount={agents.length}
         connectionStatus={connectionStatus}
         onViewResults={allFinished ? () => setView("results") : undefined}
-        onStop={(operator.authenticated || operator.hadSession) && !runTerminal ? stopRace : undefined}
+        onStop={canStopRace ? stopRace : undefined}
       />
 
       {stopError && (
