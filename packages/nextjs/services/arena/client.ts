@@ -4,6 +4,7 @@ import type {
   CreateRunRequest,
   HistoryPage,
   NonceResponse,
+  RestartResponse,
   RunResponse,
   RunSnapshot,
   SessionResponse,
@@ -66,9 +67,16 @@ export const arenaClient = {
     runFetch(`/runs/${encodeURIComponent(runId)}/seed`, { method: "POST", body }),
   stopRun: (runId: string) => runFetch(`/runs/${encodeURIComponent(runId)}/stop`, { method: "POST" }),
   steerEntrant: (runId: string, entrantId: string, body: SteerRequest) =>
-    arenaFetch<SteerResponse>(
-      `/runs/${encodeURIComponent(runId)}/entrants/${encodeURIComponent(entrantId)}/steer`,
-      { method: "POST", body },
+    arenaFetch<SteerResponse>(`/runs/${encodeURIComponent(runId)}/entrants/${encodeURIComponent(entrantId)}/steer`, {
+      method: "POST",
+      body,
+    }),
+  restartEntrant: (runId: string, entrantId: string) =>
+    arenaFetch<RestartResponse>(
+      `/runs/${encodeURIComponent(runId)}/entrants/${encodeURIComponent(entrantId)}/restart`,
+      {
+        method: "POST",
+      },
     ),
   broadcast: (runId: string, body: BroadcastRequest) =>
     arenaFetch<BroadcastResponse>(`/runs/${encodeURIComponent(runId)}/broadcast`, { method: "POST", body }),
