@@ -757,7 +757,7 @@ function FundingRow({
         {formatEther(balance ?? 0n)} ETH
       </span>
 
-      <span className="lobby-funding-status w-52 shrink-0 text-right text-sm font-bold tracking-widest">
+      <span className="lobby-funding-status w-52 shrink-0 whitespace-nowrap text-right text-sm font-bold tracking-widest">
         {status === "funded" ? (
           <span style={{ color: GREEN }}>FUNDED ✓</span>
         ) : status === "partial" ? (
@@ -1014,7 +1014,7 @@ function LobbyStyles() {
           font-size: 0.75rem;
         }
         .lobby-funding-status {
-          width: 9rem;
+          width: 12rem;
           font-size: 0.75rem;
         }
       }
