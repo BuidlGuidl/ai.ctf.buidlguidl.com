@@ -32,6 +32,7 @@ const GREEN = "#00ff9c";
 const YELLOW = "#FFBE00";
 const RED = "#FF5861";
 const STOP_ARM_MS = 6000;
+const STOP_CONFIRM_DWELL_MS = 400;
 
 function shortAddress(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
@@ -92,9 +93,10 @@ export function ArenaLobby({
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
   const logId = useRef(0);
-  const restoredLiveRun = useRef(run?.state === "running" || run?.state === "finished");
+  const restoredLiveRun = useRef(run?.state === "running" || run?.state === "stopping" || run?.state === "finished");
   const lastRunState = useRef<string | null>(null);
   const stopArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stopArmedAt = useRef(0);
 
   const operator = useOperatorSession();
   const needsWallet = !operator.authenticated && !operator.address;
@@ -106,6 +108,14 @@ export function ArenaLobby({
     run?.state === "ready";
 
   useEffect(() => () => clearTimeout(stopArmTimer.current ?? undefined), []);
+
+  useEffect(() => {
+    if (canStopRun) return;
+    setStopArmed(false);
+    stopArmedAt.current = 0;
+    clearTimeout(stopArmTimer.current ?? undefined);
+    stopArmTimer.current = null;
+  }, [canStopRun]);
 
   const phase: Phase = !run
     ? starting
@@ -284,16 +294,19 @@ export function ArenaLobby({
         roster: [...ROSTER],
         durationMs: Math.round(minutes * 60_000),
       });
-      pushLog(`created run ${created.id}`, GREEN);
-      const started = await arenaClient.startRun(created.id);
-      useArenaStore.getState().syncSnapshot(started);
       const url = new URL(window.location.href);
       url.searchParams.set("run", created.id);
       window.history.replaceState(null, "", url);
+      pushLog(`created run ${created.id}`, GREEN);
+      const started = await arenaClient.startRun(created.id);
+      useArenaStore.getState().syncSnapshot(started);
       pushLog(`started run ${created.id}`, GREEN);
     } catch (cause) {
       const conflict = activeRunConflict(cause);
       if (conflict) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("run");
+        window.history.replaceState(null, "", url);
         setBlockingRun(conflict);
         pushLog(`start blocked by run ${conflict.id}`, RED);
         return;
@@ -329,27 +342,39 @@ export function ArenaLobby({
     if (!run || !canStopRun || stoppingRun) return;
     if (!stopArmed) {
       setStopArmed(true);
+      stopArmedAt.current = Date.now();
       stopArmTimer.current = setTimeout(() => setStopArmed(false), STOP_ARM_MS);
       return;
     }
+    if (Date.now() - stopArmedAt.current < STOP_CONFIRM_DWELL_MS) return;
     clearTimeout(stopArmTimer.current ?? undefined);
     setStopArmed(false);
+    stopArmedAt.current = 0;
     setStoppingRun(true);
     setError(null);
     setBlockingRun(null);
     try {
       if (!operator.authenticated) await operator.signIn();
-      await arenaClient.stopRun(run.id);
-      onStartOver();
+      const stopped = await arenaClient.stopRun(run.id);
+      // A stopped run that reports `stopping` is winding down, not launching;
+      // suppress the countdown ceremony the phase mapping would trigger.
+      restoredLiveRun.current = true;
+      useArenaStore.getState().syncSnapshot(stopped);
       pushLog(`stopped run ${run.id}`, GREEN);
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : "Could not stop the arena run";
-      setError(message);
-      pushLog(message, RED);
+      if (cause instanceof ArenaApiError && cause.status === 401) {
+        operator.invalidate();
+        setError("operator session expired — sign in again");
+        pushLog("operator session expired — sign in again", RED);
+      } else {
+        const message = cause instanceof Error ? cause.message : "Could not stop the arena run";
+        setError(message);
+        pushLog(message, RED);
+      }
     } finally {
       setStoppingRun(false);
     }
-  }, [canStopRun, onStartOver, operator, pushLog, run, stopArmed, stoppingRun]);
+  }, [canStopRun, operator, pushLog, run, stopArmed, stoppingRun]);
 
   useEffect(() => {
     if (phase !== "launching") return;
@@ -510,13 +535,19 @@ export function ArenaLobby({
             <div className="mb-4 max-w-3xl rounded border border-[#FF5861]/40 bg-[#FF5861]/10 px-3 py-2 text-xs text-[#FF5861]">
               {blockingRun ? (
                 <>
-                  <div>
-                    run {shortAddress(blockingRun.id)} is already {blockingRun.state.replaceAll("_", " ")}
-                  </div>
+                  <div>run is already {blockingRun.state.replaceAll("_", " ")}</div>
+                  <code className="mt-1 block break-words text-[#FFBE00]">{blockingRun.id}</code>
                   <div className="mt-1">
                     <a
                       href={`/arena?run=${encodeURIComponent(blockingRun.id)}`}
-                      title={blockingRun.id}
+                      onClick={event => {
+                        event.preventDefault();
+                        setBlockingRun(null);
+                        useArenaStore.getState().setCurrentRunId(blockingRun.id);
+                        const url = new URL(window.location.href);
+                        url.searchParams.set("run", blockingRun.id);
+                        window.history.replaceState(null, "", url);
+                      }}
                       className="font-bold underline underline-offset-2 hover:text-white"
                     >
                       open that run
@@ -618,7 +649,7 @@ export function ArenaLobby({
                 ◀ START OVER
               </button>
             )}
-            {canStopRun && (
+            {canStopRun && (operator.authenticated || operator.hadSession) && (
               <button
                 onClick={() => void stopLoadedRun()}
                 disabled={stoppingRun}

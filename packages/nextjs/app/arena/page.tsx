@@ -62,6 +62,7 @@ const PODIUM = {
 // `podiumBroadcast` keyframes so the banner is never cut off mid-animation.
 const FINISH_STING_MS = 4600;
 const STOP_ARM_MS = 6000;
+const STOP_CONFIRM_DWELL_MS = 400;
 
 const PODIUM_RESULT: Record<PodiumPlace, string> = {
   1: "ARENA CHAMPION",
@@ -1599,6 +1600,7 @@ function OperatorStrip({
   const [error, setError] = useState<string | null>(null);
   const [stopArmed, setStopArmed] = useState(false);
   const stopArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stopArmedAt = useRef(0);
 
   useEffect(() => () => clearTimeout(stopArmTimer.current ?? undefined), []);
 
@@ -1628,11 +1630,14 @@ function OperatorStrip({
     if (busy || archived) return;
     if (!stopArmed) {
       setStopArmed(true);
+      stopArmedAt.current = Date.now();
       stopArmTimer.current = setTimeout(() => setStopArmed(false), STOP_ARM_MS);
       return;
     }
+    if (Date.now() - stopArmedAt.current < STOP_CONFIRM_DWELL_MS) return;
     clearTimeout(stopArmTimer.current ?? undefined);
     setStopArmed(false);
+    stopArmedAt.current = 0;
     setBusy(true);
     setError(null);
     try {
