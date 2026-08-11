@@ -62,6 +62,7 @@ const PODIUM = {
 // `podiumBroadcast` keyframes so the banner is never cut off mid-animation.
 const FINISH_STING_MS = 4600;
 const STOP_ARM_MS = 6000;
+const STOP_CONFIRM_DWELL_MS = 400;
 
 const PODIUM_RESULT: Record<PodiumPlace, string> = {
   1: "ARENA CHAMPION",
@@ -1654,20 +1655,38 @@ function OperatorStrip({
   // change your mind, arm and confirm RESTART, and leave STOP live for the rest
   // of its window — where the next click ends the race outright.
   const [armed, setArmed] = useState<"stop" | "restart" | null>(null);
+  // The confirm stays disabled for a beat after arming so a double-click's
+  // second click cannot reach it.
+  const [confirmDisabled, setConfirmDisabled] = useState(false);
   const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const disarm = useCallback(() => {
     clearTimeout(armTimer.current ?? undefined);
+    clearTimeout(confirmTimer.current ?? undefined);
     setArmed(null);
+    setConfirmDisabled(false);
   }, []);
 
   const arm = (action: "stop" | "restart") => {
     clearTimeout(armTimer.current ?? undefined);
+    clearTimeout(confirmTimer.current ?? undefined);
     setArmed(action);
+    setConfirmDisabled(true);
+    confirmTimer.current = setTimeout(() => {
+      setConfirmDisabled(false);
+      confirmTimer.current = null;
+    }, STOP_CONFIRM_DWELL_MS);
     armTimer.current = setTimeout(() => setArmed(null), STOP_ARM_MS);
   };
 
-  useEffect(() => () => clearTimeout(armTimer.current ?? undefined), []);
+  useEffect(
+    () => () => {
+      clearTimeout(armTimer.current ?? undefined);
+      clearTimeout(confirmTimer.current ?? undefined);
+    },
+    [],
+  );
 
   // An arm must not outlive the button that took it: switching lanes would aim
   // it at whoever is observed next, and a run leaving `running` mid-arm would
@@ -1704,6 +1723,7 @@ function OperatorStrip({
       arm(action);
       return;
     }
+    if (confirmDisabled) return;
     disarm();
     setBusy(true);
     setError(null);
@@ -1790,7 +1810,7 @@ function OperatorStrip({
             {focusMode && (
               <button
                 onClick={() => void restart()}
-                disabled={busy || archived || !restartable}
+                disabled={busy || archived || !restartable || (armed === "restart" && confirmDisabled)}
                 title={`drop ${focused.handle}'s session and re-feed its opening prompt`}
                 className={`shrink-0 whitespace-nowrap rounded border px-2 py-1 text-[10px] font-bold disabled:opacity-40 ${
                   armed === "restart"
@@ -1803,7 +1823,7 @@ function OperatorStrip({
             )}
             <button
               onClick={() => void stop()}
-              disabled={busy || archived}
+              disabled={busy || archived || (armed === "stop" && confirmDisabled)}
               className={`px-2 py-1 rounded border text-[10px] font-bold disabled:opacity-40 ${
                 armed === "stop" || timeUp
                   ? "animate-pulse border-[#FF5861] bg-[#FF5861] text-black"

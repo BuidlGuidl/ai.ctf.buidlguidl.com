@@ -20,7 +20,7 @@ export const ARENA_BACKEND_URL = (process.env.NEXT_PUBLIC_ARENA_BACKEND_URL || "
 );
 
 export class ArenaApiError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(public readonly status: number, message: string, public readonly body: unknown = null) {
     super(message);
     this.name = "ArenaApiError";
   }
@@ -43,7 +43,7 @@ async function arenaFetch<T>(path: string, options: RequestOptions = {}): Promis
     const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
     const message =
       typeof body?.error === "string" ? body.error : `Arena request failed with status ${response.status}`;
-    throw new ArenaApiError(response.status, message);
+    throw new ArenaApiError(response.status, message, body);
   }
 
   if (response.status === 204) return undefined as T;
