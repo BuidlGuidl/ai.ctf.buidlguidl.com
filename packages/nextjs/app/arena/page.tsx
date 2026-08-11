@@ -313,7 +313,11 @@ export default function ArenaPage() {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-black text-[#00FBFF] font-mono overflow-hidden arena-root">
+    <div
+      className={`fixed inset-0 z-[60] flex flex-col bg-black text-[#00FBFF] font-mono overflow-hidden arena-root ${
+        overviewTab === "grid" ? "arena-grid-mode" : ""
+      }`}
+    >
       <Scanlines />
       <TopBar
         clock={clock.seconds}
@@ -342,15 +346,15 @@ export default function ArenaPage() {
         </div>
       )}
 
-      <div className="flex flex-col flex-1 min-h-0">
-        <div className="flex flex-1 min-h-0">
+      <div className="arena-content flex flex-col flex-1 min-h-0">
+        <div className="arena-stage-row flex flex-1 min-h-0">
           {/* MAIN STAGE — always the wide shot, so observing an agent never hides the race */}
           <div
             className={`flex flex-col flex-1 min-w-0 ${
               gridUsesFullWidth ? "2xl:border-r 2xl:border-[#00FBFF]/20" : "border-r border-[#00FBFF]/20"
             }`}
           >
-            <div className="flex-1 min-h-0 relative p-4">
+            <div className="arena-main-stage-padding flex-1 min-h-0 relative p-4">
               <div className="h-full flex flex-col border border-[#00FBFF]/25 rounded-lg bg-[#020a0c]/80 overflow-hidden shadow-[0_0_40px_-12px_rgba(0,251,255,0.4)]">
                 <StageTabs tab={overviewTab} onTab={setOverviewTab} />
                 <OverviewStage ranked={ranked} tab={overviewTab} onPick={goFocus} flashes={flashes} />
@@ -359,7 +363,11 @@ export default function ArenaPage() {
           </div>
 
           {/* RIGHT COLUMN — the unified arena stream; the observed agent's log takes over here */}
-          <div className={`w-[520px] flex-col min-h-0 min-w-0 ${gridUsesFullWidth ? "hidden 2xl:flex" : "flex"}`}>
+          <div
+            className={`arena-right-rail w-[520px] flex-col min-h-0 min-w-0 ${
+              gridUsesFullWidth ? "hidden 2xl:flex" : "flex"
+            }`}
+          >
             {stageMode === "focus" ? <AgentLog focused={focused} onClose={closeLog} /> : <ArenaStream />}
             {/* Run URLs are spectator-shareable, so the strip only shows for someone
                 who is (or was, mid-race) the operator — never as a sign-in invitation. */}
@@ -385,9 +393,9 @@ export default function ArenaPage() {
             with terminals and no standings, so the race track runs along the bottom
             there; the race stage keeps the challenge board instead. */}
         {overviewTab === "grid" ? (
-          <div className="shrink-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#010607]">
+          <div className="arena-grid-race-strip shrink-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#010607]">
             <SectionHead label="RACE" hint="showing top 5 · scroll for all" />
-            <div className="h-[190px] overflow-y-auto console-scroll">
+            <div className="arena-grid-race-scroll h-[190px] overflow-y-auto console-scroll">
               <RaceView ranked={ranked} onPick={goFocus} flashes={flashes} compact />
             </div>
           </div>
@@ -700,9 +708,9 @@ function TopBar({
   onViewResults?: () => void;
 }) {
   return (
-    <div className="flex items-center gap-4 px-5 h-16 border-b border-[#00FBFF]/25 bg-gradient-to-r from-[#020808] to-[#001014] shrink-0">
+    <div className="arena-top-bar flex items-center gap-4 px-5 h-16 border-b border-[#00FBFF]/25 bg-gradient-to-r from-[#020808] to-[#001014] shrink-0">
       <span
-        className={`flex items-center gap-2 font-bold tracking-widest ${
+        className={`arena-live-status flex items-center gap-2 font-bold tracking-widest ${
           allFinished ? "text-[#00ff9c]" : "text-[#FF5861]"
         }`}
       >
@@ -713,7 +721,7 @@ function TopBar({
         />
         {allFinished ? "LOCKED" : runFailed ? "FAILED" : "LIVE"}
       </span>
-      <div className="hidden sm:block font-dotGothic text-xl md:text-2xl text-[#00FBFF] tracking-wide title-glow">
+      <div className="arena-topbar-title hidden sm:block font-dotGothic text-xl md:text-2xl text-[#00FBFF] tracking-wide title-glow">
         BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · AGENT ARENA
       </div>
       <div className="hidden 2xl:flex items-center gap-1 text-sm text-[#00FBFF]/70">
@@ -725,7 +733,7 @@ function TopBar({
           TIME&apos;S UP · OPERATOR: STOP THE RACE
         </span>
       )}
-      <div className="ml-auto flex items-center gap-4 text-lg">
+      <div className="arena-topbar-metrics ml-auto flex items-center gap-4 text-lg">
         {onViewResults && (
           <button
             onClick={onViewResults}
@@ -740,9 +748,11 @@ function TopBar({
         <span className={finishedCount ? "text-[#00ff9c] font-bold" : "text-[#00FBFF]/70"}>
           ◆ {finishedCount}/{agentCount}
         </span>
-        <span className="hidden xl:inline text-sm uppercase tracking-wider text-[#00FBFF]/55">{connectionStatus}</span>
+        <span className="arena-topbar-connection hidden xl:inline text-sm uppercase tracking-wider text-[#00FBFF]/55">
+          {connectionStatus}
+        </span>
         {/* The race clock is the one number the stream never stops reading. */}
-        <span className={`text-3xl tabular-nums font-bold ${timeUp ? "text-[#FF5861]" : "text-[#FFBE00]"}`}>
+        <span className={`arena-clock text-3xl tabular-nums font-bold ${timeUp ? "text-[#FF5861]" : "text-[#FFBE00]"}`}>
           ⏱ {fmtClock(clock)}
         </span>
         <RainbowKitCustomConnectButton />
@@ -760,14 +770,14 @@ const STAGE_TABS: { id: OverviewTab; label: string }[] = [
 
 function StageTabs({ tab, onTab }: { tab: OverviewTab; onTab: (t: OverviewTab) => void }) {
   return (
-    <div className="flex items-center gap-2 px-4 h-12 border-b border-[#00FBFF]/20 bg-[#001417] shrink-0">
-      <span className="font-dotGothic text-lg text-[#00FBFF]/70 mr-2">WIDE SHOT</span>
+    <div className="arena-stage-tabs flex items-center gap-2 px-4 h-12 border-b border-[#00FBFF]/20 bg-[#001417] shrink-0">
+      <span className="arena-stage-label font-dotGothic text-lg text-[#00FBFF]/70 mr-2">WIDE SHOT</span>
       {STAGE_TABS.map(t => (
         <button
           key={t.id}
           onClick={() => onTab(t.id)}
           title={t.label}
-          className={`px-3 py-1 rounded text-sm font-bold tracking-wider transition ${
+          className={`arena-stage-tab px-3 py-1 rounded text-sm font-bold tracking-wider transition ${
             tab === t.id
               ? "bg-[#00FBFF]/15 text-[#00FBFF] border border-[#00FBFF]/50"
               : "text-[#00FBFF]/60 border border-transparent hover:text-[#00FBFF]"
@@ -776,7 +786,7 @@ function StageTabs({ tab, onTab }: { tab: OverviewTab; onTab: (t: OverviewTab) =
           {t.label}
         </button>
       ))}
-      <span className="ml-auto text-sm text-[#00FBFF]/55">click any agent → observe its log ▸</span>
+      <span className="arena-stage-hint ml-auto text-sm text-[#00FBFF]/55">click any agent → observe its log ▸</span>
     </div>
   );
 }
@@ -795,7 +805,7 @@ function AgentLog({ focused, onClose }: { focused: Agent; onClose: () => void })
   const finished = focused.status === "done";
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#020a0c]">
+    <div className="arena-agent-log flex-1 min-h-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#020a0c]">
       {/* Two rows, not one: at broadcast sizes the badges crowd the handle off
           the end of a single line, and the observed agent's name is the whole
           point of this panel. */}
@@ -1035,20 +1045,30 @@ function RaceView({
   useEffect(() => () => void (stingTimer.current && clearTimeout(stingTimer.current)), []);
 
   return (
-    <div className={`relative ${compact ? "p-2 space-y-[2px]" : "p-3 space-y-1"}`}>
+    <div
+      className={`arena-race-view relative ${compact ? "arena-race-view-compact p-2 space-y-[2px]" : "p-3 space-y-1"}`}
+    >
       {sting && <RaceFinishSting key={sting.key} agent={sting.agent} place={sting.place} />}
 
       {/* ruler — one column per flag minted, in capture order */}
-      <div className={`flex items-center ${rowGap} px-2 pb-1`}>
-        <span className="w-10 shrink-0" />
+      <div className={`arena-race-ruler flex items-center ${rowGap} px-2 pb-1`}>
+        <span className="arena-race-rank w-10 shrink-0" />
         <span className="w-4 shrink-0" />
         <span className={`${compact ? "w-7" : "w-8"} shrink-0`} />
-        <span className={`${compact ? "w-56" : "w-[300px]"} shrink-0 ${dataText} tracking-widest text-[#00FBFF]/55`}>
+        <span
+          className={`arena-race-agent-column ${
+            compact ? "w-56" : "w-[300px]"
+          } shrink-0 ${dataText} tracking-widest text-[#00FBFF]/55`}
+        >
           AGENT · MINTS →
         </span>
-        <span className={`w-16 shrink-0 text-right ${dataText} tracking-widest text-[#00FBFF]/55`}>TOK</span>
-        <span className={`w-20 shrink-0 text-right ${dataText} tracking-widest text-[#00FBFF]/55`}>COST</span>
-        <div className="flex-1 flex gap-1">
+        <span className={`arena-race-tokens w-16 shrink-0 text-right ${dataText} tracking-widest text-[#00FBFF]/55`}>
+          TOK
+        </span>
+        <span className={`arena-race-cost w-20 shrink-0 text-right ${dataText} tracking-widest text-[#00FBFF]/55`}>
+          COST
+        </span>
+        <div className="arena-race-flags flex-1 flex gap-1">
           {slots.map(k => (
             <span
               key={k}
@@ -1059,7 +1079,9 @@ function RaceView({
             </span>
           ))}
         </div>
-        <span className={`w-28 shrink-0 text-right ${dataText} tracking-widest text-[#00FBFF]/55`}>RESULT</span>
+        <span className={`arena-race-result w-28 shrink-0 text-right ${dataText} tracking-widest text-[#00FBFF]/55`}>
+          RESULT
+        </span>
       </div>
 
       {ranked.map((a, i) => {
@@ -1086,7 +1108,7 @@ function RaceView({
                 onPick(a.id);
               }
             }}
-            className={`relative w-full flex items-center ${rowGap} px-2 ${
+            className={`arena-race-row relative w-full flex items-center ${rowGap} px-2 ${
               compact ? "py-0.5" : "py-2"
             } rounded hover:bg-[#00FBFF]/5 will-change-transform text-left group cursor-pointer ${
               leadTaker === a.id ? "lead-take" : ""
@@ -1104,7 +1126,7 @@ function RaceView({
               />
             )}
             <span
-              className={`flex w-10 shrink-0 items-center justify-center text-center ${numText} font-bold tabular-nums ${
+              className={`arena-race-rank flex w-10 shrink-0 items-center justify-center text-center ${numText} font-bold tabular-nums ${
                 place
                   ? ""
                   : done(a)
@@ -1134,20 +1156,22 @@ function RaceView({
             <StatusDot status={a.status} />
             <AgentBlockieLink agent={a} compact={compact} />
             <span
-              className={`${compact ? "w-56 text-base" : "w-[300px] text-2xl"} truncate font-bold text-white shrink-0`}
+              className={`arena-race-agent-column ${
+                compact ? "w-56 text-base" : "w-[300px] text-2xl"
+              } truncate font-bold text-white shrink-0`}
               title={`${a.harness} + ${a.model}${a.effort ? ` · ${a.effort}` : ""}`}
             >
               <ModelName name={a.handle} effort={a.effort} />
             </span>
-            <span className={`w-16 text-right ${dataText} tabular-nums shrink-0 text-[#00FBFF]/75`}>
+            <span className={`arena-race-tokens w-16 text-right ${dataText} tabular-nums shrink-0 text-[#00FBFF]/75`}>
               {fmtTokens(a.tokens)}
             </span>
-            <span className={`w-20 text-right ${dataText} tabular-nums shrink-0 text-[#FFBE00]/90`}>
+            <span className={`arena-race-cost w-20 text-right ${dataText} tabular-nums shrink-0 text-[#FFBE00]/90`}>
               {a.cost === null ? "—" : `$${a.cost.toFixed(2)}`}
             </span>
 
             {/* The backend reports captures but not each entrant's active challenge. */}
-            <div className="flex-1 flex gap-1">
+            <div className="arena-race-flags flex-1 flex gap-1">
               {slots.map(k => {
                 const flagId = a.solved[k];
                 if (flagId !== undefined) {
@@ -1157,7 +1181,7 @@ function RaceView({
                     <span
                       key={k}
                       title={`#${flagId} ${ch?.name ?? ""} · minted ${k + 1} of ${total}`}
-                      className={`relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums transition-colors ${
+                      className={`arena-race-cell relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums transition-colors ${
                         flashing ? "flag-pop" : ""
                       }`}
                       style={{ background: a.color, borderColor: a.color, color: "#00181c" }}
@@ -1172,7 +1196,7 @@ function RaceView({
                     <span
                       key={k}
                       title={STATUS_STYLE[a.status].label}
-                      className={`relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums ${
+                      className={`arena-race-cell relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums ${
                         a.status === "working" ? "cell-working" : "opacity-40"
                       }`}
                       style={{ background: `${color}1f`, borderColor: color, color }}
@@ -1185,14 +1209,14 @@ function RaceView({
                   <span
                     key={k}
                     title="flag not minted yet"
-                    className={`relative flex-1 ${cellH} rounded-[3px] border`}
+                    className={`arena-race-cell relative flex-1 ${cellH} rounded-[3px] border`}
                     style={{ background: "#00fbff08", borderColor: "#00fbff1a" }}
                   />
                 );
               })}
             </div>
 
-            <span className={`w-28 text-right ${numText} tabular-nums shrink-0 text-[#00FBFF]/85`}>
+            <span className={`arena-race-result w-28 text-right ${numText} tabular-nums shrink-0 text-[#00FBFF]/85`}>
               {done(a) ? (
                 <span className="agent-finish-time font-bold" style={{ color: podium?.tone ?? "#00ff9c" }}>
                   ◆ {fmtClock(a.finishedAt ?? 0)}
@@ -1338,9 +1362,9 @@ function ChallengeBoard({
 }) {
   const solvedCount = (id: number) => agents.filter(a => a.solved.includes(id)).length;
   return (
-    <div className="h-56 shrink-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#010607]">
+    <div className="arena-challenge-board h-56 shrink-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#010607]">
       <SectionHead label="CHALLENGE BOARD" hint="click for details" />
-      <div className="flex-1 min-h-0 overflow-y-auto console-scroll p-2 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-1.5 content-start">
+      <div className="arena-challenge-grid flex-1 min-h-0 overflow-y-auto console-scroll p-2 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-1.5 content-start">
         {CHALLENGES.map(c => {
           const mine = focused.solved.includes(c.id);
           const count = solvedCount(c.id);
@@ -1348,7 +1372,7 @@ function ChallengeBoard({
             <button
               key={c.id}
               onClick={() => onOpen(c.id)}
-              className={`px-2 py-1.5 rounded border text-base text-left transition hover:border-[#00FBFF] ${
+              className={`arena-challenge-card px-2 py-1.5 rounded border text-base text-left transition hover:border-[#00FBFF] ${
                 mine ? "bg-[#00ff9c]/10 border-[#00ff9c]/50" : "border-[#00FBFF]/15 bg-[#00FBFF]/[0.02]"
               }`}
             >
@@ -1533,8 +1557,8 @@ function ArenaStream() {
   }, [newestRowId]);
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-[#010607]">
-      <div className="flex items-center gap-2 px-3 h-11 border-b border-[#00FBFF]/15 bg-[#00141733] shrink-0">
+    <div className="arena-stream flex-1 min-h-0 flex flex-col bg-[#010607]">
+      <div className="arena-stream-header flex items-center gap-2 px-3 h-11 border-b border-[#00FBFF]/15 bg-[#00141733] shrink-0">
         <span className="text-base font-bold text-[#00FBFF] tracking-widest">ARENA</span>
         <div className="ml-auto flex items-center gap-1">
           {STREAM_FILTERS.map(f => (
@@ -1553,7 +1577,10 @@ function ArenaStream() {
         </div>
       </div>
 
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto console-scroll px-3 py-1.5 text-base space-y-1">
+      <div
+        ref={scrollRef}
+        className="arena-stream-lines flex-1 min-h-0 overflow-y-auto console-scroll px-3 py-1.5 text-base space-y-1"
+      >
         {rows.length === 0 && <div className="text-[#00FBFF]/50 italic">waiting for real arena events…</div>}
         {rows.map(r =>
           r.group === "chat" ? <ChatRow key={r.id} msg={r.msg} /> : <FeedRow key={r.id} item={r.item} />,
@@ -1658,7 +1685,9 @@ function OperatorStrip({
 
   return (
     <div
-      className={`shrink-0 border-t px-2 py-2 ${timeUp ? "border-[#FF5861] bg-[#FF5861]/10" : "border-[#00FBFF]/15"}`}
+      className={`arena-operator-strip shrink-0 border-t px-2 py-2 ${
+        timeUp ? "border-[#FF5861] bg-[#FF5861]/10" : "border-[#00FBFF]/15"
+      }`}
     >
       <div className="mb-1 flex items-center gap-2 text-sm font-bold text-[#FFBE00]">
         <span>🎬 OPERATOR</span>
@@ -1803,7 +1832,9 @@ function StatusDot({ status }: { status: AgentStatus }) {
   return (
     <span
       title={s.label}
-      className={`w-4 shrink-0 text-center text-sm leading-none ${status === "blocked" ? "blocked-pulse" : ""}`}
+      className={`arena-status-dot w-4 shrink-0 text-center text-sm leading-none ${
+        status === "blocked" ? "blocked-pulse" : ""
+      }`}
       style={{ color: s.color }}
     >
       {s.glyph}
@@ -1836,7 +1867,9 @@ function StatusChip({ status }: { status: AgentStatus }) {
 function AgentBlockieLink({ agent, compact }: { agent: Agent; compact?: boolean }) {
   const { targetNetwork } = useTargetNetwork();
   const runChainId = useArenaStore(selectRunChainId);
-  const className = `${compact ? "w-6 h-6" : "w-8 h-8"} shrink-0 rounded overflow-hidden transition`;
+  const className = `arena-agent-blockie ${
+    compact ? "w-6 h-6" : "w-8 h-8"
+  } shrink-0 rounded overflow-hidden transition`;
   const badge = agent.address ? (
     <BlockieAvatar address={agent.address} ensImage={null} size={compact ? 24 : 32} />
   ) : (
@@ -1876,7 +1909,7 @@ function AgentBlockieLink({ agent, compact }: { agent: Agent; compact?: boolean 
 
 function SectionHead({ label, hint }: { label: string; hint?: string }) {
   return (
-    <div className="flex items-center gap-2 px-3 h-10 border-b border-[#00FBFF]/15 bg-[#00141733] shrink-0">
+    <div className="arena-section-head flex items-center gap-2 px-3 h-10 border-b border-[#00FBFF]/15 bg-[#00141733] shrink-0">
       <span className="text-base font-bold text-[#00FBFF] tracking-widest">{label}</span>
       {hint && <span className="ml-auto text-sm text-[#00FBFF]/55">{hint}</span>}
     </div>
@@ -1914,6 +1947,233 @@ function ArenaStyles() {
       }
       .title-glow {
         text-shadow: 0 0 12px rgba(0, 251, 255, 0.5);
+      }
+      /* Windows display scaling and browser zoom reduce the effective CSS
+         viewport. Compact the fixed-width chrome in that case, while leaving
+         the true 1920x1080 broadcast layout unchanged. */
+      @media (max-width: 1700px), (max-height: 1000px) {
+        .arena-right-rail {
+          width: clamp(400px, 28vw, 460px);
+        }
+        .arena-main-stage-padding {
+          padding: 0.75rem;
+        }
+        .arena-race-view:not(.arena-race-view-compact) {
+          padding: 0.5rem;
+        }
+        .arena-race-view:not(.arena-race-view-compact) .arena-race-ruler,
+        .arena-race-view:not(.arena-race-view-compact) .arena-race-row {
+          gap: 0.5rem;
+        }
+        .arena-race-view:not(.arena-race-view-compact) .arena-race-row {
+          padding-top: 0.25rem;
+          padding-bottom: 0.25rem;
+        }
+        .arena-race-view:not(.arena-race-view-compact) .arena-race-agent-column {
+          width: 220px;
+        }
+        .arena-race-view:not(.arena-race-view-compact) .arena-race-row .arena-race-agent-column {
+          font-size: 1.25rem;
+        }
+        .arena-race-view:not(.arena-race-view-compact) .arena-race-tokens {
+          width: 3.5rem;
+        }
+        .arena-race-view:not(.arena-race-view-compact) .arena-race-cost {
+          width: 4rem;
+        }
+        .arena-race-view:not(.arena-race-view-compact) .arena-race-result {
+          width: 5.5rem;
+          font-size: 1rem;
+        }
+        .arena-race-view:not(.arena-race-view-compact) .arena-race-cell {
+          height: 2rem;
+          font-size: 1rem;
+        }
+        .arena-challenge-board {
+          height: 13rem;
+        }
+      }
+      @media (max-width: 1400px), (max-height: 820px) {
+        /* Multiview benefits more from readable terminals than from squeezing the
+           complete race below them into one screen. Keep its live area tall and
+           let the page reveal the full standings naturally when scrolled. */
+        .arena-root.arena-grid-mode {
+          overflow-y: auto;
+        }
+        .arena-grid-mode .arena-content {
+          flex: none;
+          min-height: auto;
+        }
+        .arena-grid-mode .arena-stage-row {
+          flex: none;
+          height: 32rem;
+        }
+        .arena-grid-mode .arena-grid-race-strip {
+          flex: none;
+        }
+        .arena-grid-mode .arena-grid-race-scroll {
+          height: auto;
+          overflow: visible;
+        }
+        .arena-top-bar {
+          height: 3.25rem;
+          gap: 0.5rem;
+          padding-left: 0.75rem;
+          padding-right: 0.75rem;
+        }
+        .arena-live-status {
+          gap: 0.375rem;
+          font-size: 0.875rem;
+        }
+        .arena-topbar-title {
+          font-size: 1.25rem;
+          white-space: nowrap;
+        }
+        .arena-topbar-metrics {
+          gap: 0.625rem;
+          font-size: 1rem;
+        }
+        .arena-topbar-connection {
+          display: none;
+        }
+        .arena-clock {
+          font-size: 1.5rem;
+        }
+        .arena-right-rail {
+          width: clamp(320px, 28vw, 360px);
+        }
+        .arena-main-stage-padding {
+          padding: 0.5rem;
+        }
+        .arena-stage-tabs {
+          height: 2.25rem;
+          gap: 0.25rem;
+          padding-left: 0.75rem;
+          padding-right: 0.75rem;
+        }
+        .arena-stage-label {
+          margin-right: 0.375rem;
+          font-size: 1rem;
+        }
+        .arena-stage-tab {
+          padding: 0.125rem 0.5rem;
+          font-size: 0.75rem;
+        }
+        .arena-stage-hint {
+          display: none;
+        }
+        .arena-race-view:not(.arena-race-view-compact) {
+          padding: 0.375rem;
+        }
+        .arena-race-view:not(.arena-race-view-compact) .arena-race-ruler,
+        .arena-race-view:not(.arena-race-view-compact) .arena-race-row {
+          gap: 0.25rem;
+        }
+        .arena-race-view:not(.arena-race-view-compact) .arena-race-row {
+          padding-top: 0.125rem;
+          padding-bottom: 0.125rem;
+        }
+        .arena-race-view:not(.arena-race-view-compact) .arena-race-rank {
+          width: 2rem;
+        }
+        .arena-race-view:not(.arena-race-view-compact) .arena-status-dot {
+          width: 0.75rem;
+          font-size: 0.75rem;
+        }
+        .arena-race-view:not(.arena-race-view-compact) .arena-agent-blockie {
+          width: 1.75rem;
+          height: 1.75rem;
+        }
+        .arena-race-view:not(.arena-race-view-compact) .arena-agent-blockie > img {
+          width: 100%;
+          height: 100%;
+        }
+        .arena-race-view:not(.arena-race-view-compact) .arena-race-agent-column {
+          width: 180px;
+        }
+        .arena-race-view:not(.arena-race-view-compact) .arena-race-row .arena-race-agent-column {
+          font-size: 1rem;
+        }
+        .arena-race-view:not(.arena-race-view-compact) .arena-race-tokens {
+          display: none;
+        }
+        .arena-race-view:not(.arena-race-view-compact) .arena-race-cost {
+          width: 3rem;
+          font-size: 0.875rem;
+        }
+        .arena-race-view:not(.arena-race-view-compact) .arena-race-result {
+          width: 4rem;
+          font-size: 0.875rem;
+        }
+        .arena-race-view:not(.arena-race-view-compact) .arena-race-cell {
+          height: 1.75rem;
+          font-size: 0.875rem;
+        }
+        .arena-challenge-board {
+          height: 9.5rem;
+        }
+        .arena-section-head {
+          height: 1.875rem;
+          padding-left: 0.5rem;
+          padding-right: 0.5rem;
+        }
+        .arena-section-head > span:first-child {
+          font-size: 0.875rem;
+        }
+        .arena-section-head > span:last-child {
+          font-size: 0.75rem;
+        }
+        .arena-challenge-grid {
+          gap: 0.1875rem;
+          padding: 0.25rem;
+        }
+        .arena-challenge-card {
+          padding: 0.1875rem 0.25rem;
+          font-size: 0.8125rem;
+          line-height: 1.2;
+        }
+        .arena-challenge-card .text-sm {
+          font-size: 0.75rem;
+          line-height: 1.2;
+        }
+        .arena-stream-header {
+          height: 2.25rem;
+          padding-left: 0.5rem;
+          padding-right: 0.5rem;
+        }
+        .arena-stream-header > span {
+          font-size: 0.875rem;
+        }
+        .arena-stream-header button {
+          padding-left: 0.375rem;
+          padding-right: 0.375rem;
+          font-size: 0.75rem;
+        }
+        .arena-stream-lines {
+          padding: 0.375rem 0.5rem;
+          font-size: 0.875rem;
+          line-height: 1.35;
+        }
+        .arena-agent-log .text-lg {
+          font-size: 1rem;
+        }
+        .arena-agent-log .text-base {
+          font-size: 0.875rem;
+        }
+        .arena-agent-log .text-sm {
+          font-size: 0.75rem;
+        }
+        .arena-operator-strip {
+          padding: 0.375rem;
+        }
+        .arena-operator-strip > div:first-child,
+        .arena-operator-strip button {
+          font-size: 0.75rem;
+        }
+        .arena-operator-strip input {
+          padding: 0.25rem 0.5rem;
+          font-size: 0.875rem;
+        }
       }
       .live-dot {
         animation: livePulse 1.1s ease-in-out infinite;
