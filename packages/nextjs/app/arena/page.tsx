@@ -1095,7 +1095,7 @@ function RaceView({
           {slots.map(k => (
             <span
               key={k}
-              title={`Flag ${k + 1}`}
+              title={`Capture ${k + 1} of ${total}`}
               className={`flex-1 text-center ${dataText} font-bold tabular-nums text-[#00FBFF]/55`}
             >
               {k + 1}

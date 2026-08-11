@@ -11,6 +11,7 @@ import { useAccount, useSwitchChain } from "wagmi";
 import { Address, BlockieAvatar, RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import { useTransactor } from "~~/hooks/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
+import type { RunState } from "~~/services/arena/arena-types";
 import { arenaClient } from "~~/services/arena/client";
 import type { FundingProjection } from "~~/services/arena/projection";
 import { ROSTER } from "~~/services/arena/roster";
@@ -25,7 +26,7 @@ const GREEN = "#00ff9c";
 const YELLOW = "#FFBE00";
 const RED = "#FF5861";
 
-const SETUP_STATE_COPY: Record<string, string> = {
+const SETUP_STATE_COPY: Record<RunState, string> = {
   created: "Run created",
   awaiting_signature: "Waiting for signature",
   preparing: "Assigning agent wallets",
@@ -307,7 +308,6 @@ export function ArenaLobby({
       onLaunch();
       return;
     }
-    pushLog("The run is live", GREEN);
     let n = 3;
     setCountdown(n);
     beep(440, 0.12, "square", 0.06);
@@ -325,7 +325,7 @@ export function ArenaLobby({
       }
     }, 900);
     return () => clearInterval(tick);
-  }, [beep, onLaunch, phase, pushLog]);
+  }, [beep, onLaunch, phase]);
 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col bg-black text-[#00FBFF] font-mono overflow-hidden lobby-root">
@@ -569,7 +569,7 @@ export function ArenaLobby({
           )}
           {phase === "funding" && (
             <div className="lobby-phase-note mt-3 text-base text-[#00FBFF]/70 tracking-wide">
-              Preparing agent wallets…
+              Agents start once every wallet is funded — the amount above sets each manual top-up.
             </div>
           )}
         </div>
@@ -688,8 +688,8 @@ function FundingBoard({
       {balancesUnreachable && (
         <div className="mb-3 px-3 py-2 rounded border border-[#FF5861]/40 bg-[#FF5861]/10 text-base text-[#FF5861]">
           {mode === "local"
-            ? "Local chain unavailable — balances may be out of date"
-            : `${networkName} is unavailable — balances may be out of date`}
+            ? "Local chain unavailable — balances read as 0 until you start a node with `yarn chain`"
+            : `${networkName} is unavailable — balances read as 0 until the RPC connection recovers`}
         </div>
       )}
 
@@ -697,14 +697,14 @@ function FundingBoard({
         <div className="mb-3 flex flex-wrap items-center gap-3 px-3 py-2 rounded border border-[#00FBFF]/25 bg-[#00FBFF]/5 text-base text-[#00FBFF]/75">
           <span>
             {mode === "none"
-              ? `Funding is unavailable on ${networkName}. Choose a supported test network to continue.`
+              ? `Funding is unavailable on ${networkName}. Agent wallets are generated per run and their keys are discarded when it ends, so anything sent to them would be unrecoverable.`
               : !canFund && isConnected
-              ? `switch your wallet to ${networkName} to fund the agent wallets`
+              ? `Switch your wallet to ${networkName} to fund the agent wallets.`
               : !canFund
-              ? `connect a wallet on ${networkName} to fund the agent wallets`
+              ? `Connect a wallet on ${networkName} to fund the agent wallets.`
               : mode === "local"
-              ? "The local chain is unavailable — reconnect it to continue"
-              : `${networkName} is unreachable, so funding cannot complete until the RPC connection recovers`}
+              ? "The local chain is unavailable — start a node with `yarn chain` to continue."
+              : `${networkName} is unreachable — funding will resume when the RPC connection recovers.`}
           </span>
         </div>
       )}
