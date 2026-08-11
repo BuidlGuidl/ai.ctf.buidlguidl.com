@@ -357,7 +357,13 @@ export default function ArenaPage() {
             <div className="arena-main-stage-padding flex-1 min-h-0 relative p-4">
               <div className="h-full flex flex-col border border-[#00FBFF]/25 rounded-lg bg-[#020a0c]/80 overflow-hidden shadow-[0_0_40px_-12px_rgba(0,251,255,0.4)]">
                 <StageTabs tab={overviewTab} onTab={setOverviewTab} />
-                <OverviewStage ranked={ranked} tab={overviewTab} onPick={goFocus} flashes={flashes} />
+                <OverviewStage
+                  ranked={ranked}
+                  tab={overviewTab}
+                  onPick={goFocus}
+                  flashes={flashes}
+                  selectedId={stageMode === "focus" ? focused.id : null}
+                />
               </div>
             </div>
           </div>
@@ -368,7 +374,11 @@ export default function ArenaPage() {
               gridUsesFullWidth ? "hidden 2xl:flex" : "flex"
             }`}
           >
-            {stageMode === "focus" ? <AgentLog focused={focused} onClose={closeLog} /> : <ArenaStream />}
+            {stageMode === "focus" ? (
+              <AgentLog key={focused.id} focused={focused} onClose={closeLog} />
+            ) : (
+              <ArenaStream />
+            )}
             {/* Run URLs are spectator-shareable, so the strip only shows for someone
                 who is (or was, mid-race) the operator — never as a sign-in invitation. */}
             {(operator.authenticated || operator.hadSession) && (
@@ -396,7 +406,13 @@ export default function ArenaPage() {
           <div className="arena-grid-race-strip shrink-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#010607]">
             <SectionHead label="RACE" hint="showing top 5 · scroll for all" />
             <div className="arena-grid-race-scroll h-[190px] overflow-y-auto console-scroll">
-              <RaceView ranked={ranked} onPick={goFocus} flashes={flashes} compact />
+              <RaceView
+                ranked={ranked}
+                onPick={goFocus}
+                flashes={flashes}
+                compact
+                selectedId={stageMode === "focus" ? focused.id : null}
+              />
             </div>
           </div>
         ) : (
@@ -805,14 +821,16 @@ function AgentLog({ focused, onClose }: { focused: Agent; onClose: () => void })
   const finished = focused.status === "done";
 
   return (
-    <div className="arena-agent-log flex-1 min-h-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#020a0c]">
+    <div className="arena-agent-log arena-agent-log-in flex-1 min-h-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#020a0c]">
       {/* Two rows, not one: at broadcast sizes the badges crowd the handle off
           the end of a single line, and the observed agent's name is the whole
           point of this panel. */}
       <div className="flex flex-col gap-1 px-3 py-1.5 border-b border-[#00FBFF]/15 bg-[#00141733] shrink-0 text-base">
         <div className="flex items-center gap-2">
           <AgentBlockieLink agent={focused} />
-          <span className="flex-1 min-w-0 text-lg font-bold text-white truncate">{focused.handle}</span>
+          <span className="flex-1 min-w-0 text-lg font-bold text-white truncate">
+            <ModelName name={focused.handle} effort={focused.effort} />
+          </span>
           <button
             onClick={onClose}
             title="back to arena feed"
@@ -943,16 +961,18 @@ function OverviewStage({
   tab,
   onPick,
   flashes,
+  selectedId,
 }: {
   ranked: Agent[];
   tab: OverviewTab;
   onPick: (id: string) => void;
   flashes: string[];
+  selectedId: string | null;
 }) {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto console-scroll">
-      {tab === "race" && <RaceView ranked={ranked} onPick={onPick} flashes={flashes} />}
-      {tab === "grid" && <GridView ranked={ranked} onPick={onPick} />}
+      {tab === "race" && <RaceView ranked={ranked} onPick={onPick} flashes={flashes} selectedId={selectedId} />}
+      {tab === "grid" && <GridView ranked={ranked} onPick={onPick} selectedId={selectedId} />}
     </div>
   );
 }
@@ -964,11 +984,13 @@ function RaceView({
   onPick,
   flashes,
   compact,
+  selectedId,
 }: {
   ranked: Agent[];
   onPick: (id: string) => void;
   flashes: string[];
   compact?: boolean;
+  selectedId?: string | null;
 }) {
   const total = CHALLENGES.length;
   const rowGap = compact ? "gap-3" : "gap-4";
@@ -1100,6 +1122,7 @@ function RaceView({
               else rowRefs.current.delete(a.id);
             }}
             role="button"
+            aria-pressed={selectedId === a.id}
             tabIndex={0}
             onClick={() => onPick(a.id)}
             onKeyDown={e => {
@@ -1114,7 +1137,7 @@ function RaceView({
               leadTaker === a.id ? "lead-take" : ""
             } ${done(a) ? "agent-finish-row" : ""} ${place ? `race-podium-row race-podium-${place}` : ""} ${
               celebrating ? "race-podium-celebrate" : ""
-            }`}
+            } ${selectedId === a.id ? "arena-agent-selected" : ""}`}
             style={
               podium ? ({ "--podium-tone": podium.tone, "--podium-soft": podium.soft } as CSSProperties) : undefined
             }
@@ -1275,22 +1298,31 @@ function RaceFinishSting({ agent, place }: { agent: Agent; place: PodiumPlace })
   );
 }
 
-function GridView({ ranked, onPick }: { ranked: Agent[]; onPick: (id: string) => void }) {
+function GridView({
+  ranked,
+  onPick,
+  selectedId,
+}: {
+  ranked: Agent[];
+  onPick: (id: string) => void;
+  selectedId: string | null;
+}) {
   return (
     <div className="h-full p-2 grid grid-cols-5 auto-rows-fr gap-2">
       {ranked.map(agent => (
-        <GridCard key={agent.id} agent={agent} onPick={onPick} />
+        <GridCard key={agent.id} agent={agent} onPick={onPick} selected={selectedId === agent.id} />
       ))}
     </div>
   );
 }
 
-function GridCard({ agent, onPick }: { agent: Agent; onPick: (id: string) => void }) {
+function GridCard({ agent, onPick, selected }: { agent: Agent; onPick: (id: string) => void; selected: boolean }) {
   const preview = useArenaStore(selectPreviewFor(agent.id));
   const finished = agent.status === "done";
   return (
     <div
       role="button"
+      aria-pressed={selected}
       tabIndex={0}
       onClick={() => onPick(agent.id)}
       onKeyDown={event => {
@@ -1301,7 +1333,7 @@ function GridCard({ agent, onPick }: { agent: Agent; onPick: (id: string) => voi
       }}
       className={`min-h-0 flex flex-col text-left rounded border bg-[#00090b] hover:border-[#00FBFF]/50 transition overflow-hidden group cursor-pointer ${
         agent.status === "blocked" ? "border-[#FFBE00]/60" : "border-[#00FBFF]/15"
-      }`}
+      } ${selected ? "arena-agent-selected" : ""}`}
     >
       <div className="flex items-center gap-1.5 px-2 h-10 shrink-0 border-b border-[#00FBFF]/10 bg-[#001417]">
         <AgentBlockieLink agent={agent} />
@@ -1947,6 +1979,29 @@ function ArenaStyles() {
       }
       .title-glow {
         text-shadow: 0 0 12px rgba(0, 251, 255, 0.5);
+      }
+      .arena-agent-selected {
+        background-color: rgba(0, 251, 255, 0.08);
+        border-color: rgba(0, 251, 255, 0.8) !important;
+        box-shadow: inset 3px 0 0 #00fbff, inset 0 0 0 1px rgba(0, 251, 255, 0.3), 0 0 16px rgba(0, 251, 255, 0.14);
+      }
+      .arena-agent-log-in {
+        animation: arenaAgentLogIn 180ms ease-out;
+      }
+      @keyframes arenaAgentLogIn {
+        from {
+          opacity: 0.55;
+          transform: translateX(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .arena-agent-log-in {
+          animation: none;
+        }
       }
       /* Windows display scaling and browser zoom reduce the effective CSS
          viewport. Compact the fixed-width chrome in that case, while leaving
