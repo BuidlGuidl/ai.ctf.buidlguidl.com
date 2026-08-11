@@ -3,7 +3,6 @@
 import { type CSSProperties, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArenaLobby } from "./Lobby";
 import { ModelName } from "./ModelName";
-import { OperatorAddress } from "./OperatorAddress";
 import { Agent, AgentStatus, CHALLENGES, Challenge, DIFFICULTY_COLOR } from "./mockData";
 import type { Address } from "viem";
 import { BlockieAvatar, RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
@@ -381,7 +380,6 @@ export default function ArenaPage() {
                 who is (or was, mid-race) the operator — never as a sign-in invitation. */}
             {(operator.authenticated || operator.hadSession) && (
               <OperatorStrip
-                focused={focused}
                 address={operator.address}
                 authenticated={operator.authenticated}
                 hadSession={operator.hadSession}
@@ -1616,7 +1614,6 @@ function ArenaStream() {
 }
 
 function OperatorStrip({
-  focused,
   address,
   authenticated,
   hadSession,
@@ -1628,7 +1625,6 @@ function OperatorStrip({
   onInvalidate,
   onSignIn,
 }: {
-  focused: Agent;
   address: string | null;
   authenticated: boolean;
   hadSession: boolean;
@@ -1714,13 +1710,7 @@ function OperatorStrip({
         timeUp ? "border-[#FF5861] bg-[#FF5861]/10" : "border-[#00FBFF]/15"
       }`}
     >
-      <div className="mb-1 flex items-center gap-2 text-sm font-bold text-[#FFBE00]">
-        <span>🎬 OPERATOR</span>
-        <span className="truncate text-[#00FBFF]/70">focused: {focused.handle}</span>
-        <div className="ml-auto flex items-center gap-2">
-          <OperatorAddress address={address} />
-        </div>
-      </div>
+      <div className="mb-1 text-sm font-bold text-[#FFBE00]">🎬 OPERATOR</div>
       {authenticated ? (
         <div className="flex items-center gap-1.5">
           <input
