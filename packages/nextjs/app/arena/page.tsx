@@ -785,7 +785,7 @@ function StageTabs({ tab, onTab }: { tab: OverviewTab; onTab: (t: OverviewTab) =
           {t.label}
         </button>
       ))}
-      <span className="ml-auto text-sm text-[#00FBFF]/55">click any agent → filter to its log ▸</span>
+      <span className="ml-auto text-sm text-[#00FBFF]/55">click any agent to watch its log ▸</span>
     </div>
   );
 }
@@ -978,8 +978,8 @@ function RaceView({
   const dataText = compact ? "text-sm" : "text-base";
   const numText = compact ? "text-base" : "text-lg";
   const done = (a: Agent) => a.solved.length >= total;
-  // Columns are mint-order slots, not fixed challenges — slot k holds the k-th
-  // flag an agent minted, so a row reads left-to-right as its capture history.
+  // Columns are capture-order slots, not fixed challenges — slot k holds the k-th
+  // flag an agent captured, so a row reads left-to-right as its capture history.
   const slots = Array.from({ length: total }, (_, k) => k);
 
   // FLIP: when the ranking changes, slide each row from where it was to where it
@@ -1050,13 +1050,13 @@ function RaceView({
     <div className={`relative ${compact ? "p-2 space-y-[2px]" : "p-3 space-y-1"}`}>
       {sting && <RaceFinishSting key={sting.key} agent={sting.agent} place={sting.place} />}
 
-      {/* ruler — one column per flag minted, in capture order */}
+      {/* ruler — one column per captured flag, in capture order */}
       <div className={`flex items-center ${rowGap} px-2 pb-1`}>
         <span className="w-10 shrink-0" />
         <span className="w-4 shrink-0" />
         <span className={`${compact ? "w-7" : "w-8"} shrink-0`} />
         <span className={`${compact ? "w-56" : "w-[300px]"} shrink-0 ${dataText} tracking-widest text-[#00FBFF]/55`}>
-          AGENT · MINTS →
+          AGENT · FLAGS →
         </span>
         <span className={`w-16 shrink-0 text-right ${dataText} tracking-widest text-[#00FBFF]/55`}>TOK</span>
         <span className={`w-20 shrink-0 text-right ${dataText} tracking-widest text-[#00FBFF]/55`}>COST</span>
@@ -1064,7 +1064,7 @@ function RaceView({
           {slots.map(k => (
             <span
               key={k}
-              title={`${k + 1}. flag minted`}
+              title={`Flag ${k + 1}`}
               className={`flex-1 text-center ${dataText} font-bold tabular-nums text-[#00FBFF]/55`}
             >
               {k + 1}
@@ -1168,7 +1168,7 @@ function RaceView({
                   return (
                     <span
                       key={k}
-                      title={`#${flagId} ${ch?.name ?? ""} · minted ${k + 1} of ${total}`}
+                      title={`#${flagId} ${ch?.name ?? ""} · captured ${k + 1} of ${total}`}
                       className={`relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums transition-colors ${
                         flashing ? "flag-pop" : ""
                       }`}
@@ -1196,7 +1196,7 @@ function RaceView({
                 return (
                   <span
                     key={k}
-                    title="flag not minted yet"
+                    title="Not captured yet"
                     className={`relative flex-1 ${cellH} rounded-[3px] border`}
                     style={{ background: "#00fbff08", borderColor: "#00fbff1a" }}
                   />
@@ -1500,7 +1500,7 @@ function ChallengeDetails({
             <AgentChips list={cleared} empty="nobody has cracked this one yet" />
           </div>
 
-          <div className="pt-1 text-sm text-[#00FBFF]/55">click an agent to filter to its log · Esc to close</div>
+          <div className="pt-1 text-sm text-[#00FBFF]/55">click an agent to watch its log · Esc to close</div>
         </div>
       </div>
     </div>
@@ -1866,7 +1866,7 @@ function AgentBlockieLink({ agent, compact }: { agent: Agent; compact?: boolean 
     return (
       <span
         title={`${agent.harness} + ${agent.model}${agent.effort ? ` · ${agent.effort}` : ""}${
-          agent.address ? ` · ${agent.address}` : " · address pending"
+          agent.address ? ` · ${agent.address}` : " · assigning address"
         }`}
         className={className}
         style={{ border: `1px solid ${agent.color}55` }}

@@ -14,13 +14,7 @@ import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 import { arenaClient } from "~~/services/arena/client";
 import type { FundingProjection } from "~~/services/arena/projection";
 import { ROSTER } from "~~/services/arena/roster";
-import {
-  selectConnectionStatus,
-  selectFunding,
-  selectRun,
-  selectRunError,
-  useArenaStore,
-} from "~~/services/arena/store";
+import { selectFunding, selectRun, selectRunError, useArenaStore } from "~~/services/arena/store";
 import { useOperatorSession, useSeedSigner } from "~~/services/arena/useOperatorSession";
 
 type Phase = "idle" | "connecting" | "signature" | "preparing" | "funding" | "ready" | "launching" | "failed";
@@ -30,6 +24,18 @@ const CY = "#00FBFF";
 const GREEN = "#00ff9c";
 const YELLOW = "#FFBE00";
 const RED = "#FF5861";
+
+const SETUP_STATE_COPY: Record<string, string> = {
+  created: "Run created",
+  awaiting_signature: "Waiting for signature",
+  preparing: "Assigning agent wallets",
+  awaiting_funding: "Waiting for agent funding",
+  ready: "All agents ready",
+  running: "The run is live",
+  stopping: "Stopping the run",
+  finished: "Run finished",
+  failed: "Run setup failed",
+};
 
 function shortAddress(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
@@ -70,7 +76,6 @@ export function ArenaLobby({
 
   const run = useArenaStore(selectRun);
   const fundingProjection = useArenaStore(selectFunding);
-  const connectionStatus = useArenaStore(selectConnectionStatus);
   const runError = useArenaStore(selectRunError);
 
   const audioRef = useRef<AudioContext | null>(null);
@@ -115,7 +120,10 @@ export function ArenaLobby({
   useEffect(() => {
     if (!run || lastRunState.current === run.state) return;
     lastRunState.current = run.state;
-    pushLog(`run → ${run.state}`, run.state === "failed" ? RED : run.state === "running" ? GREEN : CY);
+    pushLog(
+      SETUP_STATE_COPY[run.state] ?? "Run status updated",
+      run.state === "failed" ? RED : run.state === "running" ? GREEN : CY,
+    );
   }, [pushLog, run]);
 
   const readyCount = run?.entrants.length ?? 0;
@@ -264,7 +272,6 @@ export function ArenaLobby({
       const url = new URL(window.location.href);
       url.searchParams.set("run", created.id);
       window.history.replaceState(null, "", url);
-      pushLog(`created run ${created.id}`, GREEN);
       const started = await arenaClient.startRun(created.id);
       useArenaStore.getState().syncSnapshot(started);
     } catch (cause) {
@@ -284,9 +291,9 @@ export function ArenaLobby({
       const signature = await signSeed(run.id, run.chainId);
       const updated = await arenaClient.seedRun(run.id, { signature });
       useArenaStore.getState().syncSnapshot(updated);
-      pushLog("seed signature accepted", GREEN);
+      pushLog("Signature accepted", GREEN);
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : "Could not submit the seed signature";
+      const message = cause instanceof Error ? cause.message : "Could not confirm the signature";
       setError(message);
       pushLog(message, RED);
     } finally {
@@ -300,7 +307,7 @@ export function ArenaLobby({
       onLaunch();
       return;
     }
-    pushLog("arena is running", GREEN);
+    pushLog("The run is live", GREEN);
     let n = 3;
     setCountdown(n);
     beep(440, 0.12, "square", 0.06);
@@ -370,9 +377,9 @@ export function ArenaLobby({
           <div className="text-center mb-6">
             <div className="font-dotGothic text-3xl md:text-4xl tracking-widest lobby-title-glow">
               {phase === "idle"
-                ? "NO RUN CREATED"
+                ? "READY TO START"
                 : phase === "signature"
-                ? "SEED SIGNATURE REQUIRED"
+                ? "SIGNATURE REQUIRED"
                 : phase === "preparing"
                 ? "PREPARING AGENT WALLETS"
                 : phase === "funding"
@@ -384,7 +391,7 @@ export function ArenaLobby({
                   ? "RUN STOPPING"
                   : run?.state === "finished"
                   ? "RUN FINISHED"
-                  : "RACE RUNNING"
+                  : "RUN IN PROGRESS"
                 : phase === "failed"
                 ? "RUN FAILED"
                 : "WAITING FOR AGENTS"}
@@ -393,16 +400,16 @@ export function ArenaLobby({
               {phase === "idle" ? null : phase === "launching" ? (
                 <span className="text-[#00ff9c] animate-pulse">
                   {run?.state === "stopping"
-                    ? "the backend is stopping this run"
+                    ? "Stopping the run…"
                     : run?.state === "finished"
-                    ? "the backend finished this run"
-                    : "the backend confirmed the race is running"}
+                    ? "The run is complete."
+                    : "The run is live."}
                 </span>
               ) : phase === "signature" ? (
-                <span className="text-[#FFBE00]">the funder must authorize deterministic agent wallets</span>
+                <span className="text-[#FFBE00]">Confirm in your wallet to set up the agents</span>
               ) : phase === "failed" ? (
                 <span className="text-[#FF5861]">
-                  {runError ?? error ?? "read the backend log for the failure reason"}
+                  {runError ?? error ?? "Something went wrong — try starting over"}
                 </span>
               ) : fundingActive ? (
                 <span>
@@ -448,13 +455,13 @@ export function ArenaLobby({
                   disabled={!agents.length || !operator.sessionLoaded || !operator.configured || starting}
                   className="lobby-cta group px-10 py-3 rounded-md font-dotGothic text-lg tracking-widest border-2 border-[#00FBFF] text-[#00FBFF] hover:bg-[#00FBFF] hover:text-black transition disabled:opacity-40"
                 >
-                  {starting ? "CREATING RUN…" : operator.authenticated ? "▶ CREATE RUN" : "▶ SIGN IN & CREATE RUN"}
+                  {starting ? "OPENING LOBBY…" : operator.authenticated ? "▶ OPEN LOBBY" : "▶ SIGN IN & OPEN LOBBY"}
                 </button>
               )}
               {!operator.sessionLoaded ? (
-                <span className="text-base text-[#FFBE00]/90">connecting to the arena backend…</span>
+                <span className="text-base text-[#FFBE00]/90">Connecting…</span>
               ) : !operator.configured ? (
-                <span className="text-base text-[#FFBE00]/90">wallet operator login is not configured</span>
+                <span className="text-base text-[#FFBE00]/90">Operator login is unavailable</span>
               ) : null}
             </div>
           )}
@@ -519,7 +526,7 @@ export function ArenaLobby({
                 disabled={signingSeed}
                 className="lobby-cta-go px-10 py-3 rounded-md font-dotGothic text-lg tracking-widest border-2 border-[#FFBE00] text-[#FFBE00] transition disabled:opacity-40"
               >
-                {signingSeed ? "SIGNING…" : "▶ SIGN RUN SEED"}
+                {signingSeed ? "SIGNING…" : "▶ SIGN TO CONTINUE"}
               </button>
             )}
             {phase === "preparing" && (
@@ -556,26 +563,20 @@ export function ArenaLobby({
           </div>
 
           {phase === "ready" && (
-            <div className="mt-3 text-base text-[#00FBFF]/70 tracking-wide">
-              the backend will begin the race after its readiness gates pass
-            </div>
+            <div className="mt-3 text-base text-[#00FBFF]/70 tracking-wide">All agents ready — starting the run…</div>
           )}
           {phase === "funding" && (
-            <div className="mt-3 text-base text-[#00FBFF]/70 tracking-wide">
-              backend funding events control readiness; the amount above controls manual top-ups
-            </div>
+            <div className="mt-3 text-base text-[#00FBFF]/70 tracking-wide">Preparing agent wallets…</div>
           )}
         </div>
 
         {/* setup activity log */}
         <div className="hidden md:flex w-[400px] shrink-0 flex-col border-l border-[#00FBFF]/20 bg-[#00090b]/70">
           <div className="px-4 h-11 flex items-center text-base font-bold tracking-widest text-[#00FBFF]/75 border-b border-[#00FBFF]/15 bg-[#001417]">
-            ▤ SETUP LOG
+            ▤ ARENA STATUS
           </div>
           <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 text-sm leading-snug space-y-1">
-            {log.length === 0 && (
-              <div className="text-[#00FBFF]/55 italic">{connectionStatus} · waiting for setup activity…</div>
-            )}
+            {log.length === 0 && <div className="text-[#00FBFF]/55 italic">Waiting for setup activity…</div>}
             {log.map(l => (
               <div key={l.id} className="lobby-log-in flex gap-2">
                 <span className="text-[#00FBFF]/55 shrink-0">›</span>
@@ -683,8 +684,8 @@ function FundingBoard({
       {balancesUnreachable && (
         <div className="mb-3 px-3 py-2 rounded border border-[#FF5861]/40 bg-[#FF5861]/10 text-base text-[#FF5861]">
           {mode === "local"
-            ? "cannot reach the local chain — balances below are stale, start a node with `yarn chain`"
-            : `cannot reach ${networkName} — balances below are stale`}
+            ? "Local chain unavailable — balances may be out of date"
+            : `${networkName} is unavailable — balances may be out of date`}
         </div>
       )}
 
@@ -692,13 +693,13 @@ function FundingBoard({
         <div className="mb-3 flex flex-wrap items-center gap-3 px-3 py-2 rounded border border-[#00FBFF]/25 bg-[#00FBFF]/5 text-base text-[#00FBFF]/75">
           <span>
             {mode === "none"
-              ? `funding is not available on ${networkName} — these wallets are generated per run and their keys are discarded, so funds sent where they matter would be unrecoverable`
+              ? `Funding is unavailable on ${networkName}. Choose a supported test network to continue.`
               : !canFund && isConnected
               ? `switch your wallet to ${networkName} to fund the agent wallets`
               : !canFund
               ? `connect a wallet on ${networkName} to fund the agent wallets`
               : mode === "local"
-              ? "the local chain is unreachable, so funding cannot complete — start a node with `yarn chain`"
+              ? "The local chain is unavailable — reconnect it to continue"
               : `${networkName} is unreachable, so funding cannot complete until the RPC connection recovers`}
           </span>
         </div>
@@ -758,7 +759,7 @@ function FundingRow({
         {agent.address ? (
           <Address address={agent.address} hideBlockie openLinkInNewTab size="base" />
         ) : (
-          "address pending"
+          "Assigning address…"
         )}
       </span>
 
@@ -832,7 +833,7 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
             <div className="text-base text-[#00FBFF]/75 leading-tight">{agent.harness}</div>
           </>
         ) : (
-          <div className="text-base text-[#00FBFF]/55 tracking-widest">{idle ? "NOT STARTED" : "———"}</div>
+          <div className="text-base text-[#00FBFF]/55 tracking-widest">{idle ? "AWAITING AGENT" : "———"}</div>
         )}
       </div>
 
@@ -845,7 +846,7 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
             CONNECTING…
           </span>
         ) : (
-          <span className="text-[#00FBFF]/25">{idle ? "OFFLINE" : "PENDING"}</span>
+          <span className="text-[#00FBFF]/25">{idle ? "STANDBY" : "PENDING"}</span>
         )}
       </div>
     </div>
