@@ -395,15 +395,17 @@ export function ArenaLobby({
       stopArmTimer.current = setTimeout(() => setStopArmed(false), STOP_ARM_MS);
       return;
     }
-    clearTimeout(stopArmTimer.current ?? undefined);
-    setStopArmed(false);
     setStoppingRun(true);
     setError(null);
     setBlockingRun(null);
+    // Sign in before disarming: a transient auth failure keeps the confirm
+    // armed instead of restarting the two-click dance.
     if (!operator.authenticated && !(await signInOperator())) {
       setStoppingRun(false);
       return;
     }
+    clearTimeout(stopArmTimer.current ?? undefined);
+    setStopArmed(false);
     try {
       const stopped = await arenaClient.stopRun(run.id);
       useArenaStore.getState().syncSnapshot(stopped);
@@ -588,7 +590,7 @@ export function ArenaLobby({
                     <a
                       href={`/arena?run=${encodeURIComponent(blockingRun.id)}`}
                       onClick={event => {
-                        if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+                        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
                         event.preventDefault();
                         setBlockingRun(null);
                         useArenaStore.getState().setCurrentRunId(blockingRun.id);
@@ -709,7 +711,7 @@ export function ArenaLobby({
               backend funding events control readiness; the amount above controls manual top-ups
             </div>
           )}
-          {canStopRun && (
+          {canStopRun && (operator.authenticated || operator.hadSession) && (
             <div className="mt-6 flex justify-center">
               {operator.authenticated || (operator.hadSession && operator.address) ? (
                 <button
