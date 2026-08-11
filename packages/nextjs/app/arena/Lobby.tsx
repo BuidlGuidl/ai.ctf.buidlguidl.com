@@ -881,6 +881,11 @@ function LobbyStyles() {
       .lobby-title-glow {
         text-shadow: 0 0 14px rgba(0, 251, 255, 0.5);
       }
+      /* Keep the phase indicator compact while leaving a full 24px visual
+         break before the event title, matching the live arena header. */
+      .lobby-phase {
+        margin-right: 0.5rem;
+      }
       @media (max-width: 1400px), (max-height: 820px) {
         .lobby-header {
           height: 3.25rem;
@@ -890,6 +895,7 @@ function LobbyStyles() {
         }
         .lobby-phase {
           gap: 0.375rem;
+          margin-right: 1rem;
           font-size: 0.875rem;
         }
         .lobby-header-title {

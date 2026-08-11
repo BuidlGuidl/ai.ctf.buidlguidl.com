@@ -467,7 +467,7 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
       <div className="pointer-events-none absolute inset-0 z-10 final-victory-sweep" />
 
       <header className="relative z-20 flex h-14 shrink-0 items-center gap-3 border-b border-[#FFBE00]/25 bg-black/65 px-4 sm:px-5">
-        <span className="flex items-center gap-2 text-sm font-bold tracking-[0.18em] text-[#00ff9c]">
+        <span className="flex items-center gap-2 text-sm font-bold tracking-[0.18em] text-[#00ff9c] lg:mr-3">
           <span className="h-2.5 w-2.5 rounded-full bg-[#00ff9c] shadow-[0_0_10px_#00ff9c]" />
           RUN COMPLETE
         </span>
@@ -1978,6 +1978,11 @@ function ArenaStyles() {
       .title-glow {
         text-shadow: 0 0 12px rgba(0, 251, 255, 0.5);
       }
+      /* Keep the status dot and label as one tight unit, then use a full 24px
+         spacing step before the separate event-title group. */
+      .arena-live-status {
+        margin-right: 0.5rem;
+      }
       .arena-agent-selected {
         background-color: rgba(0, 251, 255, 0.08);
         border-color: rgba(0, 251, 255, 0.8) !important;
@@ -2076,6 +2081,7 @@ function ArenaStyles() {
         }
         .arena-live-status {
           gap: 0.375rem;
+          margin-right: 1rem;
           font-size: 0.875rem;
         }
         .arena-topbar-title {
