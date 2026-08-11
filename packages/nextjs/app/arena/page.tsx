@@ -275,7 +275,7 @@ export default function ArenaPage() {
   if (!mounted) {
     return (
       <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black text-[#00FBFF] font-dotGothic text-2xl tracking-widest">
-        <span className="animate-pulse">◆ LOADING AGENT ARENA…</span>
+        <span className="animate-pulse">◆ LOADING RUN…</span>
       </div>
     );
   }
@@ -297,7 +297,7 @@ export default function ArenaPage() {
   if (!focused || (currentRunId && !runId)) {
     return (
       <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black text-[#00FBFF] font-dotGothic text-2xl tracking-widest">
-        <span className="animate-pulse">◆ LOADING AGENT ARENA…</span>
+        <span className="animate-pulse">◆ LOADING RUN…</span>
       </div>
     );
   }
@@ -323,6 +323,7 @@ export default function ArenaPage() {
         totalSolved={totalSolved}
         allFinished={allFinished}
         runFailed={runFailed}
+        runStopping={runState === "stopping"}
         agentCount={agents.length}
         connectionStatus={connectionStatus}
         onViewResults={ceremonyReady ? () => setFinalView("results") : undefined}
@@ -468,10 +469,10 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
       <header className="relative z-20 flex h-14 shrink-0 items-center gap-3 border-b border-[#FFBE00]/25 bg-black/65 px-4 sm:px-5">
         <span className="flex items-center gap-2 text-sm font-bold tracking-[0.18em] text-[#00ff9c]">
           <span className="h-2.5 w-2.5 rounded-full bg-[#00ff9c] shadow-[0_0_10px_#00ff9c]" />
-          MATCH COMPLETE
+          RUN COMPLETE
         </span>
         <div className="hidden font-dotGothic text-lg tracking-wide text-[#00FBFF] lg:block lg:text-xl">
-          BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · FINAL TRANSMISSION
+          BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · RUN SUMMARY
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
           <button
@@ -486,9 +487,9 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
 
       <main className="console-scroll relative z-20 flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:py-8">
         <section className="final-lock-in mx-auto max-w-5xl text-center">
-          <div className="text-sm font-bold tracking-[0.35em] text-[#00ff9c]">ALL AGENT RESULTS COMMITTED</div>
+          <div className="text-sm font-bold tracking-[0.35em] text-[#00ff9c]">RUN FINISHED</div>
           <h1 className="final-title mt-2 font-dotGothic text-3xl tracking-[0.12em] text-white sm:text-5xl">
-            RESULTS LOCKED
+            FINAL RESULTS
           </h1>
         </section>
 
@@ -704,6 +705,7 @@ function TopBar({
   totalSolved,
   allFinished,
   runFailed,
+  runStopping,
   agentCount,
   connectionStatus,
   onViewResults,
@@ -713,6 +715,7 @@ function TopBar({
   totalSolved: number;
   allFinished: boolean;
   runFailed: boolean;
+  runStopping: boolean;
   agentCount: number;
   connectionStatus: ConnectionStatus;
   onViewResults?: () => void;
@@ -721,15 +724,21 @@ function TopBar({
     <div className="arena-top-bar flex items-center gap-4 px-5 h-16 border-b border-[#00FBFF]/25 bg-gradient-to-r from-[#020808] to-[#001014] shrink-0">
       <span
         className={`arena-live-status flex items-center gap-2 font-bold tracking-widest ${
-          allFinished ? "text-[#00ff9c]" : "text-[#FF5861]"
+          allFinished ? "text-[#00ff9c]" : runStopping ? "text-[#FFBE00]" : "text-[#FF5861]"
         }`}
       >
         <span
           className={`w-2.5 h-2.5 rounded-full ${
-            allFinished ? "bg-[#00ff9c]" : runFailed ? "bg-[#FF5861]" : "bg-[#FF5861] live-dot"
+            allFinished
+              ? "bg-[#00ff9c]"
+              : runStopping
+              ? "bg-[#FFBE00] live-dot"
+              : runFailed
+              ? "bg-[#FF5861]"
+              : "bg-[#FF5861] live-dot"
           }`}
         />
-        {allFinished ? "LOCKED" : runFailed ? "FAILED" : "LIVE"}
+        {allFinished ? "FINISHED" : runFailed ? "FAILED" : runStopping ? "STOPPING" : "RUNNING"}
       </span>
       <div className="arena-topbar-title hidden sm:block font-dotGothic text-xl md:text-2xl text-[#00FBFF] tracking-wide title-glow">
         BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · AGENT ARENA
@@ -740,7 +749,7 @@ function TopBar({
       </div>
       {timeUp && (
         <span className="animate-pulse rounded border border-[#FF5861] bg-[#FF5861]/15 px-3 py-1 text-sm font-bold tracking-widest text-[#FF5861]">
-          TIME&apos;S UP · OPERATOR: STOP THE RACE
+          DEADLINE REACHED · OPERATOR: STOP THE RUN
         </span>
       )}
       <div className="arena-topbar-metrics ml-auto flex items-center gap-4 text-lg">
@@ -778,7 +787,7 @@ const STAGE_TABS: { id: OverviewTab; label: string }[] = [
 function StageTabs({ tab, onTab }: { tab: OverviewTab; onTab: (t: OverviewTab) => void }) {
   return (
     <div className="arena-stage-tabs flex items-center gap-2 px-4 h-12 border-b border-[#00FBFF]/20 bg-[#001417] shrink-0">
-      <span className="arena-stage-label font-dotGothic text-lg text-[#00FBFF]/70 mr-2">WIDE SHOT</span>
+      <span className="arena-stage-label font-dotGothic text-lg text-[#00FBFF]/70 mr-2">OVERVIEW</span>
       {STAGE_TABS.map(t => (
         <button
           key={t.id}
@@ -793,7 +802,7 @@ function StageTabs({ tab, onTab }: { tab: OverviewTab; onTab: (t: OverviewTab) =
           {t.label}
         </button>
       ))}
-      <span className="arena-stage-hint ml-auto text-sm text-[#00FBFF]/55">click any agent → observe its log ▸</span>
+      <span className="arena-stage-hint ml-auto text-sm text-[#00FBFF]/55">click any agent to watch its log ▸</span>
     </div>
   );
 }
@@ -820,11 +829,12 @@ function AgentLog({ focused, onClose }: { focused: Agent; onClose: () => void })
         <div className="flex items-center gap-2">
           <AgentBlockieLink agent={focused} />
           <span className="flex-1 min-w-0 text-lg font-bold text-white truncate">
+            <span className="text-[#00FBFF]/70">AGENT LOG · </span>
             <ModelName name={focused.handle} effort={focused.effort} />
           </span>
           <button
             onClick={onClose}
-            title="back to arena feed"
+            title="back to run log"
             className="w-7 h-7 shrink-0 rounded border border-[#00FBFF]/25 text-[#00FBFF]/60 hover:text-[#00FBFF] hover:border-[#00FBFF] transition"
           >
             ✕
@@ -838,7 +848,7 @@ function AgentLog({ focused, onClose }: { focused: Agent; onClose: () => void })
             </span>
           ) : (
             <span className="px-1.5 py-0.5 rounded font-bold shrink-0 text-sm text-[#00FBFF]/70 border border-[#00FBFF]/20">
-              TARGET UNREPORTED
+              CHALLENGE UNREPORTED
             </span>
           )}
           <span className="ml-auto text-[#00ff9c] font-bold shrink-0">
@@ -853,7 +863,7 @@ function AgentLog({ focused, onClose }: { focused: Agent; onClose: () => void })
         ))}
         {finished ? (
           <div className="mt-2 border-t border-[#00ff9c]/20 pt-2 text-[#00ff9c] font-bold">
-            ◆ SESSION COMPLETE · RESULT COMMITTED
+            ◆ AGENT FINISHED · FINAL LOG
           </div>
         ) : (
           <div className="text-[#00ff9c] animate-pulse">▋</div>
@@ -989,8 +999,8 @@ function RaceView({
   const dataText = compact ? "text-sm" : "text-base";
   const numText = compact ? "text-base" : "text-lg";
   const done = (a: Agent) => a.solved.length >= total;
-  // Columns are mint-order slots, not fixed challenges — slot k holds the k-th
-  // flag an agent minted, so a row reads left-to-right as its capture history.
+  // Columns are capture-order slots, not fixed challenges — slot k holds the k-th
+  // flag an agent captured, so a row reads left-to-right as its capture history.
   const slots = Array.from({ length: total }, (_, k) => k);
 
   // FLIP: when the ranking changes, slide each row from where it was to where it
@@ -1063,7 +1073,7 @@ function RaceView({
     >
       {sting && <RaceFinishSting key={sting.key} agent={sting.agent} place={sting.place} />}
 
-      {/* ruler — one column per flag minted, in capture order */}
+      {/* ruler — one column per captured flag, in capture order */}
       <div className={`arena-race-ruler flex items-center ${rowGap} px-2 pb-1`}>
         <span className="arena-race-rank w-10 shrink-0" />
         <span className="w-4 shrink-0" />
@@ -1073,7 +1083,7 @@ function RaceView({
             compact ? "w-56" : "w-[300px]"
           } shrink-0 ${dataText} tracking-widest text-[#00FBFF]/55`}
         >
-          AGENT · MINTS →
+          AGENT · FLAGS →
         </span>
         <span className={`arena-race-tokens w-16 shrink-0 text-right ${dataText} tracking-widest text-[#00FBFF]/55`}>
           TOK
@@ -1085,7 +1095,7 @@ function RaceView({
           {slots.map(k => (
             <span
               key={k}
-              title={`${k + 1}. flag minted`}
+              title={`Capture ${k + 1} of ${total}`}
               className={`flex-1 text-center ${dataText} font-bold tabular-nums text-[#00FBFF]/55`}
             >
               {k + 1}
@@ -1194,7 +1204,7 @@ function RaceView({
                   return (
                     <span
                       key={k}
-                      title={`#${flagId} ${ch?.name ?? ""} · minted ${k + 1} of ${total}`}
+                      title={`#${flagId} ${ch?.name ?? ""} · captured ${k + 1} of ${total}`}
                       className={`arena-race-cell relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums transition-colors ${
                         flashing ? "flag-pop" : ""
                       }`}
@@ -1222,7 +1232,7 @@ function RaceView({
                 return (
                   <span
                     key={k}
-                    title="flag not minted yet"
+                    title="Not captured yet"
                     className={`arena-race-cell relative flex-1 ${cellH} rounded-[3px] border`}
                     style={{ background: "#00fbff08", borderColor: "#00fbff1a" }}
                   />
@@ -1263,7 +1273,7 @@ function RaceFinishSting({ agent, place }: { agent: Agent; place: PodiumPlace })
         <PodiumMedal place={place} size="lg" animate className="shrink-0" />
         <div className="min-w-0 flex-1">
           <div className="text-xs font-bold tracking-[0.32em]" style={{ color: podium.tone }}>
-            {podium.label} FINISH · RESULT LOCKED
+            {podium.label} FINISH · FINAL PLACEMENT
           </div>
           <div className="mt-1 truncate font-dotGothic text-xl tracking-wide text-white sm:text-2xl">
             {PODIUM_RESULT[place]}
@@ -1349,7 +1359,7 @@ function GridCard({ agent, onPick, selected }: { agent: Agent; onPick: (id: stri
         {finished ? (
           <>
             <div className="shrink-0 text-[#00FBFF]/55">agent process exited</div>
-            <div className="shrink-0 text-[#00ff9c] font-bold">result committed ✓</div>
+            <div className="shrink-0 text-[#00ff9c] font-bold">agent finished ✓</div>
           </>
         ) : (
           <>
@@ -1535,7 +1545,7 @@ function ChallengeDetails({
             <AgentChips list={cleared} empty="nobody has cracked this one yet" />
           </div>
 
-          <div className="pt-1 text-sm text-[#00FBFF]/55">click an agent to jump to its close-up · Esc to close</div>
+          <div className="pt-1 text-sm text-[#00FBFF]/55">click an agent to watch its log · Esc to close</div>
         </div>
       </div>
     </div>
@@ -1544,35 +1554,40 @@ function ChallengeDetails({
 
 /* -------------------------------------------------------------- ArenaStream */
 
-type StreamFilter = "all" | "chat" | "flags" | "events";
+type StreamFilter = "logs" | "output" | "injections" | "captures" | "status";
 type StreamRow =
-  | { id: number; group: "chat"; msg: ChatItem }
-  | { id: number; group: "flags" | "events"; item: FeedItem };
+  | { id: number; group: "output" | "injections"; msg: ChatItem }
+  | { id: number; group: "captures" | "status"; item: FeedItem };
 
 const STREAM_FILTERS: { id: StreamFilter; label: string }[] = [
-  { id: "all", label: "ALL" },
-  { id: "chat", label: "CHAT" },
-  { id: "flags", label: "FLAGS" },
-  { id: "events", label: "EVENTS" },
+  { id: "logs", label: "LOGS" },
+  { id: "output", label: "OUTPUT" },
+  { id: "injections", label: "INJECT" },
+  { id: "captures", label: "FLAGS" },
+  { id: "status", label: "STATUS" },
 ];
 
 function ArenaStream() {
   const feed = useArenaStore(selectFeed);
   const chat = useArenaStore(selectChat);
-  const [filter, setFilter] = useState<StreamFilter>("all");
+  const [filter, setFilter] = useState<StreamFilter>("logs");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const merged = useMemo<StreamRow[]>(() => {
-    const chatRows: StreamRow[] = chat.map(m => ({ id: m.id, group: "chat", msg: m }));
+    const outputRows: StreamRow[] = chat.map(m => ({
+      id: m.id,
+      group: m.director ? "injections" : "output",
+      msg: m,
+    }));
     const feedRows: StreamRow[] = feed.map(item => ({
       id: item.id,
-      group: item.type === "flag" ? "flags" : "events",
+      group: item.type === "flag" ? "captures" : "status",
       item,
     }));
-    return [...chatRows, ...feedRows].sort((a, b) => a.id - b.id);
+    return [...outputRows, ...feedRows].sort((a, b) => a.id - b.id);
   }, [feed, chat]);
 
-  const rows = merged.filter(r => filter === "all" || r.group === filter);
+  const rows = merged.filter(r => filter === "logs" || r.group === filter);
 
   const newestRowId = rows.length ? rows[rows.length - 1].id : 0;
   useEffect(() => {
@@ -1582,13 +1597,13 @@ function ArenaStream() {
   return (
     <div className="arena-stream flex-1 min-h-0 flex flex-col bg-[#010607]">
       <div className="arena-stream-header flex items-center gap-2 px-3 h-11 border-b border-[#00FBFF]/15 bg-[#00141733] shrink-0">
-        <span className="text-base font-bold text-[#00FBFF] tracking-widest">ARENA</span>
-        <div className="ml-auto flex items-center gap-1">
+        <span className="shrink-0 text-base font-bold text-[#00FBFF] tracking-widest">RUN LOG</span>
+        <div className="console-scroll ml-auto flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap">
           {STREAM_FILTERS.map(f => (
             <button
               key={f.id}
               onClick={() => setFilter(f.id)}
-              className={`px-2 py-0.5 rounded text-sm font-bold tracking-wider transition ${
+              className={`shrink-0 px-2 py-0.5 rounded text-sm font-bold tracking-wider transition ${
                 filter === f.id
                   ? "bg-[#00FBFF]/15 text-[#00FBFF] border border-[#00FBFF]/40"
                   : "text-[#00FBFF]/60 border border-transparent hover:text-[#00FBFF]"
@@ -1604,10 +1619,8 @@ function ArenaStream() {
         ref={scrollRef}
         className="arena-stream-lines flex-1 min-h-0 overflow-y-auto console-scroll px-3 py-1.5 text-base space-y-1"
       >
-        {rows.length === 0 && <div className="text-[#00FBFF]/50 italic">waiting for real arena events…</div>}
-        {rows.map(r =>
-          r.group === "chat" ? <ChatRow key={r.id} msg={r.msg} /> : <FeedRow key={r.id} item={r.item} />,
-        )}
+        {rows.length === 0 && <div className="text-[#00FBFF]/50 italic">waiting for run activity…</div>}
+        {rows.map(r => ("msg" in r ? <ChatRow key={r.id} msg={r.msg} /> : <FeedRow key={r.id} item={r.item} />))}
       </div>
     </div>
   );
@@ -1710,7 +1723,7 @@ function OperatorStrip({
         timeUp ? "border-[#FF5861] bg-[#FF5861]/10" : "border-[#00FBFF]/15"
       }`}
     >
-      <div className="mb-1 text-sm font-bold text-[#FFBE00]">🎬 OPERATOR</div>
+      <div className="mb-1 text-sm font-bold text-[#FFBE00]">🎬 NEXT-TURN INJECTION</div>
       {authenticated ? (
         <div className="flex items-center gap-1.5">
           <input
@@ -1720,7 +1733,7 @@ function OperatorStrip({
               if (event.key === "Enter") void send(onSteer);
             }}
             disabled={busy || archived}
-            placeholder={archived ? "run ended · controls locked" : "send an operator message…"}
+            placeholder={archived ? "run ended · controls unavailable" : "message to inject on the next turn…"}
             className="flex-1 min-w-0 bg-[#00181c] border border-[#00FBFF]/20 rounded px-2 py-1 text-base text-white placeholder-[#00FBFF]/45 focus:outline-none focus:border-[#FFBE00]/60 disabled:cursor-not-allowed disabled:opacity-55"
           />
           <button
@@ -1728,14 +1741,14 @@ function OperatorStrip({
             disabled={busy || archived || !draft.trim()}
             className="px-2 py-1 rounded border border-[#00FBFF]/40 text-[#00FBFF] text-sm font-bold disabled:opacity-40"
           >
-            STEER
+            TO AGENT
           </button>
           <button
             onClick={() => void send(onBroadcast)}
             disabled={busy || archived || !draft.trim()}
             className="px-2 py-1 rounded border border-[#FFBE00]/50 text-[#FFBE00] text-sm font-bold disabled:opacity-40"
           >
-            ALL
+            TO ALL
           </button>
           <button
             onClick={() => void stop()}
@@ -1746,7 +1759,7 @@ function OperatorStrip({
                 : "border-[#FF5861]/60 text-[#FF5861]"
             }`}
           >
-            {stopArmed ? "CONFIRM STOP" : "STOP"}
+            {stopArmed ? "CONFIRM STOP" : "STOP RUN"}
           </button>
         </div>
       ) : address ? (
@@ -1795,8 +1808,10 @@ function ChatRow({ msg }: { msg: ChatItem }) {
   if (msg.director) {
     return (
       <div className="flex items-start gap-2 feed-in rounded bg-[#FFBE00]/10 border border-[#FFBE00]/30 px-2 py-1">
-        <span className="text-[#FFBE00] font-bold shrink-0">🎬 director</span>
-        <span className="text-[#ffe9a8]">{msg.text}</span>
+        <span title={msg.fromHandle} className="max-w-[55%] min-w-0 truncate text-[#FFBE00] font-bold">
+          🎬 inject → {msg.fromHandle}
+        </span>
+        <span className="min-w-0 break-words text-[#ffe9a8]">{msg.text}</span>
       </div>
     );
   }
@@ -1839,7 +1854,7 @@ const STATUS_STYLE: Record<AgentStatus, { glyph: string; color: string; label: s
   working: { glyph: "▶", color: "#00ff9c", label: "working" },
   idle: { glyph: "•", color: "#3d7c80", label: "idle — alive, nothing in flight" },
   blocked: { glyph: "⚠", color: "#FFBE00", label: "blocked — waiting on a permission prompt" },
-  done: { glyph: "◆", color: "#7fd8dd", label: "done — the arena consumed its exit" },
+  done: { glyph: "◆", color: "#7fd8dd", label: "done — agent process exited" },
 };
 
 function StatusDot({ status }: { status: AgentStatus }) {
@@ -1897,7 +1912,7 @@ function AgentBlockieLink({ agent, compact }: { agent: Agent; compact?: boolean 
     return (
       <span
         title={`${agent.harness} + ${agent.model}${agent.effort ? ` · ${agent.effort}` : ""}${
-          agent.address ? ` · ${agent.address}` : " · address pending"
+          agent.address ? ` · ${agent.address}` : " · assigning address"
         }`}
         className={className}
         style={{ border: `1px solid ${agent.color}55` }}
