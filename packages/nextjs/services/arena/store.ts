@@ -103,6 +103,11 @@ function resolvePendingSteers(pending: Record<string, string[]>, event: ArenaEve
   if (event.type === "entrant.status" && event.payload.status === "done" && pending[event.payload.entrantId]) {
     return { ...pending, [event.payload.entrantId]: [] };
   }
+  // A restart throws the queue away with the session, so those hints resolve to
+  // nothing and would otherwise hang over the lane for the rest of the race.
+  if (event.type === "entrant.restarted" && pending[event.payload.entrantId]) {
+    return { ...pending, [event.payload.entrantId]: [] };
+  }
   if (event.type !== "entrant.steered") return pending;
 
   const queue = pending[event.payload.entrantId] ?? [];
