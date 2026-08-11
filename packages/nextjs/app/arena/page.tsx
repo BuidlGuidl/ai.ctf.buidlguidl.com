@@ -206,7 +206,6 @@ export default function ArenaPage() {
   const focused = useMemo(() => agents.find(a => a.id === focusedId) ?? agents[0], [agents, focusedId]);
   const ranked = useMemo(() => rankAgents(agents), [agents]);
   const totalSolved = useMemo(() => agents.reduce((n, a) => n + a.solved.length, 0), [agents]);
-  const finishedCount = useMemo(() => agents.filter(agent => agent.status === "done").length, [agents]);
   const allFinished = runState === "finished";
   const runFailed = runState === "failed";
   const runTerminal = allFinished || runFailed;
@@ -323,7 +322,6 @@ export default function ArenaPage() {
         clock={clock.seconds}
         timeUp={clock.timeUp}
         totalSolved={totalSolved}
-        finishedCount={finishedCount}
         allFinished={allFinished}
         runFailed={runFailed}
         agentCount={agents.length}
@@ -478,13 +476,13 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
           BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · FINAL TRANSMISSION
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          <RainbowKitCustomConnectButton />
           <button
             onClick={onViewData}
             className="rounded border border-[#00FBFF]/30 px-2.5 py-1 text-sm font-bold tracking-[0.12em] text-[#00FBFF]/75 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
           >
             ARENA DATA ▸
           </button>
+          <RainbowKitCustomConnectButton />
         </div>
       </header>
 
@@ -706,7 +704,6 @@ function TopBar({
   clock,
   timeUp,
   totalSolved,
-  finishedCount,
   allFinished,
   runFailed,
   agentCount,
@@ -716,7 +713,6 @@ function TopBar({
   clock: number;
   timeUp: boolean;
   totalSolved: number;
-  finishedCount: number;
   allFinished: boolean;
   runFailed: boolean;
   agentCount: number;
@@ -760,9 +756,6 @@ function TopBar({
         )}
         <span className="hidden md:inline text-[#00FBFF]/75">
           🏁 <span className="text-[#00ff9c] font-bold">{totalSolved}</span> flags
-        </span>
-        <span className={finishedCount ? "text-[#00ff9c] font-bold" : "text-[#00FBFF]/70"}>
-          ◆ {finishedCount}/{agentCount}
         </span>
         <span className="arena-topbar-connection hidden xl:inline text-sm uppercase tracking-wider text-[#00FBFF]/55">
           {connectionStatus}
