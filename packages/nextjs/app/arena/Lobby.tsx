@@ -78,8 +78,10 @@ export function ArenaLobby({
   const [funding, setFunding] = useState(false);
   const [starting, setStarting] = useState(false);
   const [signingSeed, setSigningSeed] = useState(false);
+  const [signingInOperator, setSigningInOperator] = useState(false);
   const [stoppingRun, setStoppingRun] = useState(false);
   const [stopArmed, setStopArmed] = useState(false);
+  const [stopConfirmDisabled, setStopConfirmDisabled] = useState(false);
   const [durationMinutes, setDurationMinutes] = useState("60");
   const [error, setError] = useState<string | null>(null);
   const [blockingRun, setBlockingRun] = useState<ActiveRunConflict | null>(null);
@@ -96,7 +98,7 @@ export function ArenaLobby({
   const restoredLiveRun = useRef(run?.state === "running" || run?.state === "stopping" || run?.state === "finished");
   const lastRunState = useRef<string | null>(null);
   const stopArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const stopArmedAt = useRef(0);
+  const stopConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const operator = useOperatorSession();
   const needsWallet = !operator.authenticated && !operator.address;
@@ -106,15 +108,28 @@ export function ArenaLobby({
     run?.state === "preparing" ||
     run?.state === "awaiting_funding" ||
     run?.state === "ready";
+  const stoppedBeforeStart = run?.startedAt == null && (run?.state === "stopping" || run?.state === "finished");
 
-  useEffect(() => () => clearTimeout(stopArmTimer.current ?? undefined), []);
+  useEffect(
+    () => () => {
+      clearTimeout(stopArmTimer.current ?? undefined);
+      clearTimeout(stopConfirmTimer.current ?? undefined);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!run) restoredLiveRun.current = false;
+  }, [run]);
 
   useEffect(() => {
     if (canStopRun) return;
     setStopArmed(false);
-    stopArmedAt.current = 0;
+    setStopConfirmDisabled(false);
     clearTimeout(stopArmTimer.current ?? undefined);
+    clearTimeout(stopConfirmTimer.current ?? undefined);
     stopArmTimer.current = null;
+    stopConfirmTimer.current = null;
   }, [canStopRun]);
 
   const phase: Phase = !run
@@ -129,6 +144,8 @@ export function ArenaLobby({
     ? "funding"
     : run.state === "ready"
     ? "ready"
+    : stoppedBeforeStart
+    ? "failed"
     : run.state === "running" || run.state === "stopping" || run.state === "finished"
     ? "launching"
     : run.state === "failed"
@@ -283,6 +300,7 @@ export function ArenaLobby({
     setStarting(true);
     setError(null);
     setBlockingRun(null);
+    let createdRunId: string | null = null;
     try {
       if (!operator.authenticated) await operator.signIn();
       const minutes = Number(durationMinutes);
@@ -294,6 +312,7 @@ export function ArenaLobby({
         roster: [...ROSTER],
         durationMs: Math.round(minutes * 60_000),
       });
+      createdRunId = created.id;
       const url = new URL(window.location.href);
       url.searchParams.set("run", created.id);
       window.history.replaceState(null, "", url);
@@ -305,8 +324,10 @@ export function ArenaLobby({
       const conflict = activeRunConflict(cause);
       if (conflict) {
         const url = new URL(window.location.href);
-        url.searchParams.delete("run");
-        window.history.replaceState(null, "", url);
+        if (url.searchParams.get("run") === createdRunId) {
+          url.searchParams.delete("run");
+          window.history.replaceState(null, "", url);
+        }
         setBlockingRun(conflict);
         pushLog(`start blocked by run ${conflict.id}`, RED);
         return;
@@ -338,27 +359,53 @@ export function ArenaLobby({
     }
   }, [pushLog, run, signSeed]);
 
+  const signInOperator = useCallback(async () => {
+    try {
+      await operator.signIn();
+      return true;
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Could not sign in to manage this run";
+      setError(message);
+      pushLog(message, RED);
+      return false;
+    }
+  }, [operator, pushLog]);
+
+  const signInToManageRun = useCallback(async () => {
+    if (operator.authenticated || signingInOperator) return;
+    setSigningInOperator(true);
+    setError(null);
+    setBlockingRun(null);
+    try {
+      await signInOperator();
+    } finally {
+      setSigningInOperator(false);
+    }
+  }, [operator.authenticated, signInOperator, signingInOperator]);
+
   const stopLoadedRun = useCallback(async () => {
     if (!run || !canStopRun || stoppingRun) return;
     if (!stopArmed) {
       setStopArmed(true);
-      stopArmedAt.current = Date.now();
+      setStopConfirmDisabled(true);
+      stopConfirmTimer.current = setTimeout(() => {
+        setStopConfirmDisabled(false);
+        stopConfirmTimer.current = null;
+      }, STOP_CONFIRM_DWELL_MS);
       stopArmTimer.current = setTimeout(() => setStopArmed(false), STOP_ARM_MS);
       return;
     }
-    if (Date.now() - stopArmedAt.current < STOP_CONFIRM_DWELL_MS) return;
     clearTimeout(stopArmTimer.current ?? undefined);
     setStopArmed(false);
-    stopArmedAt.current = 0;
     setStoppingRun(true);
     setError(null);
     setBlockingRun(null);
+    if (!operator.authenticated && !(await signInOperator())) {
+      setStoppingRun(false);
+      return;
+    }
     try {
-      if (!operator.authenticated) await operator.signIn();
       const stopped = await arenaClient.stopRun(run.id);
-      // A stopped run that reports `stopping` is winding down, not launching;
-      // suppress the countdown ceremony the phase mapping would trigger.
-      restoredLiveRun.current = true;
       useArenaStore.getState().syncSnapshot(stopped);
       pushLog(`stopped run ${run.id}`, GREEN);
     } catch (cause) {
@@ -374,7 +421,7 @@ export function ArenaLobby({
     } finally {
       setStoppingRun(false);
     }
-  }, [canStopRun, operator, pushLog, run, stopArmed, stoppingRun]);
+  }, [canStopRun, operator, pushLog, run, signInOperator, stopArmed, stoppingRun]);
 
   useEffect(() => {
     if (phase !== "launching") return;
@@ -541,6 +588,7 @@ export function ArenaLobby({
                     <a
                       href={`/arena?run=${encodeURIComponent(blockingRun.id)}`}
                       onClick={event => {
+                        if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
                         event.preventDefault();
                         setBlockingRun(null);
                         useArenaStore.getState().setCurrentRunId(blockingRun.id);
@@ -661,17 +709,37 @@ export function ArenaLobby({
               backend funding events control readiness; the amount above controls manual top-ups
             </div>
           )}
-          {canStopRun && (operator.authenticated || operator.hadSession) && (
+          {canStopRun && (
             <div className="mt-6 flex justify-center">
-              <button
-                onClick={() => void stopLoadedRun()}
-                disabled={stoppingRun}
-                className={`px-4 py-1.5 rounded font-dotGothic text-xs tracking-widest border border-[#FF5861]/60 hover:bg-[#FF5861] hover:text-black transition disabled:opacity-40 ${
-                  stopArmed ? "animate-pulse bg-[#FF5861] text-black border-[#FF5861]" : "text-[#FF5861]/80"
-                }`}
-              >
-                {stoppingRun ? "STOPPING…" : stopArmed ? "CONFIRM STOP" : "■ STOP THIS RUN"}
-              </button>
+              {operator.authenticated || (operator.hadSession && operator.address) ? (
+                <button
+                  onClick={() => void stopLoadedRun()}
+                  disabled={stoppingRun || stopConfirmDisabled}
+                  className={`px-4 py-1.5 rounded font-dotGothic text-xs tracking-widest border border-[#FF5861]/60 hover:bg-[#FF5861] hover:text-black transition disabled:opacity-40 ${
+                    stopArmed ? "animate-pulse bg-[#FF5861] text-black border-[#FF5861]" : "text-[#FF5861]/80"
+                  }`}
+                >
+                  {stoppingRun ? "STOPPING…" : stopArmed ? "CONFIRM STOP" : "■ STOP THIS RUN"}
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    if (needsWallet) openConnectModal?.();
+                    else void signInToManageRun();
+                  }}
+                  disabled={
+                    !operator.sessionLoaded ||
+                    (needsWallet ? !openConnectModal : !operator.configured || signingInOperator)
+                  }
+                  className="rounded border border-[#FFBE00]/50 px-3 py-1.5 font-dotGothic text-[10px] tracking-widest text-[#FFBE00] transition hover:bg-[#FFBE00] hover:text-black disabled:opacity-40"
+                >
+                  {needsWallet
+                    ? "connect wallet to manage this run"
+                    : signingInOperator
+                    ? "signing in…"
+                    : "sign in to manage this run"}
+                </button>
+              )}
             </div>
           )}
         </div>

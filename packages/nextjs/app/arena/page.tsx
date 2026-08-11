@@ -1599,10 +1599,17 @@ function OperatorStrip({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stopArmed, setStopArmed] = useState(false);
+  const [stopConfirmDisabled, setStopConfirmDisabled] = useState(false);
   const stopArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const stopArmedAt = useRef(0);
+  const stopConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => () => clearTimeout(stopArmTimer.current ?? undefined), []);
+  useEffect(
+    () => () => {
+      clearTimeout(stopArmTimer.current ?? undefined);
+      clearTimeout(stopConfirmTimer.current ?? undefined);
+    },
+    [],
+  );
 
   const send = async (action: (text: string) => Promise<void>) => {
     const text = draft.trim();
@@ -1630,14 +1637,16 @@ function OperatorStrip({
     if (busy || archived) return;
     if (!stopArmed) {
       setStopArmed(true);
-      stopArmedAt.current = Date.now();
+      setStopConfirmDisabled(true);
+      stopConfirmTimer.current = setTimeout(() => {
+        setStopConfirmDisabled(false);
+        stopConfirmTimer.current = null;
+      }, STOP_CONFIRM_DWELL_MS);
       stopArmTimer.current = setTimeout(() => setStopArmed(false), STOP_ARM_MS);
       return;
     }
-    if (Date.now() - stopArmedAt.current < STOP_CONFIRM_DWELL_MS) return;
     clearTimeout(stopArmTimer.current ?? undefined);
     setStopArmed(false);
-    stopArmedAt.current = 0;
     setBusy(true);
     setError(null);
     try {
@@ -1708,7 +1717,7 @@ function OperatorStrip({
             </button>
             <button
               onClick={() => void stop()}
-              disabled={busy || archived}
+              disabled={busy || archived || stopConfirmDisabled}
               className={`px-2 py-1 rounded border text-[10px] font-bold disabled:opacity-40 ${
                 stopArmed || timeUp
                   ? "animate-pulse border-[#FF5861] bg-[#FF5861] text-black"
