@@ -649,17 +649,6 @@ export function ArenaLobby({
                 ◀ START OVER
               </button>
             )}
-            {canStopRun && (operator.authenticated || operator.hadSession) && (
-              <button
-                onClick={() => void stopLoadedRun()}
-                disabled={stoppingRun}
-                className={`lobby-cta px-10 py-3 rounded-md font-dotGothic text-lg tracking-widest border-2 border-[#FF5861] hover:bg-[#FF5861] hover:text-black transition disabled:opacity-40 ${
-                  stopArmed ? "animate-pulse bg-[#FF5861] text-black" : "text-[#FF5861]"
-                }`}
-              >
-                {stoppingRun ? "STOPPING…" : stopArmed ? "CONFIRM STOP" : "■ STOP THIS RUN"}
-              </button>
-            )}
           </div>
 
           {phase === "ready" && (
@@ -670,6 +659,19 @@ export function ArenaLobby({
           {phase === "funding" && (
             <div className="mt-3 text-[11px] text-[#00FBFF]/40 tracking-wide">
               backend funding events control readiness; the amount above controls manual top-ups
+            </div>
+          )}
+          {canStopRun && (operator.authenticated || operator.hadSession) && (
+            <div className="mt-6 flex justify-center">
+              <button
+                onClick={() => void stopLoadedRun()}
+                disabled={stoppingRun}
+                className={`px-4 py-1.5 rounded font-dotGothic text-xs tracking-widest border border-[#FF5861]/60 hover:bg-[#FF5861] hover:text-black transition disabled:opacity-40 ${
+                  stopArmed ? "animate-pulse bg-[#FF5861] text-black border-[#FF5861]" : "text-[#FF5861]/80"
+                }`}
+              >
+                {stoppingRun ? "STOPPING…" : stopArmed ? "CONFIRM STOP" : "■ STOP THIS RUN"}
+              </button>
             </div>
           )}
         </div>
