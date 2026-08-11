@@ -14,7 +14,7 @@ export interface ConsoleEntry {
 
 export interface FeedItem {
   id: number;
-  type: "flag" | "blocked" | "resumed" | "done";
+  type: "flag" | "blocked" | "resumed" | "done" | "restarted";
   agentId: string;
   color: string;
   text: string;
@@ -194,6 +194,26 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         kind: "message",
         text: `Task: ${event.payload.text}`,
       });
+    // The lane starts over: everything above it in the console belongs to a
+    // session the agent no longer has. The opening prompt lands right after as
+    // the usual entrant.prompt, so this only marks the cut.
+    case "entrant.restarted": {
+      next = appendConsole(next, event.payload.entrantId, {
+        id: event.id,
+        source: event.source,
+        // Rendered under a "DIRECTOR:" prefix, so the line does not repeat who did it.
+        kind: "steer",
+        text: "restarted this session — the agent starts over from its opening prompt",
+      });
+      const display = displayFor(event.payload.entrantId);
+      return appendFeed(next, {
+        id: event.id,
+        type: "restarted",
+        agentId: event.payload.entrantId,
+        color: display.color,
+        text: `${display.handle} was restarted on a fresh session`,
+      });
+    }
     case "entrant.nudged":
       return appendConsole(next, event.payload.entrantId, {
         id: event.id,
