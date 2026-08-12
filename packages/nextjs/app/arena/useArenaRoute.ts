@@ -39,20 +39,22 @@ export function useArenaRoute(): ArenaRoute {
   const viewParam = params.get("view");
   const view = viewParam !== null && ARENA_VIEWS.includes(viewParam) ? (viewParam as ArenaView) : null;
 
-  const go = useCallback(
-    (update: ArenaRouteUpdate, options?: { replace?: boolean }) => {
-      const next = new URLSearchParams(params.toString());
-      for (const [key, value] of Object.entries(update)) {
-        if (value === null) next.delete(key);
-        else if (value !== undefined) next.set(key, value);
-      }
-      const search = next.toString();
-      const url = `${window.location.pathname}${search ? `?${search}` : ""}`;
-      if (options?.replace) window.history.replaceState(null, "", url);
-      else window.history.pushState(null, "", url);
-    },
-    [params],
-  );
+  const go = useCallback((update: ArenaRouteUpdate, options?: { replace?: boolean }) => {
+    // Built from the live URL, not the hook's render-time snapshot: two writes in
+    // the same tick must both land, and reading nothing from render keeps this
+    // callback one identity for the life of the page.
+    const next = new URLSearchParams(window.location.search);
+    for (const [key, value] of Object.entries(update)) {
+      if (value === null) next.delete(key);
+      else if (value !== undefined) next.set(key, value);
+    }
+    const search = next.toString();
+    const url = `${window.location.pathname}${search ? `?${search}` : ""}`;
+    if (options?.replace) window.history.replaceState(null, "", url);
+    // A push to the URL already shown would stack a duplicate entry — re-clicking
+    // the active tab would make back appear dead for a press.
+    else if (url !== `${window.location.pathname}${window.location.search}`) window.history.pushState(null, "", url);
+  }, []);
 
   return useMemo(() => ({ runId, view, agentId, go }), [agentId, go, runId, view]);
 }
