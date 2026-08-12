@@ -12,7 +12,7 @@ import { Address, BlockieAvatar, RainbowKitCustomConnectButton } from "~~/compon
 import { useTransactor } from "~~/hooks/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 import type { RunState } from "~~/services/arena/arena-types";
-import { arenaClient } from "~~/services/arena/client";
+import { ArenaApiError, arenaClient } from "~~/services/arena/client";
 import type { FundingProjection } from "~~/services/arena/projection";
 import { ROSTER } from "~~/services/arena/roster";
 import { selectFunding, selectRun, selectRunError, useArenaStore } from "~~/services/arena/store";
@@ -20,11 +20,14 @@ import { useOperatorSession, useSeedSigner } from "~~/services/arena/useOperator
 
 type Phase = "idle" | "connecting" | "signature" | "preparing" | "funding" | "ready" | "launching" | "failed";
 type SlotState = "waiting" | "joining" | "ready";
+type ActiveRunConflict = { id: string; state: string };
 
 const CY = "#00FBFF";
 const GREEN = "#00ff9c";
 const YELLOW = "#FFBE00";
 const RED = "#FF5861";
+const STOP_ARM_MS = 6000;
+const STOP_CONFIRM_DWELL_MS = 400;
 
 const SETUP_STATE_COPY: Record<RunState, string> = {
   created: "Run created",
@@ -40,6 +43,16 @@ const SETUP_STATE_COPY: Record<RunState, string> = {
 
 function shortAddress(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
+}
+
+function activeRunConflict(cause: unknown): ActiveRunConflict | null {
+  if (!(cause instanceof ArenaApiError) || cause.status !== 409 || !cause.body || typeof cause.body !== "object") {
+    return null;
+  }
+  const { activeRunId, activeRunState } = cause.body as Record<string, unknown>;
+  return typeof activeRunId === "string" && typeof activeRunState === "string"
+    ? { id: activeRunId, state: activeRunState }
+    : null;
 }
 
 function tone(ctx: AudioContext, freq: number, dur = 0.09, type: OscillatorType = "square", gain = 0.05) {
@@ -72,8 +85,13 @@ export function ArenaLobby({
   const [funding, setFunding] = useState(false);
   const [starting, setStarting] = useState(false);
   const [signingSeed, setSigningSeed] = useState(false);
+  const [signingInOperator, setSigningInOperator] = useState(false);
+  const [stoppingRun, setStoppingRun] = useState(false);
+  const [stopArmed, setStopArmed] = useState(false);
+  const [stopConfirmDisabled, setStopConfirmDisabled] = useState(false);
   const [durationMinutes, setDurationMinutes] = useState("60");
   const [error, setError] = useState<string | null>(null);
+  const [blockingRun, setBlockingRun] = useState<ActiveRunConflict | null>(null);
 
   const run = useArenaStore(selectRun);
   const fundingProjection = useArenaStore(selectFunding);
@@ -85,10 +103,40 @@ export function ArenaLobby({
   const logId = useRef(0);
   const restoredLiveRun = useRef(run?.state === "running" || run?.state === "stopping" || run?.state === "finished");
   const lastRunState = useRef<string | null>(null);
+  const stopArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stopConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const operator = useOperatorSession();
   const needsWallet = !operator.authenticated && !operator.address;
   const signSeed = useSeedSigner();
+  const canStopRun =
+    run?.state === "awaiting_signature" ||
+    run?.state === "preparing" ||
+    run?.state === "awaiting_funding" ||
+    run?.state === "ready";
+  const stoppedBeforeStart = run?.startedAt == null && (run?.state === "stopping" || run?.state === "finished");
+
+  useEffect(
+    () => () => {
+      clearTimeout(stopArmTimer.current ?? undefined);
+      clearTimeout(stopConfirmTimer.current ?? undefined);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!run) restoredLiveRun.current = false;
+  }, [run]);
+
+  useEffect(() => {
+    if (canStopRun) return;
+    setStopArmed(false);
+    setStopConfirmDisabled(false);
+    clearTimeout(stopArmTimer.current ?? undefined);
+    clearTimeout(stopConfirmTimer.current ?? undefined);
+    stopArmTimer.current = null;
+    stopConfirmTimer.current = null;
+  }, [canStopRun]);
 
   const phase: Phase = !run
     ? starting
@@ -102,6 +150,8 @@ export function ArenaLobby({
     ? "funding"
     : run.state === "ready"
     ? "ready"
+    : stoppedBeforeStart
+    ? "failed"
     : run.state === "running" || run.state === "stopping" || run.state === "finished"
     ? "launching"
     : run.state === "failed"
@@ -258,6 +308,8 @@ export function ArenaLobby({
     audioRef.current?.resume();
     setStarting(true);
     setError(null);
+    setBlockingRun(null);
+    let createdRunId: string | null = null;
     try {
       if (!operator.authenticated) await operator.signIn();
       const minutes = Number(durationMinutes);
@@ -269,13 +321,25 @@ export function ArenaLobby({
         roster: [...ROSTER],
         durationMs: Math.round(minutes * 60_000),
       });
-      useArenaStore.getState().seedSnapshot(created);
+      createdRunId = created.id;
       const url = new URL(window.location.href);
       url.searchParams.set("run", created.id);
       window.history.replaceState(null, "", url);
       const started = await arenaClient.startRun(created.id);
       useArenaStore.getState().syncSnapshot(started);
+      pushLog(`started run ${created.id}`, GREEN);
     } catch (cause) {
+      const conflict = activeRunConflict(cause);
+      if (conflict) {
+        const url = new URL(window.location.href);
+        if (url.searchParams.get("run") === createdRunId) {
+          url.searchParams.delete("run");
+          window.history.replaceState(null, "", url);
+        }
+        setBlockingRun(conflict);
+        pushLog(`start blocked by run ${conflict.id}`, RED);
+        return;
+      }
       const message = cause instanceof Error ? cause.message : "Could not start the arena";
       setError(message);
       pushLog(message, RED);
@@ -288,6 +352,7 @@ export function ArenaLobby({
     if (!run || run.state !== "awaiting_signature") return;
     setSigningSeed(true);
     setError(null);
+    setBlockingRun(null);
     try {
       const signature = await signSeed(run.id, run.chainId);
       const updated = await arenaClient.seedRun(run.id, { signature });
@@ -301,6 +366,72 @@ export function ArenaLobby({
       setSigningSeed(false);
     }
   }, [pushLog, run, signSeed]);
+
+  const signInOperator = useCallback(async () => {
+    try {
+      await operator.signIn();
+      return true;
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Could not sign in to manage this run";
+      setError(message);
+      pushLog(message, RED);
+      return false;
+    }
+  }, [operator, pushLog]);
+
+  const signInToManageRun = useCallback(async () => {
+    if (operator.authenticated || signingInOperator) return;
+    setSigningInOperator(true);
+    setError(null);
+    setBlockingRun(null);
+    try {
+      await signInOperator();
+    } finally {
+      setSigningInOperator(false);
+    }
+  }, [operator.authenticated, signInOperator, signingInOperator]);
+
+  const stopLoadedRun = useCallback(async () => {
+    if (!run || !canStopRun || stoppingRun) return;
+    if (!stopArmed) {
+      setStopArmed(true);
+      setStopConfirmDisabled(true);
+      stopConfirmTimer.current = setTimeout(() => {
+        setStopConfirmDisabled(false);
+        stopConfirmTimer.current = null;
+      }, STOP_CONFIRM_DWELL_MS);
+      stopArmTimer.current = setTimeout(() => setStopArmed(false), STOP_ARM_MS);
+      return;
+    }
+    setStoppingRun(true);
+    setError(null);
+    setBlockingRun(null);
+    // Sign in before disarming: a transient auth failure keeps the confirm
+    // armed instead of restarting the two-click dance.
+    if (!operator.authenticated && !(await signInOperator())) {
+      setStoppingRun(false);
+      return;
+    }
+    clearTimeout(stopArmTimer.current ?? undefined);
+    setStopArmed(false);
+    try {
+      const stopped = await arenaClient.stopRun(run.id);
+      useArenaStore.getState().syncSnapshot(stopped);
+      pushLog(`stopped run ${run.id}`, GREEN);
+    } catch (cause) {
+      if (cause instanceof ArenaApiError && cause.status === 401) {
+        operator.invalidate();
+        setError("operator session expired — sign in again");
+        pushLog("operator session expired — sign in again", RED);
+      } else {
+        const message = cause instanceof Error ? cause.message : "Could not stop the arena run";
+        setError(message);
+        pushLog(message, RED);
+      }
+    } finally {
+      setStoppingRun(false);
+    }
+  }, [canStopRun, operator, pushLog, run, signInOperator, stopArmed, stoppingRun]);
 
   useEffect(() => {
     if (phase !== "launching") return;
@@ -466,9 +597,34 @@ export function ArenaLobby({
             </div>
           )}
 
-          {error && phase !== "failed" && (
+          {(blockingRun || error) && phase !== "failed" && (
             <div className="mb-4 max-w-3xl rounded border border-[#FF5861]/40 bg-[#FF5861]/10 px-3 py-2 text-base text-[#FF5861]">
-              {error}
+              {blockingRun ? (
+                <>
+                  <div>run is already {blockingRun.state.replaceAll("_", " ")}</div>
+                  <code className="mt-1 block break-words text-[#FFBE00]">{blockingRun.id}</code>
+                  <div className="mt-1">
+                    <a
+                      href={`/arena?run=${encodeURIComponent(blockingRun.id)}`}
+                      onClick={event => {
+                        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                        event.preventDefault();
+                        setBlockingRun(null);
+                        useArenaStore.getState().setCurrentRunId(blockingRun.id);
+                        const url = new URL(window.location.href);
+                        url.searchParams.set("run", blockingRun.id);
+                        window.history.replaceState(null, "", url);
+                      }}
+                      className="font-bold underline underline-offset-2 hover:text-white"
+                    >
+                      open that run
+                    </a>
+                    {blockingRun.state === "stopping" ? " and wait for it to finish" : " and stop it, then start yours"}
+                  </div>
+                </>
+              ) : (
+                error
+              )}
             </div>
           )}
 
@@ -514,7 +670,7 @@ export function ArenaLobby({
           )}
 
           {/* primary action */}
-          <div className="lobby-primary-action mt-10 h-16 flex items-center justify-center">
+          <div className="lobby-primary-action mt-10 h-16 flex items-center justify-center gap-3">
             {phase === "connecting" && (
               <div className="text-[#00FBFF]/50 text-sm tracking-widest font-dotGothic lobby-blink">
                 ● ● ● CONNECTING AGENTS ● ● ●
@@ -570,6 +726,39 @@ export function ArenaLobby({
           {phase === "funding" && (
             <div className="lobby-phase-note mt-3 text-base text-[#00FBFF]/70 tracking-wide">
               Agents start once every wallet is funded — the amount above sets each manual top-up.
+            </div>
+          )}
+          {canStopRun && (operator.authenticated || operator.hadSession) && (
+            <div className="mt-6 flex justify-center">
+              {operator.authenticated || (operator.hadSession && operator.address) ? (
+                <button
+                  onClick={() => void stopLoadedRun()}
+                  disabled={stoppingRun || stopConfirmDisabled}
+                  className={`px-4 py-1.5 rounded font-dotGothic text-sm tracking-widest border border-[#FF5861]/60 hover:bg-[#FF5861] hover:text-black transition disabled:opacity-40 ${
+                    stopArmed ? "animate-pulse bg-[#FF5861] text-black border-[#FF5861]" : "text-[#FF5861]/80"
+                  }`}
+                >
+                  {stoppingRun ? "STOPPING…" : stopArmed ? "CONFIRM STOP" : "■ STOP THIS RUN"}
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    if (needsWallet) openConnectModal?.();
+                    else void signInToManageRun();
+                  }}
+                  disabled={
+                    !operator.sessionLoaded ||
+                    (needsWallet ? !openConnectModal : !operator.configured || signingInOperator)
+                  }
+                  className="rounded border border-[#FFBE00]/50 px-3 py-1.5 font-dotGothic text-sm tracking-widest text-[#FFBE00] transition hover:bg-[#FFBE00] hover:text-black disabled:opacity-40"
+                >
+                  {needsWallet
+                    ? "connect wallet to manage this run"
+                    : signingInOperator
+                    ? "signing in…"
+                    : "sign in to manage this run"}
+                </button>
+              )}
             </div>
           )}
         </div>

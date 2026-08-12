@@ -4,10 +4,12 @@ import type {
   CreateRunRequest,
   HistoryPage,
   NonceResponse,
+  RestartResponse,
   RunResponse,
   RunSnapshot,
   SessionResponse,
   SteerRequest,
+  SteerResponse,
   VerifyRequest,
   VerifyResponse,
 } from "./arena-types";
@@ -18,7 +20,7 @@ export const ARENA_BACKEND_URL = (process.env.NEXT_PUBLIC_ARENA_BACKEND_URL || "
 );
 
 export class ArenaApiError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(public readonly status: number, message: string, public readonly body: unknown = null) {
     super(message);
     this.name = "ArenaApiError";
   }
@@ -41,7 +43,7 @@ async function arenaFetch<T>(path: string, options: RequestOptions = {}): Promis
     const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
     const message =
       typeof body?.error === "string" ? body.error : `Arena request failed with status ${response.status}`;
-    throw new ArenaApiError(response.status, message);
+    throw new ArenaApiError(response.status, message, body);
   }
 
   if (response.status === 204) return undefined as T;
@@ -65,9 +67,16 @@ export const arenaClient = {
     runFetch(`/runs/${encodeURIComponent(runId)}/seed`, { method: "POST", body }),
   stopRun: (runId: string) => runFetch(`/runs/${encodeURIComponent(runId)}/stop`, { method: "POST" }),
   steerEntrant: (runId: string, entrantId: string, body: SteerRequest) =>
-    arenaFetch<{ accepted: boolean }>(
-      `/runs/${encodeURIComponent(runId)}/entrants/${encodeURIComponent(entrantId)}/steer`,
-      { method: "POST", body },
+    arenaFetch<SteerResponse>(`/runs/${encodeURIComponent(runId)}/entrants/${encodeURIComponent(entrantId)}/steer`, {
+      method: "POST",
+      body,
+    }),
+  restartEntrant: (runId: string, entrantId: string) =>
+    arenaFetch<RestartResponse>(
+      `/runs/${encodeURIComponent(runId)}/entrants/${encodeURIComponent(entrantId)}/restart`,
+      {
+        method: "POST",
+      },
     ),
   broadcast: (runId: string, body: BroadcastRequest) =>
     arenaFetch<BroadcastResponse>(`/runs/${encodeURIComponent(runId)}/broadcast`, { method: "POST", body }),

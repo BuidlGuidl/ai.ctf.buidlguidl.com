@@ -19,6 +19,9 @@ const BACKFILL_TYPES = [
   "tool.result",
   "entrant.steered",
   "entrant.prompt",
+  // Both prompts replay, so without the cut between them the abandoned session
+  // and its replacement rebuild as one continuous console.
+  "entrant.restarted",
   "entrant.nudged",
   "director.broadcast",
   "score.flag",

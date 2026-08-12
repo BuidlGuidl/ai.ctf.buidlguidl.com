@@ -30,6 +30,7 @@ export interface Agent {
   cost: number | null;
   lastSolveAt: string | null;
   finishedAt: number | null;
+  currentChallengeId: number | null;
 }
 
 // Names, blurbs and hints mirror the real CTF copy in packages/nextjs/data/challenges/*.md.

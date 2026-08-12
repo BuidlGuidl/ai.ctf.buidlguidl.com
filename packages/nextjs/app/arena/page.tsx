@@ -3,6 +3,7 @@
 import { type CSSProperties, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArenaLobby } from "./Lobby";
 import { ModelName } from "./ModelName";
+import { OperatorAddress } from "./OperatorAddress";
 import { Agent, AgentStatus, CHALLENGES, Challenge, DIFFICULTY_COLOR } from "./mockData";
 import type { Address } from "viem";
 import { BlockieAvatar, RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
@@ -20,6 +21,7 @@ import {
   selectConsoleFor,
   selectFeed,
   selectLastFlagEvent,
+  selectPendingSteersFor,
   selectPreviewFor,
   selectRunChainId,
   selectRunDeadlineAt,
@@ -60,6 +62,7 @@ const PODIUM = {
 // `podiumBroadcast` keyframes so the banner is never cut off mid-animation.
 const FINISH_STING_MS = 4600;
 const STOP_ARM_MS = 6000;
+const STOP_CONFIRM_DWELL_MS = 400;
 
 const PODIUM_RESULT: Record<PodiumPlace, string> = {
   1: "ARENA CHAMPION",
@@ -79,6 +82,15 @@ const rankAgents = (agents: Agent[]) =>
       (a.lastSolveAt ?? "\uffff").localeCompare(b.lastSolveAt ?? "\uffff") ||
       a.id.localeCompare(b.id),
   );
+
+// The announced target only means something while the agent is still chasing it:
+// `done` keeps the last announce forever, `score.flag` never clears it, and the id
+// is self-reported so it can land off the board. Every surface reads it through here.
+const activeTarget = (a: Agent): number | null => {
+  const id = a.currentChallengeId;
+  if (id === null || a.status === "done" || a.solved.includes(id)) return null;
+  return CHALLENGES.some(c => c.id === id) ? id : null;
+};
 
 function secondsFrom(start: string | null, end: string | null): number | null {
   if (!start || !end) return null;
@@ -105,6 +117,7 @@ function agentsFromRun(entrants: EntrantSummary[] | null, startedAt: string | nu
         cost: null,
         lastSolveAt: null,
         finishedAt: null,
+        currentChallengeId: null,
       };
     });
   }
@@ -129,6 +142,7 @@ function agentsFromRun(entrants: EntrantSummary[] | null, startedAt: string | nu
       cost: entrant.costUsd,
       lastSolveAt: lastSolve,
       finishedAt: secondsFrom(startedAt, clearedAt),
+      currentChallengeId: entrant.currentChallengeId,
     };
   });
 }
@@ -259,7 +273,11 @@ export default function ArenaPage() {
   const steer = useCallback(
     async (text: string) => {
       if (!runId || !focused) return;
-      await arenaClient.steerEntrant(runId, focused.id, { text });
+      const sinceEventId = useArenaStore.getState().projection?.lastEventId ?? 0;
+      const { status } = await arenaClient.steerEntrant(runId, focused.id, { text });
+      // An injected steer is already on its way back as an event; only a queued
+      // one needs the hint to stand in until the agent's turn ends.
+      if (status === "queued") useArenaStore.getState().addPendingSteer(focused.id, text, sinceEventId);
     },
     [focused, runId],
   );
@@ -271,6 +289,13 @@ export default function ArenaPage() {
     },
     [runId],
   );
+
+  // Recovery for the observed lane only. The backend rebuilds the opening prompt
+  // and the events come back over SSE, so there is nothing to sync here.
+  const restart = useCallback(async () => {
+    if (!runId || !focused) return;
+    await arenaClient.restartEntrant(runId, focused.id);
+  }, [focused, runId]);
 
   if (!mounted) {
     return (
@@ -381,13 +406,17 @@ export default function ArenaPage() {
                 who is (or was, mid-race) the operator — never as a sign-in invitation. */}
             {(operator.authenticated || operator.hadSession) && (
               <OperatorStrip
+                focused={focused}
+                focusMode={stageMode === "focus"}
                 address={operator.address}
                 authenticated={operator.authenticated}
                 hadSession={operator.hadSession}
                 archived={runTerminal}
+                restartable={runState === "running"}
                 timeUp={clock.timeUp}
                 onSteer={steer}
                 onBroadcast={broadcast}
+                onRestart={restart}
                 onStop={stopRace}
                 onInvalidate={operator.invalidate}
                 onSignIn={operator.signIn}
@@ -819,6 +848,7 @@ function AgentLog({ focused, onClose }: { focused: Agent; onClose: () => void })
   }, [lines]);
 
   const finished = focused.status === "done";
+  const target = activeTarget(focused);
 
   return (
     <div className="arena-agent-log arena-agent-log-in flex-1 min-h-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#020a0c]">
@@ -846,9 +876,13 @@ function AgentLog({ focused, onClose }: { focused: Agent; onClose: () => void })
             <span className="px-1.5 py-0.5 rounded font-bold shrink-0 text-sm text-[#00ff9c] border border-[#00ff9c]/40">
               CLEARED · {fmtClock(focused.finishedAt)}
             </span>
+          ) : target !== null ? (
+            <span className="px-1.5 py-0.5 rounded font-bold shrink-0 text-sm text-[#FFBE00] border border-[#FFBE00]/40">
+              TARGET #{target}
+            </span>
           ) : (
             <span className="px-1.5 py-0.5 rounded font-bold shrink-0 text-sm text-[#00FBFF]/70 border border-[#00FBFF]/20">
-              CHALLENGE UNREPORTED
+              TARGET UNREPORTED
             </span>
           )}
           <span className="ml-auto text-[#00ff9c] font-bold shrink-0">
@@ -884,6 +918,7 @@ function ConsoleRow({ line }: { line: ConsoleEntry }) {
   if (line.kind === "message") return <div className="text-white/85">› {line.text}</div>;
   if (line.kind === "error") return <div className="text-[#FF5861] font-bold">⚠ {line.text}</div>;
   if (line.kind === "flag") return <div className="text-[#00ff9c] font-bold">🏁 {line.text}</div>;
+  if (line.kind === "steer") return <div className="text-[#FFBE00] font-bold">◆ DIRECTOR: {line.text}</div>;
   if (line.kind === "tool") {
     const state = !line.result ? "running" : line.result.ok ? "ok" : "fail";
     const color = state === "running" ? "#FFBE00" : state === "ok" ? "#00ff9c" : "#FF5861";
@@ -1194,7 +1229,6 @@ function RaceView({
               {a.cost === null ? "—" : `$${a.cost.toFixed(2)}`}
             </span>
 
-            {/* The backend reports captures but not each entrant's active challenge. */}
             <div className="arena-race-flags flex-1 flex gap-1">
               {slots.map(k => {
                 const flagId = a.solved[k];
@@ -1216,16 +1250,23 @@ function RaceView({
                 }
                 if (k === a.solved.length && !done(a)) {
                   const color = STATUS_STYLE[a.status].color;
+                  const target = activeTarget(a);
+                  // The in-flight slot names the entrant's reported target — an
+                  // outlined number, so it can't read as a captured flag.
                   return (
                     <span
                       key={k}
-                      title={STATUS_STYLE[a.status].label}
+                      title={
+                        target !== null
+                          ? `${STATUS_STYLE[a.status].label} · target #${target} ${CHALLENGES[target - 1]?.name ?? ""}`
+                          : STATUS_STYLE[a.status].label
+                      }
                       className={`arena-race-cell relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums ${
                         a.status === "working" ? "cell-working" : "opacity-40"
                       }`}
                       style={{ background: `${color}1f`, borderColor: color, color }}
                     >
-                      …
+                      {target ?? "…"}
                     </span>
                   );
                 }
@@ -1320,6 +1361,7 @@ function GridView({
 function GridCard({ agent, onPick, selected }: { agent: Agent; onPick: (id: string) => void; selected: boolean }) {
   const preview = useArenaStore(selectPreviewFor(agent.id));
   const finished = agent.status === "done";
+  const target = activeTarget(agent);
   return (
     <div
       role="button"
@@ -1347,6 +1389,14 @@ function GridCard({ agent, onPick, selected }: { agent: Agent; onPick: (id: stri
         <span className="truncate" style={{ color: finished ? "#00ff9c" : STATUS_STYLE[agent.status].color }}>
           {agent.finishedAt !== null ? `◆ CLEARED · ${fmtClock(agent.finishedAt)}` : STATUS_STYLE[agent.status].label}
         </span>
+        {agent.finishedAt === null && target !== null && (
+          <span
+            className="shrink-0 font-bold text-[#FFBE00]"
+            title={`working on #${target} ${CHALLENGES[target - 1]?.name ?? ""}`}
+          >
+            ▸ #{target}
+          </span>
+        )}
         <span className="ml-auto shrink-0 text-[#00FBFF]/70 tabular-nums">
           {agent.solved.length}/{CHALLENGES.length}
         </span>
@@ -1356,20 +1406,17 @@ function GridCard({ agent, onPick, selected }: { agent: Agent; onPick: (id: stri
           finished ? "agent-terminal-locked" : ""
         }`}
       >
+        {/* shrink-0: these lines are flex items, so without it a full buffer
+            squashes every line and truncate slices the glyphs in half. */}
+        {preview.map((line, index) => (
+          <div key={`${index}:${line}`} className="shrink-0 truncate text-[#7fd8dd]/90">
+            {line}
+          </div>
+        ))}
         {finished ? (
-          <>
-            <div className="shrink-0 text-[#00FBFF]/55">agent process exited</div>
-            <div className="shrink-0 text-[#00ff9c] font-bold">agent finished ✓</div>
-          </>
+          <div className="shrink-0 border-t border-[#00ff9c]/20 pt-0.5 text-[#00ff9c] font-bold">agent finished ✓</div>
         ) : (
-          <>
-            {preview.map((line, index) => (
-              <div key={`${index}:${line}`} className="shrink-0 truncate text-[#7fd8dd]/90">
-                {line}
-              </div>
-            ))}
-            <div className="text-[#00ff9c] animate-pulse shrink-0">▋</div>
-          </>
+          <div className="text-[#00ff9c] animate-pulse shrink-0">▋</div>
         )}
       </div>
       <div className="h-1 shrink-0 bg-[#00FBFF]/10">
@@ -1394,19 +1441,25 @@ function ChallengeBoard({
   onOpen: (id: number) => void;
 }) {
   const solvedCount = (id: number) => agents.filter(a => a.solved.includes(id)).length;
+  const focusedTarget = activeTarget(focused);
   return (
     <div className="arena-challenge-board h-56 shrink-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#010607]">
       <SectionHead label="CHALLENGE BOARD" hint="click for details" />
       <div className="arena-challenge-grid flex-1 min-h-0 overflow-y-auto console-scroll p-2 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-1.5 content-start">
         {CHALLENGES.map(c => {
           const mine = focused.solved.includes(c.id);
+          const target = focusedTarget === c.id;
           const count = solvedCount(c.id);
           return (
             <button
               key={c.id}
               onClick={() => onOpen(c.id)}
               className={`arena-challenge-card px-2 py-1.5 rounded border text-base text-left transition hover:border-[#00FBFF] ${
-                mine ? "bg-[#00ff9c]/10 border-[#00ff9c]/50" : "border-[#00FBFF]/15 bg-[#00FBFF]/[0.02]"
+                mine
+                  ? "bg-[#00ff9c]/10 border-[#00ff9c]/50"
+                  : target
+                  ? "bg-[#FFBE00]/10 border-[#FFBE00]/50"
+                  : "border-[#00FBFF]/15 bg-[#00FBFF]/[0.02]"
               }`}
             >
               <div className="flex items-center gap-1">
@@ -1414,6 +1467,11 @@ function ChallengeBoard({
                   #{c.id}
                 </span>
                 {mine && <span className="text-[#00ff9c]">✓</span>}
+                {target && (
+                  <span className="text-xs font-bold tracking-wider text-[#FFBE00]" title="the agent's reported target">
+                    ◎ TARGET
+                  </span>
+                )}
               </div>
               <div className="text-white/80 truncate">{c.name}</div>
               <div className="text-sm text-[#00FBFF]/70">
@@ -1627,35 +1685,86 @@ function ArenaStream() {
 }
 
 function OperatorStrip({
+  focused,
+  focusMode,
   address,
   authenticated,
   hadSession,
   archived,
+  restartable,
   timeUp,
   onSteer,
   onBroadcast,
+  onRestart,
   onStop,
   onInvalidate,
   onSignIn,
 }: {
+  focused: Agent;
+  // On the overview no target was chosen, so the composer speaks to everyone;
+  // a directed steer only exists once an agent is actually being observed.
+  focusMode: boolean;
   address: string | null;
   authenticated: boolean;
   hadSession: boolean;
   archived: boolean;
+  // The backend only replaces a session while the run is running.
+  restartable: boolean;
   timeUp: boolean;
   onSteer: (text: string) => Promise<void>;
   onBroadcast: (text: string) => Promise<void>;
+  onRestart: () => Promise<void>;
   onStop: () => Promise<void>;
   onInvalidate: () => void;
   onSignIn: () => Promise<void>;
 }) {
+  const pendingSteers = useArenaStore(selectPendingSteersFor(focused.id));
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [stopArmed, setStopArmed] = useState(false);
-  const stopArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // One arm for both destructive buttons. Two independent ones let you arm STOP,
+  // change your mind, arm and confirm RESTART, and leave STOP live for the rest
+  // of its window — where the next click ends the race outright.
+  const [armed, setArmed] = useState<"stop" | "restart" | null>(null);
+  // The confirm stays disabled for a beat after arming so a double-click's
+  // second click cannot reach it.
+  const [confirmDisabled, setConfirmDisabled] = useState(false);
+  const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => () => clearTimeout(stopArmTimer.current ?? undefined), []);
+  const disarm = useCallback(() => {
+    clearTimeout(armTimer.current ?? undefined);
+    clearTimeout(confirmTimer.current ?? undefined);
+    setArmed(null);
+    setConfirmDisabled(false);
+  }, []);
+
+  const arm = (action: "stop" | "restart") => {
+    clearTimeout(armTimer.current ?? undefined);
+    clearTimeout(confirmTimer.current ?? undefined);
+    setArmed(action);
+    setConfirmDisabled(true);
+    confirmTimer.current = setTimeout(() => {
+      setConfirmDisabled(false);
+      confirmTimer.current = null;
+    }, STOP_CONFIRM_DWELL_MS);
+    armTimer.current = setTimeout(() => setArmed(null), STOP_ARM_MS);
+  };
+
+  useEffect(
+    () => () => {
+      clearTimeout(armTimer.current ?? undefined);
+      clearTimeout(confirmTimer.current ?? undefined);
+    },
+    [],
+  );
+
+  // An arm must not outlive the button that took it: switching lanes would aim
+  // it at whoever is observed next, and a run leaving `running` mid-arm would
+  // leave a disabled button pulsing CONFIRM for the rest of the window.
+  useEffect(() => {
+    disarm();
+  }, [disarm, focused.id, focusMode, restartable, archived]);
 
   const send = async (action: (text: string) => Promise<void>) => {
     const text = draft.trim();
@@ -1677,31 +1786,42 @@ function OperatorStrip({
     }
   };
 
-  // Stopping ends the race for everyone, so it takes two clicks. The arm state
-  // lapses on its own; a native confirm dialog would cover the broadcast.
-  const stop = async () => {
-    if (busy || archived) return;
-    if (!stopArmed) {
-      setStopArmed(true);
-      stopArmTimer.current = setTimeout(() => setStopArmed(false), STOP_ARM_MS);
+  // Both destructive actions take two clicks, and arming one disarms the other.
+  // The arm lapses on its own; a native confirm dialog would cover the broadcast.
+  const confirmed = async (action: "stop" | "restart", run: () => Promise<void>, failure: string) => {
+    if (busy) return;
+    if (armed !== action) {
+      arm(action);
       return;
     }
-    clearTimeout(stopArmTimer.current ?? undefined);
-    setStopArmed(false);
+    if (confirmDisabled) return;
+    disarm();
     setBusy(true);
     setError(null);
     try {
-      await onStop();
+      await run();
     } catch (cause) {
       if (cause instanceof ArenaApiError && cause.status === 401) {
         onInvalidate();
         setError("operator session expired — sign in again");
       } else {
-        setError(cause instanceof Error ? cause.message : "The stop request failed");
+        setError(cause instanceof Error ? cause.message : failure);
       }
     } finally {
       setBusy(false);
     }
+  };
+
+  // Stopping ends the race for everyone.
+  const stop = async () => {
+    if (archived) return;
+    await confirmed("stop", onStop, "The stop request failed");
+  };
+
+  // Throws away everything the agent worked out so far, but only on this lane.
+  const restart = async () => {
+    if (archived || !restartable) return;
+    await confirmed("restart", onRestart, "The restart request failed");
   };
 
   const signIn = async () => {
@@ -1723,45 +1843,77 @@ function OperatorStrip({
         timeUp ? "border-[#FF5861] bg-[#FF5861]/10" : "border-[#00FBFF]/15"
       }`}
     >
-      <div className="mb-1 text-sm font-bold text-[#FFBE00]">🎬 NEXT-TURN INJECTION</div>
-      {authenticated ? (
-        <div className="flex items-center gap-1.5">
-          <input
-            value={draft}
-            onChange={event => setDraft(event.target.value)}
-            onKeyDown={event => {
-              if (event.key === "Enter") void send(onSteer);
-            }}
-            disabled={busy || archived}
-            placeholder={archived ? "run ended · controls unavailable" : "message to inject on the next turn…"}
-            className="flex-1 min-w-0 bg-[#00181c] border border-[#00FBFF]/20 rounded px-2 py-1 text-base text-white placeholder-[#00FBFF]/45 focus:outline-none focus:border-[#FFBE00]/60 disabled:cursor-not-allowed disabled:opacity-55"
-          />
-          <button
-            onClick={() => void send(onSteer)}
-            disabled={busy || archived || !draft.trim()}
-            className="px-2 py-1 rounded border border-[#00FBFF]/40 text-[#00FBFF] text-sm font-bold disabled:opacity-40"
-          >
-            TO AGENT
-          </button>
-          <button
-            onClick={() => void send(onBroadcast)}
-            disabled={busy || archived || !draft.trim()}
-            className="px-2 py-1 rounded border border-[#FFBE00]/50 text-[#FFBE00] text-sm font-bold disabled:opacity-40"
-          >
-            TO ALL
-          </button>
-          <button
-            onClick={() => void stop()}
-            disabled={busy || archived}
-            className={`px-2 py-1 rounded border text-sm font-bold disabled:opacity-40 ${
-              stopArmed || timeUp
-                ? "animate-pulse border-[#FF5861] bg-[#FF5861] text-black"
-                : "border-[#FF5861]/60 text-[#FF5861]"
-            }`}
-          >
-            {stopArmed ? "CONFIRM STOP" : "STOP RUN"}
-          </button>
+      <div className="mb-1 flex items-center gap-2 text-sm font-bold text-[#FFBE00]">
+        <span>🎬 NEXT-TURN INJECTION</span>
+        {focusMode ? (
+          <span className="truncate text-[#00FBFF]/70">focused: {focused.handle}</span>
+        ) : (
+          <span className="truncate text-[#FFBE00]/90">→ all agents</span>
+        )}
+        <div className="ml-auto flex items-center gap-2">
+          <OperatorAddress address={address} />
         </div>
+      </div>
+      {authenticated ? (
+        <>
+          <div className="flex items-center gap-1.5">
+            <input
+              value={draft}
+              onChange={event => setDraft(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === "Enter") void send(focusMode ? onSteer : onBroadcast);
+              }}
+              disabled={busy || archived}
+              placeholder={archived ? "run ended · controls unavailable" : "message to inject on the next turn…"}
+              className="flex-1 min-w-0 bg-[#00181c] border border-[#00FBFF]/20 rounded px-2 py-1 text-base text-white placeholder-[#00FBFF]/45 focus:outline-none focus:border-[#FFBE00]/60 disabled:cursor-not-allowed disabled:opacity-55"
+            />
+            {/* One button; the stage picks the target. Cyan when directed at the
+                observed agent, gold when the overview broadcasts to everyone. */}
+            <button
+              onClick={() => void send(focusMode ? onSteer : onBroadcast)}
+              disabled={busy || archived || !draft.trim()}
+              className={`px-2 py-1 rounded border text-sm font-bold disabled:opacity-40 ${
+                focusMode ? "border-[#00FBFF]/40 text-[#00FBFF]" : "border-[#FFBE00]/50 text-[#FFBE00]"
+              }`}
+            >
+              SEND
+            </button>
+            {/* Only in focus mode: a restart names one lane, and the overview
+                has no target to name. */}
+            {focusMode && (
+              <button
+                onClick={() => void restart()}
+                disabled={busy || archived || !restartable || (armed === "restart" && confirmDisabled)}
+                title={`drop ${focused.handle}'s session and re-feed its opening prompt`}
+                className={`shrink-0 whitespace-nowrap rounded border px-2 py-1 text-sm font-bold disabled:opacity-40 ${
+                  armed === "restart"
+                    ? "animate-pulse border-[#FFBE00] bg-[#FFBE00] text-black"
+                    : "border-[#FFBE00]/50 text-[#FFBE00]"
+                }`}
+              >
+                {armed === "restart" ? "CONFIRM RESTART" : "RESTART"}
+              </button>
+            )}
+            <button
+              onClick={() => void stop()}
+              disabled={busy || archived || (armed === "stop" && confirmDisabled)}
+              className={`px-2 py-1 rounded border text-sm font-bold disabled:opacity-40 ${
+                armed === "stop" || timeUp
+                  ? "animate-pulse border-[#FF5861] bg-[#FF5861] text-black"
+                  : "border-[#FF5861]/60 text-[#FF5861]"
+              }`}
+            >
+              {armed === "stop" ? "CONFIRM STOP" : "STOP"}
+            </button>
+          </div>
+          {focusMode && pendingSteers.length > 0 && (
+            <div className="mt-1 animate-pulse text-sm text-[#FFBE00]">
+              {pendingSteers.length === 1
+                ? `◆ queued for ${focused.handle}'s next turn`
+                : `◆ ${pendingSteers.length} queued for ${focused.handle}'s next turn`}
+            </div>
+          )}
+        </>
       ) : address ? (
         <div className="flex items-center gap-2">
           {hadSession && <span className="text-sm text-[#FFBE00]/90">operator session expired</span>}
@@ -1785,6 +1937,7 @@ const FEED_STYLE: Record<FeedItem["type"], { icon: string; cls: string }> = {
   flag: { icon: "🏁", cls: "text-[#00ff9c] font-bold" },
   blocked: { icon: "⚠", cls: "text-[#FFBE00] font-bold" },
   resumed: { icon: "▶", cls: "text-[#00FBFF]/70" },
+  restarted: { icon: "↻", cls: "text-[#FFBE00] font-bold" },
   // Clearing the board is the loudest thing an agent can do, so it outranks a
   // single flag capture in the stream.
   done: { icon: "◆", cls: "text-[#FFBE00] font-bold" },
