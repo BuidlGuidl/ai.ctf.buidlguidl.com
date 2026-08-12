@@ -13,6 +13,7 @@ export const ROSTER = [
   { id: "deepseek-v4", harness: "opencode", model: "openrouter/deepseek/deepseek-v4-flash-0731", effort: "high" },
   { id: "opus-5-medium", harness: "claude", model: "claude-opus-5", effort: "medium" },
   { id: "gpt-55-xhigh", harness: "codex", model: "gpt-5.5", effort: "xhigh" },
+  { id: "gpt-55-medium", harness: "codex", model: "gpt-5.5", effort: "medium" },
 ] as const satisfies readonly RosterEntry[];
 
 export interface RosterDisplay {
@@ -94,6 +95,14 @@ export const ROSTER_DISPLAY: Readonly<Record<string, RosterDisplay>> = {
   "gpt-55-xhigh": {
     handle: "codex-gpt-55",
     color: "#E2E8F0",
+    short: "OA",
+    vendor: "OpenAI",
+    harnessLabel: "Codex CLI",
+    modelLabel: "GPT-5.5",
+  },
+  "gpt-55-medium": {
+    handle: "codex-gpt-55",
+    color: "#A3E635",
     short: "OA",
     vendor: "OpenAI",
     harnessLabel: "Codex CLI",
