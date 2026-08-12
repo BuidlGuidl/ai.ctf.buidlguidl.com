@@ -4,7 +4,6 @@ import type { RosterEffort, RosterEntry } from "./arena-types";
 // vendor-default drift can't change a race. Claude's "high" is its documented default;
 // opencode levels are an explicit override (openrouter caps that harness at high).
 export const ROSTER = [
-  { id: "gpt-56-sol", harness: "codex", model: "gpt-5.6-sol", effort: "xhigh" },
   { id: "opus-5", harness: "claude", model: "claude-opus-5", effort: "high" },
   { id: "glm-52", harness: "opencode", model: "openrouter/z-ai/glm-5.2", effort: "high" },
   { id: "gpt-55", harness: "codex", model: "gpt-5.5", effort: "high" },
@@ -12,7 +11,7 @@ export const ROSTER = [
   { id: "kimi-k3", harness: "opencode", model: "openrouter/moonshotai/kimi-k3", effort: "high" },
   { id: "opus-48", harness: "claude", model: "claude-opus-4-8", effort: "high" },
   { id: "deepseek-v4", harness: "opencode", model: "openrouter/deepseek/deepseek-v4-flash-0731", effort: "high" },
-  { id: "gpt-56-high", harness: "codex", model: "gpt-5.6-sol", effort: "high" },
+  { id: "opus-5-medium", harness: "claude", model: "claude-opus-5", effort: "medium" },
   { id: "gpt-55-xhigh", harness: "codex", model: "gpt-5.5", effort: "xhigh" },
 ] as const satisfies readonly RosterEntry[];
 
@@ -28,14 +27,6 @@ export interface RosterDisplay {
 }
 
 export const ROSTER_DISPLAY: Readonly<Record<string, RosterDisplay>> = {
-  "gpt-56-sol": {
-    handle: "codex-gpt-56-sol",
-    color: "#FF5C5C",
-    short: "OA",
-    vendor: "OpenAI",
-    harnessLabel: "Codex CLI",
-    modelLabel: "GPT-5.6 Sol",
-  },
   "opus-5": {
     handle: "claude-opus-5",
     color: "#2DD4BF",
@@ -92,13 +83,13 @@ export const ROSTER_DISPLAY: Readonly<Record<string, RosterDisplay>> = {
     harnessLabel: "OpenCode",
     modelLabel: "DeepSeek V4 Flash",
   },
-  "gpt-56-high": {
-    handle: "codex-gpt-56-sol",
-    color: "#A3E635",
-    short: "OA",
-    vendor: "OpenAI",
-    harnessLabel: "Codex CLI",
-    modelLabel: "GPT-5.6 Sol",
+  "opus-5-medium": {
+    handle: "claude-opus-5",
+    color: "#FF5C5C",
+    short: "AN",
+    vendor: "Anthropic",
+    harnessLabel: "Claude Code",
+    modelLabel: "Opus 5",
   },
   "gpt-55-xhigh": {
     handle: "codex-gpt-55",

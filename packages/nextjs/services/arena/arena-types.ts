@@ -22,7 +22,9 @@ export const HARNESS_IDS = ["codex", "opencode", "claude"] as const;
 export type HarnessId = (typeof HARNESS_IDS)[number];
 
 export const ROSTER_MODELS: Readonly<Record<HarnessId, readonly string[]>> = {
-  codex: ["gpt-5.5", "gpt-5.6-sol"],
+  // gpt-5.6-sol is off the roster: it reads the challenge briefing as a request
+  // to attack real contracts and refuses on security grounds (#48).
+  codex: ["gpt-5.5"],
   claude: ["claude-opus-5", "claude-opus-4-8", "claude-sonnet-5"],
   opencode: ["openrouter/z-ai/glm-5.2", "openrouter/moonshotai/kimi-k3", "openrouter/deepseek/deepseek-v4-flash-0731"],
 };
