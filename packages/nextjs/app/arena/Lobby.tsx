@@ -12,16 +12,11 @@ import { useAccount, useSwitchChain } from "wagmi";
 import { Address, BlockieAvatar, RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import { useTransactor } from "~~/hooks/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
+import type { RunState } from "~~/services/arena/arena-types";
 import { ArenaApiError, arenaClient } from "~~/services/arena/client";
 import type { FundingProjection } from "~~/services/arena/projection";
 import { ROSTER } from "~~/services/arena/roster";
-import {
-  selectConnectionStatus,
-  selectFunding,
-  selectRun,
-  selectRunError,
-  useArenaStore,
-} from "~~/services/arena/store";
+import { selectFunding, selectRun, selectRunError, useArenaStore } from "~~/services/arena/store";
 import { useOperatorSession, useSeedSigner } from "~~/services/arena/useOperatorSession";
 
 type Phase =
@@ -43,6 +38,18 @@ const YELLOW = "#FFBE00";
 const RED = "#FF5861";
 const STOP_ARM_MS = 6000;
 const STOP_CONFIRM_DWELL_MS = 400;
+
+const SETUP_STATE_COPY: Record<RunState, string> = {
+  created: "Run created",
+  awaiting_signature: "Waiting for signature",
+  preparing: "Assigning agent wallets",
+  awaiting_funding: "Waiting for agent funding",
+  ready: "All agents ready",
+  running: "The run is live",
+  stopping: "Stopping the run",
+  finished: "Run finished",
+  failed: "Run setup failed",
+};
 
 function shortAddress(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
@@ -98,7 +105,6 @@ export function ArenaLobby({
 
   const run = useArenaStore(selectRun);
   const fundingProjection = useArenaStore(selectFunding);
-  const connectionStatus = useArenaStore(selectConnectionStatus);
   const runError = useArenaStore(selectRunError);
 
   const audioRef = useRef<AudioContext | null>(null);
@@ -183,7 +189,10 @@ export function ArenaLobby({
     }
     if (lastRunState.current === run.state) return;
     lastRunState.current = run.state;
-    pushLog(`run → ${run.state}`, run.state === "failed" ? RED : run.state === "running" ? GREEN : CY);
+    pushLog(
+      SETUP_STATE_COPY[run.state] ?? "Run status updated",
+      run.state === "failed" ? RED : run.state === "running" ? GREEN : CY,
+    );
   }, [pushLog, run]);
 
   const readyCount = run?.entrants.length ?? 0;
@@ -398,9 +407,9 @@ export function ArenaLobby({
       const signature = await signSeed(run.id, run.chainId);
       const updated = await arenaClient.seedRun(run.id, { signature });
       useArenaStore.getState().syncSnapshot(updated);
-      pushLog("seed signature accepted", GREEN);
+      pushLog("Signature accepted", GREEN);
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : "Could not submit the seed signature";
+      const message = cause instanceof Error ? cause.message : "Could not confirm the signature";
       setError(message);
       pushLog(message, RED);
     } finally {
@@ -480,7 +489,6 @@ export function ArenaLobby({
       onLaunch();
       return;
     }
-    pushLog("arena is running", GREEN);
     let n = 3;
     setCountdown(n);
     beep(440, 0.12, "square", 0.06);
@@ -498,15 +506,15 @@ export function ArenaLobby({
       }
     }, 900);
     return () => clearInterval(tick);
-  }, [beep, onLaunch, phase, pushLog]);
+  }, [beep, onLaunch, phase]);
 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col bg-black text-[#00FBFF] font-mono overflow-hidden lobby-root">
       <div className="pointer-events-none absolute inset-0 z-[70] lobby-scanlines" />
 
       {/* header */}
-      <div className="flex items-center gap-4 px-5 h-14 border-b border-[#00FBFF]/25 bg-gradient-to-r from-[#020808] to-[#001014] shrink-0">
-        <span className="flex items-center gap-2 text-[#00FBFF]/70 font-bold tracking-widest text-sm">
+      <div className="lobby-header flex items-center gap-4 px-5 h-16 border-b border-[#00FBFF]/25 bg-gradient-to-r from-[#020808] to-[#001014] shrink-0">
+        <span className="lobby-phase flex items-center gap-2 text-[#00FBFF]/80 font-bold tracking-widest text-base">
           <span
             className="w-2.5 h-2.5 rounded-full"
             style={{ background: phase === "idle" ? "#3a4a4d" : phase === "ready" ? GREEN : YELLOW }}
@@ -529,16 +537,16 @@ export function ArenaLobby({
             ? "FAILED"
             : "LOBBY"}
         </span>
-        <div className="font-dotGothic text-xl md:text-2xl tracking-wide lobby-title-glow">
+        <div className="lobby-header-title font-dotGothic text-xl md:text-2xl tracking-wide lobby-title-glow">
           BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · AGENT ARENA
         </div>
-        <div className="hidden lg:flex items-center gap-1 text-xs text-[#00FBFF]/50">
+        <div className="lobby-header-badges hidden lg:flex items-center gap-1 text-sm text-[#00FBFF]/70">
           <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{agents.length} AGENTS</span>
           <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{CHALLENGES.length} CHALLENGES</span>
         </div>
         <button
           onClick={() => setMuted(m => !m)}
-          className="ml-auto text-xs px-2 py-1 rounded border border-[#00FBFF]/25 text-[#00FBFF]/60 hover:text-[#00FBFF] hover:border-[#00FBFF]/60 transition"
+          className="lobby-sfx ml-auto text-sm px-2 py-1 rounded border border-[#00FBFF]/25 text-[#00FBFF]/75 hover:text-[#00FBFF] hover:border-[#00FBFF]/60 transition"
           title={muted ? "unmute lobby SFX" : "mute lobby SFX"}
         >
           {muted ? "🔇 SFX OFF" : "🔊 SFX ON"}
@@ -547,38 +555,48 @@ export function ArenaLobby({
       </div>
 
       {/* stage */}
-      <div className="flex-1 min-h-0 flex">
-        <div className="flex-1 min-h-0 flex flex-col items-center justify-center px-6 py-8 relative">
-          <div className="text-center mb-6">
-            <div className="font-dotGothic text-3xl md:text-4xl tracking-widest lobby-title-glow">
+      <div className="lobby-stage flex-1 min-h-0 flex">
+        <div className="lobby-main flex-1 min-h-0 flex flex-col items-center justify-center px-6 py-8 relative">
+          <div className="lobby-hero text-center mb-6">
+            <div className="lobby-hero-title font-dotGothic text-3xl md:text-4xl tracking-widest lobby-title-glow">
               {phase === "idle"
-                ? "GAME NOT STARTED"
+                ? "READY TO START"
                 : phase === "created"
                 ? "RUN NEVER STARTED"
                 : phase === "signature"
-                ? "SEED SIGNATURE REQUIRED"
+                ? "SIGNATURE REQUIRED"
                 : phase === "preparing"
                 ? "PREPARING AGENT WALLETS"
                 : phase === "funding"
                 ? "WAITING FOR FUNDING"
                 : phase === "ready"
-                ? "ARENA READY"
+                ? "RUN READY"
                 : phase === "launching"
-                ? "ARENA IS LIVE"
+                ? run?.state === "stopping"
+                  ? "RUN STOPPING"
+                  : run?.state === "finished"
+                  ? "RUN FINISHED"
+                  : "RUN IN PROGRESS"
                 : phase === "failed"
-                ? "ARENA START FAILED"
+                ? "RUN FAILED"
                 : "WAITING FOR AGENTS"}
             </div>
-            <div className="mt-2 text-sm text-[#00FBFF]/55 tracking-wide">
+            <div className="lobby-hero-subtitle mt-2 text-sm text-[#00FBFF]/55 tracking-wide">
               {phase === "idle" ? null : phase === "created" ? (
                 <span className="text-[#FFBE00]">this run was created but its start never landed</span>
               ) : phase === "launching" ? (
-                <span className="text-[#00ff9c] animate-pulse">backend confirmed the race is running</span>
+                <span className="text-[#00ff9c] animate-pulse">
+                  {run?.state === "stopping"
+                    ? "Stopping the run…"
+                    : run?.state === "finished"
+                    ? "The run is complete."
+                    : "The run is live."}
+                </span>
               ) : phase === "signature" ? (
-                <span className="text-[#FFBE00]">the funder must authorize deterministic agent wallets</span>
+                <span className="text-[#FFBE00]">Confirm in your wallet to set up the agents</span>
               ) : phase === "failed" ? (
                 <span className="text-[#FF5861]">
-                  {runError ?? error ?? "read the backend log for the failure reason"}
+                  {runError ?? error ?? "Something went wrong — try starting over"}
                 </span>
               ) : fundingActive ? (
                 <span>
@@ -597,8 +615,8 @@ export function ArenaLobby({
           </div>
 
           {phase === "idle" && (
-            <div className="mb-8 flex flex-col items-center gap-3">
-              <label className="flex items-center gap-2 text-xs tracking-widest text-[#00FBFF]/55">
+            <div className="lobby-idle-controls mb-8 flex flex-col items-center gap-3">
+              <label className="flex items-center gap-2 text-base tracking-widest text-[#00FBFF]/75">
                 RACE DURATION
                 <input
                   value={durationMinutes}
@@ -624,19 +642,19 @@ export function ArenaLobby({
                   disabled={!agents.length || !operator.sessionLoaded || !operator.configured || starting}
                   className="lobby-cta group px-10 py-3 rounded-md font-dotGothic text-lg tracking-widest border-2 border-[#00FBFF] text-[#00FBFF] hover:bg-[#00FBFF] hover:text-black transition disabled:opacity-40"
                 >
-                  {starting ? "STARTING…" : operator.authenticated ? "▶ OPEN LOBBY" : "▶ SIGN IN & OPEN LOBBY"}
+                  {starting ? "OPENING LOBBY…" : operator.authenticated ? "▶ OPEN LOBBY" : "▶ SIGN IN & OPEN LOBBY"}
                 </button>
               )}
               {!operator.sessionLoaded ? (
-                <span className="text-[11px] text-[#FFBE00]/80">connecting to the arena backend…</span>
+                <span className="text-base text-[#FFBE00]/90">Connecting…</span>
               ) : !operator.configured ? (
-                <span className="text-[11px] text-[#FFBE00]/80">wallet operator login is not configured</span>
+                <span className="text-base text-[#FFBE00]/90">Operator login is unavailable</span>
               ) : null}
             </div>
           )}
 
           {(blockingRun || error) && phase !== "failed" && (
-            <div className="mb-4 max-w-3xl rounded border border-[#FF5861]/40 bg-[#FF5861]/10 px-3 py-2 text-xs text-[#FF5861]">
+            <div className="mb-4 max-w-3xl rounded border border-[#FF5861]/40 bg-[#FF5861]/10 px-3 py-2 text-base text-[#FF5861]">
               {blockingRun ? (
                 <>
                   <div>run is already {blockingRun.state.replaceAll("_", " ")}</div>
@@ -667,7 +685,7 @@ export function ArenaLobby({
           )}
 
           {/* progress bar — connections while agents join, funding once they have */}
-          <div className="w-full max-w-3xl h-1.5 rounded-full bg-[#00FBFF]/10 overflow-hidden mb-8">
+          <div className="lobby-progress w-full max-w-3xl h-1.5 rounded-full bg-[#00FBFF]/10 overflow-hidden mb-8">
             <div
               className="h-full rounded-full transition-all duration-500"
               style={{
@@ -699,7 +717,7 @@ export function ArenaLobby({
               locked={phase !== "funding"}
             />
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 w-full max-w-4xl">
+            <div className="lobby-slot-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 w-full max-w-4xl">
               {agents.map((a, i) => {
                 const st: SlotState = run?.entrants.some(entrant => entrant.id === a.id) ? "ready" : "waiting";
                 return <Slot key={a.id} agent={a} state={st} idle={phase === "idle"} index={i} />;
@@ -708,7 +726,7 @@ export function ArenaLobby({
           )}
 
           {/* primary action */}
-          <div className="mt-10 h-16 flex items-center justify-center gap-3">
+          <div className="lobby-primary-action mt-10 h-16 flex items-center justify-center gap-3">
             {phase === "connecting" && (
               <div className="text-[#00FBFF]/50 text-sm tracking-widest font-dotGothic lobby-blink">
                 ● ● ● CONNECTING AGENTS ● ● ●
@@ -737,7 +755,7 @@ export function ArenaLobby({
                 disabled={signingSeed}
                 className="lobby-cta-go px-10 py-3 rounded-md font-dotGothic text-lg tracking-widest border-2 border-[#FFBE00] text-[#FFBE00] transition disabled:opacity-40"
               >
-                {signingSeed ? "SIGNING…" : "▶ SIGN RUN SEED"}
+                {signingSeed ? "SIGNING…" : "▶ SIGN TO CONTINUE"}
               </button>
             )}
             {phase === "preparing" && (
@@ -779,13 +797,13 @@ export function ArenaLobby({
             </div>
           )}
           {phase === "ready" && (
-            <div className="mt-3 text-[11px] text-[#00FBFF]/40 tracking-wide">
-              the backend will begin the race after its readiness gates pass
+            <div className="lobby-phase-note mt-3 text-base text-[#00FBFF]/70 tracking-wide">
+              All agents ready — starting the run…
             </div>
           )}
           {phase === "funding" && (
-            <div className="mt-3 text-[11px] text-[#00FBFF]/40 tracking-wide">
-              backend funding events control readiness; the amount above controls manual top-ups
+            <div className="lobby-phase-note mt-3 text-base text-[#00FBFF]/70 tracking-wide">
+              Agents start once every wallet is funded — the amount above sets each manual top-up.
             </div>
           )}
           {canStopRun && (operator.authenticated || operator.hadSession) && (
@@ -794,7 +812,7 @@ export function ArenaLobby({
                 <button
                   onClick={() => void stopLoadedRun()}
                   disabled={stoppingRun || stopConfirmDisabled}
-                  className={`px-4 py-1.5 rounded font-dotGothic text-xs tracking-widest border border-[#FF5861]/60 hover:bg-[#FF5861] hover:text-black transition disabled:opacity-40 ${
+                  className={`px-4 py-1.5 rounded font-dotGothic text-sm tracking-widest border border-[#FF5861]/60 hover:bg-[#FF5861] hover:text-black transition disabled:opacity-40 ${
                     stopArmed ? "animate-pulse bg-[#FF5861] text-black border-[#FF5861]" : "text-[#FF5861]/80"
                   }`}
                 >
@@ -810,7 +828,7 @@ export function ArenaLobby({
                     !operator.sessionLoaded ||
                     (needsWallet ? !openConnectModal : !operator.configured || signingInOperator)
                   }
-                  className="rounded border border-[#FFBE00]/50 px-3 py-1.5 font-dotGothic text-[10px] tracking-widest text-[#FFBE00] transition hover:bg-[#FFBE00] hover:text-black disabled:opacity-40"
+                  className="rounded border border-[#FFBE00]/50 px-3 py-1.5 font-dotGothic text-sm tracking-widest text-[#FFBE00] transition hover:bg-[#FFBE00] hover:text-black disabled:opacity-40"
                 >
                   {needsWallet
                     ? "connect wallet to manage this run"
@@ -823,16 +841,16 @@ export function ArenaLobby({
           )}
         </div>
 
-        {/* netcode log */}
-        <div className="hidden md:flex w-[320px] shrink-0 flex-col border-l border-[#00FBFF]/20 bg-[#00090b]/70">
-          <div className="px-4 h-10 flex items-center text-xs font-bold tracking-widest text-[#00FBFF]/60 border-b border-[#00FBFF]/15 bg-[#001417]">
-            ▤ CONNECTION LOG
+        {/* setup activity log */}
+        <div className="lobby-log hidden md:flex w-[400px] shrink-0 flex-col border-l border-[#00FBFF]/20 bg-[#00090b]/70">
+          <div className="lobby-log-header px-4 h-11 flex items-center text-base font-bold tracking-widest text-[#00FBFF]/75 border-b border-[#00FBFF]/15 bg-[#001417]">
+            ▤ ARENA STATUS
           </div>
-          <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 text-[12px] leading-relaxed space-y-1">
-            {log.length === 0 && <div className="text-[#00FBFF]/25 italic">{connectionStatus} · no run events yet</div>}
+          <div className="lobby-log-lines flex-1 min-h-0 overflow-y-auto px-3 py-2 text-sm leading-snug space-y-1">
+            {log.length === 0 && <div className="text-[#00FBFF]/55 italic">Waiting for setup activity…</div>}
             {log.map(l => (
               <div key={l.id} className="lobby-log-in flex gap-2">
-                <span className="text-[#00FBFF]/25 shrink-0">›</span>
+                <span className="text-[#00FBFF]/55 shrink-0">›</span>
                 <span style={{ color: l.color }}>{l.text}</span>
               </div>
             ))}
@@ -886,11 +904,11 @@ function FundingBoard({
   // the batch path — and only until a wallet is actually connected.
   const needsConnect = mode === "batch" && !isConnected;
   return (
-    <div className="w-full max-w-4xl">
-      <div className="flex flex-wrap items-center gap-3 mb-3">
-        <span className="text-xs font-bold tracking-widest text-[#00FBFF]/60">▤ AGENT WALLETS</span>
+    <div className="lobby-funding-board w-full max-w-4xl">
+      <div className="lobby-funding-controls flex flex-wrap items-center gap-3 mb-3">
+        <span className="text-base font-bold tracking-widest text-[#00FBFF]/75">▤ AGENT WALLETS</span>
         <div className="ml-auto flex items-center gap-2">
-          <label className="flex items-center gap-1.5 text-xs text-[#00FBFF]/50">
+          <label className="flex items-center gap-1.5 text-base text-[#00FBFF]/70">
             <span className="tracking-widest">EACH</span>
             <input
               value={amount}
@@ -898,7 +916,7 @@ function FundingBoard({
               disabled={funding || locked}
               className="w-24 px-2 py-1 bg-black/60 border border-[#00FBFF]/30 rounded text-right text-[#00FBFF] tabular-nums focus:outline-none focus:border-[#00FBFF]/70 disabled:opacity-40"
             />
-            <span className="text-[#00FBFF]/40">ETH</span>
+            <span className="text-[#00FBFF]/70">ETH</span>
           </label>
           {wrongNetwork ? (
             // The arena covers the site header, so its network switcher is out of
@@ -935,30 +953,30 @@ function FundingBoard({
       </div>
 
       {balancesUnreachable && (
-        <div className="mb-3 px-3 py-2 rounded border border-[#FF5861]/40 bg-[#FF5861]/10 text-xs text-[#FF5861]">
+        <div className="mb-3 px-3 py-2 rounded border border-[#FF5861]/40 bg-[#FF5861]/10 text-base text-[#FF5861]">
           {mode === "local"
-            ? "cannot reach the local chain — balances below are stale, start a node with `yarn chain`"
-            : `cannot reach ${networkName} — balances below are stale`}
+            ? "Local chain unavailable — balances read as 0 until you start a node with `yarn chain`"
+            : `${networkName} is unavailable — balances read as 0 until the RPC connection recovers`}
         </div>
       )}
 
       {(!canFund || balancesUnreachable) && (
-        <div className="mb-3 flex flex-wrap items-center gap-3 px-3 py-2 rounded border border-[#00FBFF]/25 bg-[#00FBFF]/5 text-xs text-[#00FBFF]/60">
+        <div className="mb-3 flex flex-wrap items-center gap-3 px-3 py-2 rounded border border-[#00FBFF]/25 bg-[#00FBFF]/5 text-base text-[#00FBFF]/75">
           <span>
             {mode === "none"
-              ? `funding is not available on ${networkName} — these wallets are generated per run and their keys are discarded, so funds sent where they matter would be unrecoverable`
+              ? `Funding is unavailable on ${networkName}. Agent wallets are generated per run and their keys are discarded when it ends, so anything sent to them would be unrecoverable.`
               : !canFund && isConnected
-              ? `switch your wallet to ${networkName} to fund the agent wallets`
+              ? `Switch your wallet to ${networkName} to fund the agent wallets.`
               : !canFund
-              ? `connect a wallet on ${networkName} to fund the agent wallets`
+              ? `Connect a wallet on ${networkName} to fund the agent wallets.`
               : mode === "local"
-              ? "the local chain is unreachable, so funding cannot complete — start a node with `yarn chain`"
-              : `${networkName} is unreachable, so funding cannot complete until the RPC connection recovers`}
+              ? "The local chain is unavailable — start a node with `yarn chain` to continue."
+              : `${networkName} is unreachable — funding will resume when the RPC connection recovers.`}
           </span>
         </div>
       )}
 
-      <div className="rounded-lg border border-[#00FBFF]/20 bg-[#00090b]/60 divide-y divide-[#00FBFF]/10 max-h-[46vh] overflow-y-auto">
+      <div className="lobby-funding-list rounded-lg border border-[#00FBFF]/20 bg-[#00090b]/60 divide-y divide-[#00FBFF]/10 max-h-[46vh] overflow-y-auto">
         {agents.map((a, i) => (
           <FundingRow
             key={a.id}
@@ -991,30 +1009,39 @@ function FundingRow({
   const status: FundingStatus = backendFunded ? "funded" : balanceStatus === "funded" ? "partial" : balanceStatus;
 
   return (
-    <div className="flex items-center gap-3 px-3 py-2 text-xs">
-      <span className="w-6 shrink-0 text-[10px] text-[#00FBFF]/30 tabular-nums">P{index + 1}</span>
+    <div className="lobby-funding-row flex items-center gap-3 px-3 py-2 text-base">
+      <span className="w-8 shrink-0 text-sm text-[#00FBFF]/55 tabular-nums">P{index + 1}</span>
 
-      <span className="w-6 h-6 shrink-0 rounded-full overflow-hidden" style={{ border: `1px solid ${agent.color}` }}>
+      <span
+        className="lobby-funding-avatar w-8 h-8 shrink-0 rounded-full overflow-hidden"
+        style={{ border: `1px solid ${agent.color}` }}
+      >
         {agent.address ? (
-          <BlockieAvatar address={agent.address} ensImage={null} size={24} />
+          <BlockieAvatar address={agent.address} ensImage={null} size={32} />
         ) : (
-          <span className="flex h-full items-center justify-center text-[9px]" style={{ color: agent.color }}>
+          <span className="flex h-full items-center justify-center text-xs" style={{ color: agent.color }}>
             {agent.short}
           </span>
         )}
       </span>
 
-      <span className="w-40 shrink-0 truncate font-bold" style={{ color: agent.color }}>
+      <span className="lobby-funding-agent w-56 shrink-0 truncate font-bold" style={{ color: agent.color }}>
         <ModelName name={agent.model} effort={agent.effort} />
       </span>
 
-      <span className="hidden sm:flex items-center text-[#00FBFF]/70">
-        {agent.address ? <Address address={agent.address} hideBlockie openLinkInNewTab size="xs" /> : "address pending"}
+      <span className="lobby-funding-address hidden sm:flex items-center text-[#00FBFF]/70">
+        {agent.address ? (
+          <Address address={agent.address} hideBlockie openLinkInNewTab size="base" />
+        ) : (
+          "Assigning address…"
+        )}
       </span>
 
-      <span className="ml-auto tabular-nums text-[#00FBFF]/70">{formatEther(balance ?? 0n)} ETH</span>
+      <span className="lobby-funding-balance ml-auto tabular-nums text-[#00FBFF]/70">
+        {formatEther(balance ?? 0n)} ETH
+      </span>
 
-      <span className="w-40 shrink-0 text-right text-[10px] font-bold tracking-widest">
+      <span className="lobby-funding-status w-52 shrink-0 whitespace-nowrap text-right text-sm font-bold tracking-widest">
         {status === "funded" ? (
           <span style={{ color: GREEN }}>FUNDED ✓</span>
         ) : status === "partial" ? (
@@ -1036,7 +1063,7 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
 
   return (
     <div
-      className={`relative flex flex-col items-center gap-2 px-3 py-4 rounded-lg border transition-all duration-300 ${
+      className={`lobby-slot relative flex flex-col items-center gap-2 px-3 py-4 rounded-lg border transition-all duration-300 ${
         ready ? "lobby-slot-in" : ""
       }`}
       style={{
@@ -1047,11 +1074,11 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
       }}
     >
       {/* slot number */}
-      <span className="absolute top-1.5 left-2 text-[10px] text-[#00FBFF]/30 tabular-nums">P{index + 1}</span>
+      <span className="absolute top-1.5 left-2 text-sm text-[#00FBFF]/55 tabular-nums">P{index + 1}</span>
 
       {/* avatar — blockie of the agent wallet, ringed in the agent color */}
       <div
-        className={`relative w-14 h-14 rounded-full overflow-hidden flex items-center justify-center font-bold text-2xl ${
+        className={`lobby-slot-avatar relative w-14 h-14 rounded-full overflow-hidden flex items-center justify-center font-bold text-2xl ${
           joining ? "lobby-pulse" : ""
         }`}
         style={{
@@ -1073,21 +1100,21 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
 
       {/* identity — the block reaches into the card's padding so the longest model
           name plus its effort tail still holds one line on a 140px slot. */}
-      <div className="text-center min-h-[48px] flex flex-col justify-center -mx-1.5">
+      <div className="lobby-slot-identity text-center min-h-[48px] flex flex-col justify-center -mx-1.5">
         {active ? (
           <>
-            <div className="text-base font-bold leading-tight" style={{ color: agent.color }}>
+            <div className="lobby-slot-name text-base font-bold leading-tight" style={{ color: agent.color }}>
               <ModelName name={agent.model} effort={agent.effort} />
             </div>
-            <div className="text-sm text-[#00FBFF]/55 leading-tight">{agent.harness}</div>
+            <div className="lobby-slot-harness text-base text-[#00FBFF]/75 leading-tight">{agent.harness}</div>
           </>
         ) : (
-          <div className="text-xs text-[#00FBFF]/30 tracking-widest">{idle ? "AWAITING" : "———"}</div>
+          <div className="text-base text-[#00FBFF]/55 tracking-widest">{idle ? "AWAITING AGENT" : "———"}</div>
         )}
       </div>
 
       {/* status pill */}
-      <div className="text-[10px] font-bold tracking-widest">
+      <div className="lobby-slot-status text-sm font-bold tracking-widest">
         {ready ? (
           <span style={{ color: GREEN }}>READY ✓</span>
         ) : joining ? (
@@ -1095,7 +1122,7 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
             CONNECTING…
           </span>
         ) : (
-          <span className="text-[#00FBFF]/25">{idle ? "OFFLINE" : "PENDING"}</span>
+          <span className="text-[#00FBFF]/25">{idle ? "STANDBY" : "PENDING"}</span>
         )}
       </div>
     </div>
@@ -1120,6 +1147,166 @@ function LobbyStyles() {
       }
       .lobby-title-glow {
         text-shadow: 0 0 14px rgba(0, 251, 255, 0.5);
+      }
+      /* Keep the phase indicator compact while leaving a full 24px visual
+         break before the event title, matching the live arena header. */
+      .lobby-phase {
+        margin-right: 0.5rem;
+      }
+      @media (max-width: 1400px), (max-height: 820px) {
+        .lobby-header {
+          height: 3.25rem;
+          gap: 0.5rem;
+          padding-left: 0.75rem;
+          padding-right: 0.75rem;
+        }
+        .lobby-phase {
+          gap: 0.375rem;
+          margin-right: 1rem;
+          font-size: 0.875rem;
+        }
+        .lobby-header-title {
+          font-size: 1.25rem;
+          line-height: 1;
+          white-space: nowrap;
+        }
+        .lobby-header-badges {
+          display: none;
+        }
+        .lobby-sfx {
+          padding: 0.25rem 0.5rem;
+          font-size: 0.75rem;
+        }
+        .lobby-main {
+          justify-content: flex-start;
+          overflow-y: auto;
+          padding: 0.75rem;
+        }
+        .lobby-hero {
+          margin-bottom: 0.75rem;
+        }
+        .lobby-hero-title {
+          font-size: 1.5rem;
+          line-height: 1.1;
+        }
+        .lobby-hero-subtitle {
+          margin-top: 0.25rem;
+          font-size: 0.75rem;
+        }
+        .lobby-idle-controls {
+          margin-bottom: 1rem;
+          gap: 0.5rem;
+        }
+        .lobby-idle-controls label,
+        .lobby-idle-controls > span {
+          font-size: 0.875rem;
+        }
+        .lobby-idle-controls .lobby-cta,
+        .lobby-primary-action .lobby-cta,
+        .lobby-primary-action .lobby-cta-go {
+          padding: 0.5rem 1.5rem;
+          font-size: 0.875rem;
+        }
+        .lobby-progress {
+          margin-bottom: 0.75rem;
+          max-width: none;
+        }
+        .lobby-slot-grid {
+          max-width: none;
+          gap: 0.5rem;
+        }
+        .lobby-slot {
+          gap: 0.375rem;
+          padding: 0.625rem 0.5rem;
+        }
+        .lobby-slot-avatar {
+          width: 2.75rem;
+          height: 2.75rem;
+          font-size: 1.25rem;
+        }
+        .lobby-slot-avatar > img {
+          width: 100%;
+          height: 100%;
+        }
+        .lobby-slot-identity {
+          min-height: 2.25rem;
+        }
+        .lobby-slot-name,
+        .lobby-slot-harness {
+          font-size: 0.875rem;
+        }
+        .lobby-slot-status {
+          font-size: 0.75rem;
+        }
+        .lobby-primary-action {
+          margin-top: 0.75rem;
+          height: 2.5rem;
+        }
+        .lobby-phase-note {
+          margin-top: 0.5rem;
+          font-size: 0.75rem;
+        }
+        .lobby-log {
+          width: 20rem;
+        }
+        .lobby-log-header {
+          height: 2.25rem;
+          padding-left: 0.75rem;
+          padding-right: 0.75rem;
+          font-size: 0.875rem;
+        }
+        .lobby-log-lines {
+          padding: 0.5rem;
+          font-size: 0.75rem;
+        }
+        .lobby-funding-board {
+          max-width: none;
+        }
+        .lobby-funding-controls {
+          gap: 0.5rem;
+          margin-bottom: 0.5rem;
+        }
+        .lobby-funding-controls > span,
+        .lobby-funding-controls label {
+          font-size: 0.875rem;
+        }
+        .lobby-funding-controls button {
+          padding: 0.25rem 0.75rem;
+          font-size: 0.75rem;
+        }
+        .lobby-funding-list {
+          max-height: 50vh;
+        }
+        .lobby-funding-row {
+          gap: 0.5rem;
+          padding: 0.25rem 0.5rem;
+          font-size: 0.875rem;
+        }
+        .lobby-funding-row > span:first-child {
+          width: 1.75rem;
+          font-size: 0.75rem;
+        }
+        .lobby-funding-avatar {
+          width: 1.75rem;
+          height: 1.75rem;
+        }
+        .lobby-funding-avatar > img {
+          width: 100%;
+          height: 100%;
+        }
+        .lobby-funding-agent {
+          width: 10rem;
+        }
+        .lobby-funding-address {
+          display: none;
+        }
+        .lobby-funding-balance {
+          font-size: 0.75rem;
+        }
+        .lobby-funding-status {
+          width: 12rem;
+          font-size: 0.75rem;
+        }
       }
       .lobby-blink {
         animation: lobbyBlink 1s steps(2, start) infinite;
