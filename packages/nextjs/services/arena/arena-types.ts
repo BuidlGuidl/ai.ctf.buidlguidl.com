@@ -1,9 +1,6 @@
-// Copied from agents-arena-backend contract/arena-types.ts (master as of 2026-08-07:
-// currentChallengeId + entrant.challenge from #40, parentToolCallId from #37) plus
-// the steer-delivery delta from agents-arena-backend#52 (SteerDelivery, SteerResponse,
-// BroadcastResponse.queued) and the entrant-restart delta from agents-arena-backend#49
-// (entrant.restarted, RestartResponse). Do not edit here — sync from the backend repo.
-// Endpoint docs live there in contract/API.md.
+// Copied from agents-arena-backend contract/arena-types.ts, master @ f1d3512.
+// Do not edit here — sync from the backend repo (formatting follows this repo's
+// prettier). Endpoint docs live there in contract/API.md.
 
 export type RunState =
   | "created"
@@ -66,6 +63,8 @@ export interface RunSnapshot {
   // Chain the run's wallets and flag mints live on. Clients must read it from
   // here — not hardcode 31337 — for the seed signature and explorer links.
   chainId: number;
+  // Present after seeding. This operator holds the recovery capability for the run.
+  seededBy?: string;
   entrants: EntrantSummary[];
   startedAt: string | null;
   // Display only. The backend never stops a run at the deadline; the operator
@@ -123,8 +122,14 @@ export type ArenaEvent =
       type: "score.flag";
       payload: { entrantId: string; challengeId: number; txHash: string; tokenId: string };
     })
+  // Two sources, latest wins. `via: 'self'` is the agent's own announcement
+  // through POST /agent/progress. `via: 'command'` is a heuristic: emitted when
+  // a tool command references exactly one challenge by name or deployed
+  // address. Both fire only when the value changes, and `evidence` says where
+  // it came from (the matched token, or "announced"), so a guess reads as a
+  // guess. Append-only by design — the UI takes the latest one per entrant (#4).
   // Optional because rows journalled before the guesser existed carry neither;
-  // every one of those was an announcement, so readers treat absence as "self".
+  // every one of those was an announcement, so readers treat absence as 'self'.
   | (ArenaEventBase & {
       type: "entrant.challenge";
       payload: { entrantId: string; challengeId: number; via?: "self" | "command"; evidence?: string };
@@ -185,7 +190,6 @@ export interface SteerRequest {
   text: string;
 }
 
-// An agent mid-turn cannot be interrupted, so its steer waits for the turn to end.
 export type SteerDelivery = "queued" | "injected";
 
 export interface SteerResponse {
@@ -193,7 +197,7 @@ export interface SteerResponse {
   status: SteerDelivery;
 }
 
-// Restart takes no body: the opening prompt is rebuilt by the backend, not sent.
+// Restart takes no body: the opening prompt is rebuilt from the run, not sent.
 export interface RestartResponse {
   accepted: boolean;
 }
@@ -207,10 +211,9 @@ export interface BroadcastRequest {
 export interface BroadcastResponse {
   accepted: boolean;
   delivered: string[];
-  failed: { entrantId: string; message: string }[];
-  // The subset of `delivered` still waiting behind a running turn. Their
-  // `entrant.steered` events land later — the journal records injection, not intent.
+  // queued names accepted steers still waiting behind a running turn because the journal records injection, not intent.
   queued: string[];
+  failed: { entrantId: string; message: string }[];
 }
 
 export interface NonceResponse {
