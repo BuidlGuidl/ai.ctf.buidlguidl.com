@@ -5,6 +5,7 @@ import { ModelName } from "./ModelName";
 import { FundingMode, MULTICALL3_ABI, MULTICALL3_ADDRESS, fundingMode, localTestClient } from "./funding";
 import { Agent, CHALLENGES, FUNDING_AMOUNT_ETH } from "./mockData";
 import { type FundingStatus, fundingStatus, useAgentBalances } from "./useAgentBalances";
+import { useArenaRoute } from "./useArenaRoute";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { encodeFunctionData, formatEther, parseEther } from "viem";
 import { useAccount, useSwitchChain } from "wagmi";
@@ -18,7 +19,16 @@ import { ROSTER } from "~~/services/arena/roster";
 import { selectFunding, selectRun, selectRunError, useArenaStore } from "~~/services/arena/store";
 import { useOperatorSession, useSeedSigner } from "~~/services/arena/useOperatorSession";
 
-type Phase = "idle" | "connecting" | "signature" | "preparing" | "funding" | "ready" | "launching" | "failed";
+type Phase =
+  | "idle"
+  | "connecting"
+  | "created"
+  | "signature"
+  | "preparing"
+  | "funding"
+  | "ready"
+  | "launching"
+  | "failed";
 type SlotState = "waiting" | "joining" | "ready";
 type ActiveRunConflict = { id: string; state: string };
 
@@ -109,6 +119,7 @@ export function ArenaLobby({
   const operator = useOperatorSession();
   const needsWallet = !operator.authenticated && !operator.address;
   const signSeed = useSeedSigner();
+  const route = useArenaRoute();
   const canStopRun =
     run?.state === "awaiting_signature" ||
     run?.state === "preparing" ||
@@ -138,10 +149,15 @@ export function ArenaLobby({
     stopConfirmTimer.current = null;
   }, [canStopRun]);
 
+  // Every run state has a view. `created` is the one nothing used to reach on its
+  // own — a start that never landed parks a run there, and the URL can be reloaded
+  // or shared straight into it, so it needs its own screen rather than a spinner.
   const phase: Phase = !run
     ? starting
       ? "connecting"
       : "idle"
+    : run.state === "created"
+    ? "created"
     : run.state === "awaiting_signature"
     ? "signature"
     : run.state === "preparing"
@@ -154,9 +170,7 @@ export function ArenaLobby({
     ? "failed"
     : run.state === "running" || run.state === "stopping" || run.state === "finished"
     ? "launching"
-    : run.state === "failed"
-    ? "failed"
-    : "connecting";
+    : "failed";
 
   const beep = useCallback((freq: number, dur?: number, type?: OscillatorType, gain?: number) => {
     const ctx = audioRef.current;
@@ -169,7 +183,11 @@ export function ArenaLobby({
   }, []);
 
   useEffect(() => {
-    if (!run || lastRunState.current === run.state) return;
+    if (!run) {
+      lastRunState.current = null;
+      return;
+    }
+    if (lastRunState.current === run.state) return;
     lastRunState.current = run.state;
     pushLog(
       SETUP_STATE_COPY[run.state] ?? "Run status updated",
@@ -322,20 +340,21 @@ export function ArenaLobby({
         durationMs: Math.round(minutes * 60_000),
       });
       createdRunId = created.id;
-      const url = new URL(window.location.href);
-      url.searchParams.set("run", created.id);
-      window.history.replaceState(null, "", url);
+      // The URL is what connects the page to a run, so naming it here is the
+      // whole handover. Entering a run is a navigation and takes a history
+      // entry: back returns to the lobby.
+      route.go({ run: created.id });
+      pushLog(`created run ${created.id}`, GREEN);
       const started = await arenaClient.startRun(created.id);
       useArenaStore.getState().syncSnapshot(started);
       pushLog(`started run ${created.id}`, GREEN);
     } catch (cause) {
       const conflict = activeRunConflict(cause);
       if (conflict) {
-        const url = new URL(window.location.href);
-        if (url.searchParams.get("run") === createdRunId) {
-          url.searchParams.delete("run");
-          window.history.replaceState(null, "", url);
-        }
+        // Only the run this call put in the URL: a conflict raised by `createRun`
+        // never named one, and the address bar may still hold a run the operator
+        // was watching. Replaces, since the entry it drops leads nowhere.
+        if (createdRunId) route.go({ run: null }, { replace: true });
         setBlockingRun(conflict);
         pushLog(`start blocked by run ${conflict.id}`, RED);
         return;
@@ -346,7 +365,38 @@ export function ArenaLobby({
     } finally {
       setStarting(false);
     }
-  }, [durationMinutes, operator, pushLog]);
+  }, [durationMinutes, operator, pushLog, route]);
+
+  // A start that never landed — a lost race for the single active run, a dropped
+  // connection — leaves the run sitting in `created`. Retrying it is the whole
+  // repair; nothing was prepared yet, so there is nothing to unwind.
+  const startCreatedRun = useCallback(async () => {
+    if (!run || run.state !== "created") return;
+    setStarting(true);
+    setError(null);
+    setBlockingRun(null);
+    try {
+      if (!operator.authenticated) await operator.signIn();
+      const started = await arenaClient.startRun(run.id);
+      useArenaStore.getState().syncSnapshot(started);
+    } catch (cause) {
+      // Losing the race for the active slot is how a run ends up here in the
+      // first place, so the retry can lose it again — and needs the same box
+      // naming the blocker. The run stays in the URL: it is still `created`,
+      // and this screen is still its screen.
+      const conflict = activeRunConflict(cause);
+      if (conflict) {
+        setBlockingRun(conflict);
+        pushLog(`start blocked by run ${conflict.id}`, RED);
+        return;
+      }
+      const message = cause instanceof Error ? cause.message : "Could not start the run";
+      setError(message);
+      pushLog(message, RED);
+    } finally {
+      setStarting(false);
+    }
+  }, [operator, pushLog, run]);
 
   const submitSeed = useCallback(async () => {
     if (!run || run.state !== "awaiting_signature") return;
@@ -471,6 +521,8 @@ export function ArenaLobby({
           />
           {phase === "idle"
             ? "STANDBY"
+            : phase === "created"
+            ? "NOT STARTED"
             : phase === "ready"
             ? "READY"
             : phase === "launching"
@@ -509,6 +561,8 @@ export function ArenaLobby({
             <div className="lobby-hero-title font-dotGothic text-3xl md:text-4xl tracking-widest lobby-title-glow">
               {phase === "idle"
                 ? "READY TO START"
+                : phase === "created"
+                ? "RUN NEVER STARTED"
                 : phase === "signature"
                 ? "SIGNATURE REQUIRED"
                 : phase === "preparing"
@@ -528,7 +582,9 @@ export function ArenaLobby({
                 : "WAITING FOR AGENTS"}
             </div>
             <div className="lobby-hero-subtitle mt-2 text-sm text-[#00FBFF]/55 tracking-wide">
-              {phase === "idle" ? null : phase === "launching" ? (
+              {phase === "idle" ? null : phase === "created" ? (
+                <span className="text-[#FFBE00]">this run was created but its start never landed</span>
+              ) : phase === "launching" ? (
                 <span className="text-[#00ff9c] animate-pulse">
                   {run?.state === "stopping"
                     ? "Stopping the run…"
@@ -610,10 +666,10 @@ export function ArenaLobby({
                         if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
                         event.preventDefault();
                         setBlockingRun(null);
-                        useArenaStore.getState().setCurrentRunId(blockingRun.id);
-                        const url = new URL(window.location.href);
-                        url.searchParams.set("run", blockingRun.id);
-                        window.history.replaceState(null, "", url);
+                        // A push, not a replace: this is the operator navigating
+                        // into another run, and back has to come home to the
+                        // lobby. The URL connects the page — nothing else to do.
+                        route.go({ run: blockingRun.id });
                       }}
                       className="font-bold underline underline-offset-2 hover:text-white"
                     >
@@ -676,6 +732,23 @@ export function ArenaLobby({
                 ● ● ● CONNECTING AGENTS ● ● ●
               </div>
             )}
+            {phase === "created" && (
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => void startCreatedRun()}
+                  disabled={starting || !operator.sessionLoaded || !operator.configured}
+                  className="lobby-cta px-8 py-3 rounded-md font-dotGothic text-lg tracking-widest border-2 border-[#00FBFF] text-[#00FBFF] hover:bg-[#00FBFF] hover:text-black transition disabled:opacity-40"
+                >
+                  {starting ? "STARTING…" : operator.authenticated ? "▶ START RUN" : "▶ SIGN IN & START RUN"}
+                </button>
+                <button
+                  onClick={onStartOver}
+                  className="px-6 py-3 rounded-md font-dotGothic text-lg tracking-widest border-2 border-[#00FBFF]/40 text-[#00FBFF]/70 hover:border-[#00FBFF] hover:text-[#00FBFF] transition"
+                >
+                  ◀ START OVER
+                </button>
+              </div>
+            )}
             {phase === "signature" && (
               <button
                 onClick={() => void submitSeed()}
@@ -718,6 +791,11 @@ export function ArenaLobby({
             )}
           </div>
 
+          {phase === "created" && (
+            <div className="mt-3 text-[11px] text-[#00FBFF]/40 tracking-wide">
+              nothing was prepared yet — start it again, or leave it: a run that never started blocks nobody
+            </div>
+          )}
           {phase === "ready" && (
             <div className="lobby-phase-note mt-3 text-base text-[#00FBFF]/70 tracking-wide">
               All agents ready — starting the run…

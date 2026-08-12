@@ -1,10 +1,21 @@
 "use client";
 
-import { type CSSProperties, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  Suspense,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ArenaLobby } from "./Lobby";
 import { ModelName } from "./ModelName";
 import { OperatorAddress } from "./OperatorAddress";
 import { Agent, AgentStatus, CHALLENGES, Challenge, DIFFICULTY_COLOR } from "./mockData";
+import { type ArenaView, useArenaRoute } from "./useArenaRoute";
 import type { Address } from "viem";
 import { BlockieAvatar, RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
@@ -38,7 +49,6 @@ import { getBlockExplorerAddressLink } from "~~/utils/scaffold-eth";
 
 export const dynamic = "force-dynamic";
 
-type FinalView = "results" | "data";
 type PodiumPlace = 1 | 2 | 3;
 
 const fmtTokens = (tokens: number) => `${(tokens / 1000).toFixed(0)}k`;
@@ -62,6 +72,8 @@ const PODIUM = {
 // `podiumBroadcast` keyframes so the banner is never cut off mid-animation.
 const FINISH_STING_MS = 4600;
 const STOP_ARM_MS = 6000;
+// The confirm stays disabled for a beat after arming, so the second half of a
+// double-click cannot reach it.
 const STOP_CONFIRM_DWELL_MS = 400;
 
 const PODIUM_RESULT: Record<PodiumPlace, string> = {
@@ -167,23 +179,33 @@ function useArenaClock(
   return { seconds: elapsed, timeUp };
 }
 
+// The page is one client component reading `useSearchParams`, so it needs a
+// boundary of its own to suspend behind.
 export default function ArenaPage() {
-  const [focusedId, setFocusedId] = useState<string>(ROSTER[0].id);
+  return (
+    <Suspense fallback={<ArenaBoot />}>
+      <ArenaScreen />
+    </Suspense>
+  );
+}
+
+function ArenaScreen() {
   const [flashes, setFlashes] = useState<string[]>([]);
   const flashTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const [openChallenge, setOpenChallenge] = useState<number | null>(null);
-  const [mounted, setMounted] = useState(false);
-  const [stageMode, setStageMode] = useState<"overview" | "focus">("overview");
-  const [overviewTab, setOverviewTab] = useState<"race" | "grid">("race");
+  const [stopError, setStopError] = useState<string | null>(null);
   const [liveStarted, setLiveStarted] = useState(false);
   const [ceremonyReady, setCeremonyReady] = useState(false);
-  const [finalView, setFinalView] = useState<FinalView>("results");
+  // Whoever watches the match lock gets the finish sting before the podium takes
+  // over; a link opened on an already-locked run has no sting to wait for.
+  const sawLiveRun = useRef(false);
+  const podiumShown = useRef(false);
+  const route = useArenaRoute();
   const runId = useArenaStore(selectRunId);
   const runState = useArenaStore(selectRunState);
   const runEntrants = useArenaStore(selectRunEntrants);
   const runStartedAt = useArenaStore(selectRunStartedAt);
   const runDeadlineAt = useArenaStore(selectRunDeadlineAt);
-  const currentRunId = useArenaStore(state => state.currentRunId);
   const connectionStatus = useArenaStore(selectConnectionStatus);
   const connectionError = useArenaStore(selectConnectionError);
   const lastFlagEvent = useArenaStore(selectLastFlagEvent);
@@ -191,12 +213,30 @@ export default function ArenaPage() {
   const runError = useArenaStore(selectRunError);
   const operator = useOperatorSession();
 
+  // The run in the URL is the connection: landing on one, leaving it, or walking
+  // back to it with the browser has to move the page with it. Every reset for a
+  // change of run lives here, so there is one path in and out of a run.
+  const routeRunId = route.runId;
+  // `undefined`, not `null`: the store outlives the page, so a mount that names
+  // no run still has to run and drop whatever the last one left behind.
+  const connectedRunId = useRef<string | null | undefined>(undefined);
   useEffect(() => {
-    const runId = new URLSearchParams(window.location.search).get("run");
-    if (runId) useArenaStore.getState().setCurrentRunId(runId);
-    setMounted(true);
-  }, []);
+    if (routeRunId === connectedRunId.current) return;
+    connectedRunId.current = routeRunId;
+    // The old run goes before the new one is named. Keeping it until the next
+    // snapshot lands would leave the page showing — and the operator steering —
+    // a run the URL has already left, and would hide a 404 on the new one behind
+    // the old one's id.
+    const store = useArenaStore.getState();
+    store.clear();
+    if (routeRunId) store.setCurrentRunId(routeRunId);
+    setLiveStarted(false);
+    setCeremonyReady(false);
+    podiumShown.current = false;
+    sawLiveRun.current = false;
+  }, [routeRunId]);
 
+  const currentRunId = useArenaStore(state => state.currentRunId);
   useEffect(() => {
     if (!currentRunId) return;
     return connectRun(currentRunId);
@@ -205,35 +245,44 @@ export default function ArenaPage() {
   const agents = useMemo(() => agentsFromRun(runEntrants, runStartedAt), [runEntrants, runStartedAt]);
   const startMatch = useCallback(() => setLiveStarted(true), []);
 
-  const goFocus = useCallback((id: string) => {
-    setFocusedId(id);
-    setStageMode("focus");
-  }, []);
-  const closeLog = useCallback(() => setStageMode("overview"), []);
+  const goFocus = useCallback((id: string) => route.go({ agent: id }), [route]);
+  const closeLog = useCallback(() => route.go({ agent: null }), [route]);
 
-  useEffect(() => {
-    if (agents.some(agent => agent.id === focusedId)) return;
-    if (agents[0]) setFocusedId(agents[0].id);
-  }, [agents, focusedId]);
-
-  const focused = useMemo(() => agents.find(a => a.id === focusedId) ?? agents[0], [agents, focusedId]);
+  // Null on the overview: nobody is being observed, so no lane is named — the
+  // composer speaks to everyone and the challenge board shows the whole field.
+  const focused = useMemo(() => agents.find(a => a.id === route.agentId) ?? null, [agents, route.agentId]);
   const ranked = useMemo(() => rankAgents(agents), [agents]);
   const totalSolved = useMemo(() => agents.reduce((n, a) => n + a.solved.length, 0), [agents]);
   const allFinished = runState === "finished";
   const runFailed = runState === "failed";
   const runTerminal = allFinished || runFailed;
+  // Only while the race is actually running: a run already stopping takes no
+  // second stop, and the backend answers the retry with an error.
+  const canStopRace = (operator.authenticated || operator.hadSession) && runState === "running";
   const clock = useArenaClock(runStartedAt, runDeadlineAt, runState, runFinishedAt);
-  const gridUsesFullWidth = overviewTab === "grid" && stageMode === "overview" && !operator.authenticated;
 
-  const backToLobby = useCallback(() => {
-    useArenaStore.getState().clear();
-    const url = new URL(window.location.href);
-    url.searchParams.delete("run");
-    window.history.replaceState(null, "", url);
-    setLiveStarted(false);
-    setCeremonyReady(false);
-    setFinalView("results");
-  }, []);
+  useEffect(() => {
+    if (runState && runState !== "finished" && runState !== "failed") sawLiveRun.current = true;
+  }, [runState]);
+
+  // A link with no view lands on the board while the race is live and on the
+  // podium once it is locked; anything the operator picked is spelled out in the
+  // URL and wins over both.
+  const view: ArenaView = route.view ?? (allFinished && !sawLiveRun.current ? "results" : "race");
+  const overviewTab: OverviewTab = view === "grid" ? "grid" : "race";
+  const gridUsesFullWidth = overviewTab === "grid" && !focused && !operator.authenticated;
+  const setView = useCallback((next: ArenaView) => route.go({ view: next }), [route]);
+
+  // Where ARENA DATA goes back to, so leaving the podium returns to the stage the
+  // operator was watching rather than always to the race track.
+  const stageBeforePodium = useRef<OverviewTab>("race");
+  useEffect(() => {
+    if (view !== "results") stageBeforePodium.current = overviewTab;
+  }, [overviewTab, view]);
+
+  // Dropping the run from the URL is the whole exit — the effect above sees it
+  // leave and tears down the connection and the view state with it.
+  const backToLobby = useCallback(() => route.go({ run: null, view: null, agent: null }, { replace: true }), [route]);
 
   useEffect(() => {
     if (!lastFlagEvent) return;
@@ -264,11 +313,33 @@ export default function ArenaPage() {
     return () => clearTimeout(timer);
   }, [allFinished, liveStarted]);
 
+  // Once the sting has aired the podium takes the stage, whichever one was up.
+  // It happens once: from there the URL rules, so ARENA DATA — or a reload of a
+  // run that locked long ago — is not overruled a few seconds later.
+  useEffect(() => {
+    if (!ceremonyReady || podiumShown.current || !sawLiveRun.current) return;
+    podiumShown.current = true;
+    route.go({ view: "results" }, { replace: true });
+  }, [ceremonyReady, route]);
+
+  // Ending the race is a run-level act, so it answers in the run header rather
+  // than in the observed lane's strip — and its failures need a place of their
+  // own now that there is no composer underneath to print them.
   const stopRace = useCallback(async () => {
     if (!runId) return;
-    const snapshot = await arenaClient.stopRun(runId);
-    useArenaStore.getState().syncSnapshot(snapshot);
-  }, [runId]);
+    setStopError(null);
+    try {
+      const snapshot = await arenaClient.stopRun(runId);
+      useArenaStore.getState().syncSnapshot(snapshot);
+    } catch (cause) {
+      if (cause instanceof ArenaApiError && cause.status === 401) {
+        operator.invalidate();
+        setStopError("operator session expired — sign in again");
+      } else {
+        setStopError(cause instanceof Error ? cause.message : "The stop request failed");
+      }
+    }
+  }, [operator, runId]);
 
   const steer = useCallback(
     async (text: string) => {
@@ -297,15 +368,7 @@ export default function ArenaPage() {
     await arenaClient.restartEntrant(runId, focused.id);
   }, [focused, runId]);
 
-  if (!mounted) {
-    return (
-      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black text-[#00FBFF] font-dotGothic text-2xl tracking-widest">
-        <span className="animate-pulse">◆ LOADING RUN…</span>
-      </div>
-    );
-  }
-
-  if (currentRunId && !runId && (connectionStatus === "not-found" || connectionStatus === "error")) {
+  if (route.runId && !runId && (connectionStatus === "not-found" || connectionStatus === "error")) {
     return (
       <RunExitPanel
         title="RUN UNAVAILABLE"
@@ -319,20 +382,14 @@ export default function ArenaPage() {
     );
   }
 
-  if (!focused || (currentRunId && !runId)) {
-    return (
-      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black text-[#00FBFF] font-dotGothic text-2xl tracking-widest">
-        <span className="animate-pulse">◆ LOADING RUN…</span>
-      </div>
-    );
-  }
+  if (!agents.length || (route.runId && !runId)) return <ArenaBoot />;
 
   if (!liveStarted) {
     return <ArenaLobby agents={agents} onLaunch={startMatch} onStartOver={backToLobby} />;
   }
 
-  if (ceremonyReady && finalView === "results") {
-    return <FinalCeremony ranked={ranked} onViewData={() => setFinalView("data")} />;
+  if (view === "results" && allFinished) {
+    return <FinalCeremony ranked={ranked} onViewData={() => setView(stageBeforePodium.current)} />;
   }
 
   return (
@@ -351,8 +408,23 @@ export default function ArenaPage() {
         runStopping={runState === "stopping"}
         agentCount={agents.length}
         connectionStatus={connectionStatus}
-        onViewResults={ceremonyReady ? () => setFinalView("results") : undefined}
+        onViewResults={allFinished ? () => setView("results") : undefined}
+        onStop={canStopRace ? stopRace : undefined}
       />
+
+      {stopError && (
+        <div className="flex shrink-0 items-center gap-4 border-b border-[#FF5861]/50 bg-[#FF5861]/10 px-5 py-2 text-[#FF5861]">
+          <span className="font-dotGothic tracking-widest">STOP FAILED</span>
+          <span className="min-w-0 flex-1 text-sm text-[#FF5861]/80">{stopError}</span>
+          <button
+            onClick={() => setStopError(null)}
+            title="dismiss"
+            className="h-6 w-6 shrink-0 rounded border border-[#FF5861]/60 text-xs transition hover:bg-[#FF5861] hover:text-black"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {runFailed && (
         <div className="flex shrink-0 items-center gap-4 border-b border-[#FF5861]/50 bg-[#FF5861]/10 px-5 py-3 text-[#FF5861]">
@@ -379,13 +451,13 @@ export default function ArenaPage() {
           >
             <div className="arena-main-stage-padding flex-1 min-h-0 relative p-4">
               <div className="h-full flex flex-col border border-[#00FBFF]/25 rounded-lg bg-[#020a0c]/80 overflow-hidden shadow-[0_0_40px_-12px_rgba(0,251,255,0.4)]">
-                <StageTabs tab={overviewTab} onTab={setOverviewTab} />
+                <StageTabs tab={overviewTab} onTab={setView} />
                 <OverviewStage
                   ranked={ranked}
                   tab={overviewTab}
                   onPick={goFocus}
                   flashes={flashes}
-                  selectedId={stageMode === "focus" ? focused.id : null}
+                  selectedId={focused?.id ?? null}
                 />
               </div>
             </div>
@@ -397,27 +469,20 @@ export default function ArenaPage() {
               gridUsesFullWidth ? "hidden 2xl:flex" : "flex"
             }`}
           >
-            {stageMode === "focus" ? (
-              <AgentLog key={focused.id} focused={focused} onClose={closeLog} />
-            ) : (
-              <ArenaStream />
-            )}
+            {focused ? <AgentLog key={focused.id} focused={focused} onClose={closeLog} /> : <ArenaStream />}
             {/* Run URLs are spectator-shareable, so the strip only shows for someone
                 who is (or was, mid-race) the operator — never as a sign-in invitation. */}
             {(operator.authenticated || operator.hadSession) && (
               <OperatorStrip
                 focused={focused}
-                focusMode={stageMode === "focus"}
                 address={operator.address}
                 authenticated={operator.authenticated}
                 hadSession={operator.hadSession}
                 archived={runTerminal}
                 restartable={runState === "running"}
-                timeUp={clock.timeUp}
                 onSteer={steer}
                 onBroadcast={broadcast}
                 onRestart={restart}
-                onStop={stopRace}
                 onInvalidate={operator.invalidate}
                 onSignIn={operator.signIn}
               />
@@ -432,13 +497,7 @@ export default function ArenaPage() {
           <div className="arena-grid-race-strip shrink-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#010607]">
             <SectionHead label="RACE" hint="showing top 5 · scroll for all" />
             <div className="arena-grid-race-scroll h-[190px] overflow-y-auto console-scroll">
-              <RaceView
-                ranked={ranked}
-                onPick={goFocus}
-                flashes={flashes}
-                compact
-                selectedId={stageMode === "focus" ? focused.id : null}
-              />
+              <RaceView ranked={ranked} onPick={goFocus} flashes={flashes} compact selectedId={focused?.id ?? null} />
             </div>
           </div>
         ) : (
@@ -456,6 +515,14 @@ export default function ArenaPage() {
       )}
 
       <ArenaStyles />
+    </div>
+  );
+}
+
+function ArenaBoot() {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black text-[#00FBFF] font-dotGothic text-2xl tracking-widest">
+      <span className="animate-pulse">◆ LOADING RUN…</span>
     </div>
   );
 }
@@ -728,6 +795,7 @@ function PodiumMedal({
 
 // `onViewResults` is only handed over once the match is locked — it doubles as
 // the signal that the board is an archive and needs a way back to the podium.
+// `onStop` is handed over only to an operator of a run that is still live.
 function TopBar({
   clock,
   timeUp,
@@ -738,6 +806,7 @@ function TopBar({
   agentCount,
   connectionStatus,
   onViewResults,
+  onStop,
 }: {
   clock: number;
   timeUp: boolean;
@@ -748,6 +817,7 @@ function TopBar({
   agentCount: number;
   connectionStatus: ConnectionStatus;
   onViewResults?: () => void;
+  onStop?: () => Promise<void>;
 }) {
   return (
     <div className="arena-top-bar flex items-center gap-4 px-5 h-16 border-b border-[#00FBFF]/25 bg-gradient-to-r from-[#020808] to-[#001014] shrink-0">
@@ -800,9 +870,70 @@ function TopBar({
         <span className={`arena-clock text-3xl tabular-nums font-bold ${timeUp ? "text-[#FF5861]" : "text-[#FFBE00]"}`}>
           ⏱ {fmtClock(clock)}
         </span>
+        {onStop && <RunStopControl timeUp={timeUp} onStop={onStop} />}
         <RainbowKitCustomConnectButton />
       </div>
     </div>
+  );
+}
+
+// Stopping ends the race for every agent, so it belongs to the run header and
+// not beside the observed lane's RESTART, where it read as one more thing done
+// to that agent. Two clicks, and the arm lapses on its own — a native confirm
+// would cover the board.
+function RunStopControl({ timeUp, onStop }: { timeUp: boolean; onStop: () => Promise<void> }) {
+  const [armed, setArmed] = useState(false);
+  const [confirmDisabled, setConfirmDisabled] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      clearTimeout(armTimer.current ?? undefined);
+      clearTimeout(confirmTimer.current ?? undefined);
+    },
+    [],
+  );
+
+  const click = async () => {
+    if (busy) return;
+    clearTimeout(armTimer.current ?? undefined);
+    clearTimeout(confirmTimer.current ?? undefined);
+    if (!armed) {
+      setArmed(true);
+      setConfirmDisabled(true);
+      confirmTimer.current = setTimeout(() => {
+        setConfirmDisabled(false);
+        confirmTimer.current = null;
+      }, STOP_CONFIRM_DWELL_MS);
+      armTimer.current = setTimeout(() => setArmed(false), STOP_ARM_MS);
+      return;
+    }
+    if (confirmDisabled) return;
+    setArmed(false);
+    setConfirmDisabled(false);
+    setBusy(true);
+    try {
+      await onStop();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={() => void click()}
+      disabled={busy || (armed && confirmDisabled)}
+      title="end the race for every agent"
+      className={`shrink-0 whitespace-nowrap rounded border px-2 py-1 text-[10px] font-bold tracking-widest transition disabled:opacity-40 ${
+        armed || timeUp
+          ? "animate-pulse border-[#FF5861] bg-[#FF5861] text-black"
+          : "border-[#FF5861]/60 text-[#FF5861] hover:bg-[#FF5861]/10"
+      }`}
+    >
+      {busy ? "STOPPING…" : armed ? "CONFIRM STOP" : "■ STOP RUN"}
+    </button>
   );
 }
 
@@ -1437,17 +1568,17 @@ function ChallengeBoard({
   onOpen,
 }: {
   agents: Agent[];
-  focused: Agent;
+  focused: Agent | null;
   onOpen: (id: number) => void;
 }) {
   const solvedCount = (id: number) => agents.filter(a => a.solved.includes(id)).length;
-  const focusedTarget = activeTarget(focused);
+  const focusedTarget = focused && activeTarget(focused);
   return (
     <div className="arena-challenge-board h-56 shrink-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#010607]">
       <SectionHead label="CHALLENGE BOARD" hint="click for details" />
       <div className="arena-challenge-grid flex-1 min-h-0 overflow-y-auto console-scroll p-2 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-1.5 content-start">
         {CHALLENGES.map(c => {
-          const mine = focused.solved.includes(c.id);
+          const mine = focused?.solved.includes(c.id) ?? false;
           const target = focusedTarget === c.id;
           const count = solvedCount(c.id);
           return (
@@ -1686,48 +1817,37 @@ function ArenaStream() {
 
 function OperatorStrip({
   focused,
-  focusMode,
   address,
   authenticated,
   hadSession,
   archived,
   restartable,
-  timeUp,
   onSteer,
   onBroadcast,
   onRestart,
-  onStop,
   onInvalidate,
   onSignIn,
 }: {
-  focused: Agent;
-  // On the overview no target was chosen, so the composer speaks to everyone;
-  // a directed steer only exists once an agent is actually being observed.
-  focusMode: boolean;
+  // Null on the overview, where no target was chosen, so the composer speaks to
+  // everyone; a directed steer only exists once an agent is being observed.
+  focused: Agent | null;
   address: string | null;
   authenticated: boolean;
   hadSession: boolean;
   archived: boolean;
   // The backend only replaces a session while the run is running.
   restartable: boolean;
-  timeUp: boolean;
   onSteer: (text: string) => Promise<void>;
   onBroadcast: (text: string) => Promise<void>;
   onRestart: () => Promise<void>;
-  onStop: () => Promise<void>;
   onInvalidate: () => void;
   onSignIn: () => Promise<void>;
 }) {
-  const pendingSteers = useArenaStore(selectPendingSteersFor(focused.id));
+  const pendingSteers = useArenaStore(selectPendingSteersFor(focused?.id ?? ""));
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // One arm for both destructive buttons. Two independent ones let you arm STOP,
-  // change your mind, arm and confirm RESTART, and leave STOP live for the rest
-  // of its window — where the next click ends the race outright.
-  const [armed, setArmed] = useState<"stop" | "restart" | null>(null);
-  // The confirm stays disabled for a beat after arming so a double-click's
-  // second click cannot reach it.
+  const [armed, setArmed] = useState(false);
   const [confirmDisabled, setConfirmDisabled] = useState(false);
   const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1735,20 +1855,20 @@ function OperatorStrip({
   const disarm = useCallback(() => {
     clearTimeout(armTimer.current ?? undefined);
     clearTimeout(confirmTimer.current ?? undefined);
-    setArmed(null);
+    setArmed(false);
     setConfirmDisabled(false);
   }, []);
 
-  const arm = (action: "stop" | "restart") => {
+  const arm = () => {
     clearTimeout(armTimer.current ?? undefined);
     clearTimeout(confirmTimer.current ?? undefined);
-    setArmed(action);
+    setArmed(true);
     setConfirmDisabled(true);
     confirmTimer.current = setTimeout(() => {
       setConfirmDisabled(false);
       confirmTimer.current = null;
     }, STOP_CONFIRM_DWELL_MS);
-    armTimer.current = setTimeout(() => setArmed(null), STOP_ARM_MS);
+    armTimer.current = setTimeout(() => setArmed(false), STOP_ARM_MS);
   };
 
   useEffect(
@@ -1764,7 +1884,7 @@ function OperatorStrip({
   // leave a disabled button pulsing CONFIRM for the rest of the window.
   useEffect(() => {
     disarm();
-  }, [disarm, focused.id, focusMode, restartable, archived]);
+  }, [disarm, focused?.id, restartable, archived]);
 
   const send = async (action: (text: string) => Promise<void>) => {
     const text = draft.trim();
@@ -1786,12 +1906,13 @@ function OperatorStrip({
     }
   };
 
-  // Both destructive actions take two clicks, and arming one disarms the other.
-  // The arm lapses on its own; a native confirm dialog would cover the broadcast.
-  const confirmed = async (action: "stop" | "restart", run: () => Promise<void>, failure: string) => {
-    if (busy) return;
-    if (armed !== action) {
-      arm(action);
+  // Throws away everything the agent worked out so far, but only on this lane —
+  // which is why it takes two clicks. The arm lapses on its own; a native confirm
+  // dialog would cover the broadcast.
+  const restart = async () => {
+    if (busy || archived || !restartable || !focused) return;
+    if (!armed) {
+      arm();
       return;
     }
     if (confirmDisabled) return;
@@ -1799,29 +1920,17 @@ function OperatorStrip({
     setBusy(true);
     setError(null);
     try {
-      await run();
+      await onRestart();
     } catch (cause) {
       if (cause instanceof ArenaApiError && cause.status === 401) {
         onInvalidate();
         setError("operator session expired — sign in again");
       } else {
-        setError(cause instanceof Error ? cause.message : failure);
+        setError(cause instanceof Error ? cause.message : "The restart request failed");
       }
     } finally {
       setBusy(false);
     }
-  };
-
-  // Stopping ends the race for everyone.
-  const stop = async () => {
-    if (archived) return;
-    await confirmed("stop", onStop, "The stop request failed");
-  };
-
-  // Throws away everything the agent worked out so far, but only on this lane.
-  const restart = async () => {
-    if (archived || !restartable) return;
-    await confirmed("restart", onRestart, "The restart request failed");
   };
 
   const signIn = async () => {
@@ -1838,14 +1947,10 @@ function OperatorStrip({
   };
 
   return (
-    <div
-      className={`arena-operator-strip shrink-0 border-t px-2 py-2 ${
-        timeUp ? "border-[#FF5861] bg-[#FF5861]/10" : "border-[#00FBFF]/15"
-      }`}
-    >
+    <div className="arena-operator-strip shrink-0 border-t border-[#00FBFF]/15 px-2 py-2">
       <div className="mb-1 flex items-center gap-2 text-sm font-bold text-[#FFBE00]">
         <span>🎬 NEXT-TURN INJECTION</span>
-        {focusMode ? (
+        {focused ? (
           <span className="truncate text-[#00FBFF]/70">focused: {focused.handle}</span>
         ) : (
           <span className="truncate text-[#FFBE00]/90">→ all agents</span>
@@ -1861,7 +1966,7 @@ function OperatorStrip({
               value={draft}
               onChange={event => setDraft(event.target.value)}
               onKeyDown={event => {
-                if (event.key === "Enter") void send(focusMode ? onSteer : onBroadcast);
+                if (event.key === "Enter") void send(focused ? onSteer : onBroadcast);
               }}
               disabled={busy || archived}
               placeholder={archived ? "run ended · controls unavailable" : "message to inject on the next turn…"}
@@ -1870,43 +1975,32 @@ function OperatorStrip({
             {/* One button; the stage picks the target. Cyan when directed at the
                 observed agent, gold when the overview broadcasts to everyone. */}
             <button
-              onClick={() => void send(focusMode ? onSteer : onBroadcast)}
+              onClick={() => void send(focused ? onSteer : onBroadcast)}
               disabled={busy || archived || !draft.trim()}
               className={`px-2 py-1 rounded border text-sm font-bold disabled:opacity-40 ${
-                focusMode ? "border-[#00FBFF]/40 text-[#00FBFF]" : "border-[#FFBE00]/50 text-[#FFBE00]"
+                focused ? "border-[#00FBFF]/40 text-[#00FBFF]" : "border-[#FFBE00]/50 text-[#FFBE00]"
               }`}
             >
               SEND
             </button>
             {/* Only in focus mode: a restart names one lane, and the overview
                 has no target to name. */}
-            {focusMode && (
+            {focused && (
               <button
                 onClick={() => void restart()}
-                disabled={busy || archived || !restartable || (armed === "restart" && confirmDisabled)}
+                disabled={busy || archived || !restartable || (armed && confirmDisabled)}
                 title={`drop ${focused.handle}'s session and re-feed its opening prompt`}
                 className={`shrink-0 whitespace-nowrap rounded border px-2 py-1 text-sm font-bold disabled:opacity-40 ${
-                  armed === "restart"
+                  armed
                     ? "animate-pulse border-[#FFBE00] bg-[#FFBE00] text-black"
                     : "border-[#FFBE00]/50 text-[#FFBE00]"
                 }`}
               >
-                {armed === "restart" ? "CONFIRM RESTART" : "RESTART"}
+                {armed ? "CONFIRM RESTART" : "RESTART"}
               </button>
             )}
-            <button
-              onClick={() => void stop()}
-              disabled={busy || archived || (armed === "stop" && confirmDisabled)}
-              className={`px-2 py-1 rounded border text-sm font-bold disabled:opacity-40 ${
-                armed === "stop" || timeUp
-                  ? "animate-pulse border-[#FF5861] bg-[#FF5861] text-black"
-                  : "border-[#FF5861]/60 text-[#FF5861]"
-              }`}
-            >
-              {armed === "stop" ? "CONFIRM STOP" : "STOP"}
-            </button>
           </div>
-          {focusMode && pendingSteers.length > 0 && (
+          {focused && pendingSteers.length > 0 && (
             <div className="mt-1 animate-pulse text-sm text-[#FFBE00]">
               {pendingSteers.length === 1
                 ? `◆ queued for ${focused.handle}'s next turn`
