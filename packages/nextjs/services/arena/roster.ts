@@ -102,7 +102,7 @@ export const ROSTER_DISPLAY: Readonly<Record<string, RosterDisplay>> = {
   },
   "gpt-55-medium": {
     handle: "codex-gpt-55",
-    color: "#A3E635",
+    color: "#C5A5D7",
     short: "OA",
     vendor: "OpenAI",
     harnessLabel: "Codex CLI",
