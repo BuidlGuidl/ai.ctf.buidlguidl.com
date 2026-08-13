@@ -53,11 +53,13 @@ type PodiumPlace = 1 | 2 | 3;
 
 const fmtTokens = (tokens: number) => `${(tokens / 1000).toFixed(0)}k`;
 const USAGE_PENDING_TOOLTIP = "Filled in at the end of the run, live usage is unavailable";
+const ARENA_TIP =
+  "tooltip tooltip-bottom [--tooltip-color:#0a1e23] [--tooltip-text-color:#00FBFFcc] before:border before:border-[#00FBFF]/40 before:text-[10px] before:shadow-[0_0_14px_rgba(0,251,255,0.25)] after:border-b-[#00FBFF]/60";
 
 function PendingUsage() {
   return (
     <span
-      className="tooltip tooltip-bottom cursor-help underline decoration-dotted underline-offset-2 [--tooltip-color:#0a1e23] [--tooltip-text-color:#00FBFFcc] before:border before:border-[#00FBFF]/40 before:text-[10px] before:shadow-[0_0_14px_rgba(0,251,255,0.25)] after:border-b-[#00FBFF]/60"
+      className={`${ARENA_TIP} cursor-help underline decoration-dotted underline-offset-2`}
       data-tip={USAGE_PENDING_TOOLTIP}
       aria-label={USAGE_PENDING_TOOLTIP}
     >
@@ -1397,11 +1399,13 @@ function RaceView({
                 if (flagId !== undefined) {
                   const ch = CHALLENGES[flagId - 1];
                   const flashing = flashes.includes(`${a.id}:${flagId}`);
+                  const tip = `#${flagId} ${ch?.name ?? ""} · captured ${k + 1} of ${total}`;
                   return (
                     <span
                       key={k}
-                      title={`#${flagId} ${ch?.name ?? ""} · captured ${k + 1} of ${total}`}
-                      className={`arena-race-cell relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums transition-colors ${
+                      data-tip={tip}
+                      aria-label={tip}
+                      className={`arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums transition-colors ${
                         flashing ? "flag-pop" : ""
                       }`}
                       style={{ background: a.color, borderColor: a.color, color: "#00181c" }}
@@ -1413,17 +1417,18 @@ function RaceView({
                 if (k === a.solved.length && !done(a)) {
                   const color = STATUS_STYLE[a.status].color;
                   const target = activeTarget(a);
+                  const tip =
+                    target !== null
+                      ? `${STATUS_STYLE[a.status].label} · target #${target} ${CHALLENGES[target - 1]?.name ?? ""}`
+                      : STATUS_STYLE[a.status].label;
                   // The in-flight slot names the entrant's reported target — an
                   // outlined number, so it can't read as a captured flag.
                   return (
                     <span
                       key={k}
-                      title={
-                        target !== null
-                          ? `${STATUS_STYLE[a.status].label} · target #${target} ${CHALLENGES[target - 1]?.name ?? ""}`
-                          : STATUS_STYLE[a.status].label
-                      }
-                      className={`arena-race-cell relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums ${
+                      data-tip={tip}
+                      aria-label={tip}
+                      className={`arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums ${
                         a.status === "working" ? "cell-working" : "opacity-40"
                       }`}
                       style={{ background: `${color}1f`, borderColor: color, color }}
@@ -1435,8 +1440,9 @@ function RaceView({
                 return (
                   <span
                     key={k}
-                    title="Not captured yet"
-                    className={`arena-race-cell relative flex-1 ${cellH} rounded-[3px] border`}
+                    data-tip="Not captured yet"
+                    aria-label="Not captured yet"
+                    className={`arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] border`}
                     style={{ background: "#00fbff08", borderColor: "#00fbff1a" }}
                   />
                 );
