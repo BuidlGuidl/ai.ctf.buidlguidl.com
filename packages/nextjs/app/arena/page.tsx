@@ -1380,7 +1380,7 @@ function RaceView({
               {a.usagePending && a.tokens === 0 ? <PendingUsage /> : fmtTokens(a.tokens)}
             </span>
             <span className={`arena-race-cost w-20 text-right ${dataText} tabular-nums shrink-0 text-[#FFBE00]/90`}>
-              {a.cost === null ? a.usagePending ? <PendingUsage /> : "N/A" : `$${a.cost.toFixed(2)}`}
+              {a.cost !== null ? `$${a.cost.toFixed(2)}` : a.usagePending ? <PendingUsage /> : "N/A"}
             </span>
 
             <div className="arena-race-flags flex-1 flex gap-1">
