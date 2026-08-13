@@ -51,6 +51,8 @@ import { getBlockExplorerAddressLink } from "~~/utils/scaffold-eth";
 export const dynamic = "force-dynamic";
 
 type PodiumPlace = 1 | 2 | 3;
+type OverviewTab = "race" | "grid";
+type RaceColumnMode = "challenges" | "order";
 
 const fmtTokens = (tokens: number) => `${(tokens / 1000).toFixed(0)}k`;
 const USAGE_PENDING_TOOLTIP = "Filled in at the end of the run, live usage is unavailable";
@@ -74,6 +76,13 @@ const fmtClock = (s: number) => {
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+};
+
+const fmtFinishTime = (s: number) => {
+  if (s >= 3600) return fmtClock(s);
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 };
 
 // `soft` is the translucent wash behind a podium row, `shadow`/`highlight` the
@@ -217,6 +226,7 @@ function ArenaScreen() {
   const flashTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const [openChallenge, setOpenChallenge] = useState<number | null>(null);
   const [stopError, setStopError] = useState<string | null>(null);
+  const [raceColumnMode, setRaceColumnMode] = useState<RaceColumnMode>("order");
   const [liveStarted, setLiveStarted] = useState(false);
   const [ceremonyReady, setCeremonyReady] = useState(false);
   // Whoever watches the match lock gets the finish sting before the podium takes
@@ -477,12 +487,18 @@ function ArenaScreen() {
           >
             <div className="arena-main-stage-padding flex-1 min-h-0 relative p-4">
               <div className="h-full flex flex-col border border-[#00FBFF]/25 rounded-lg bg-[#020a0c]/80 overflow-hidden shadow-[0_0_40px_-12px_rgba(0,251,255,0.4)]">
-                <StageTabs tab={overviewTab} onTab={setView} />
+                <StageTabs
+                  tab={overviewTab}
+                  onTab={setView}
+                  raceColumnMode={raceColumnMode}
+                  onRaceColumnMode={setRaceColumnMode}
+                />
                 <OverviewStage
                   ranked={ranked}
                   tab={overviewTab}
                   onPick={goFocus}
                   flashes={flashes}
+                  raceColumnMode={raceColumnMode}
                   selectedId={focused?.id ?? null}
                 />
               </div>
@@ -523,7 +539,14 @@ function ArenaScreen() {
           <div className="arena-grid-race-strip shrink-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#010607]">
             <SectionHead label="RACE" hint="showing top 5 · scroll for all" />
             <div className="arena-grid-race-scroll h-[190px] overflow-y-auto console-scroll">
-              <RaceView ranked={ranked} onPick={goFocus} flashes={flashes} compact selectedId={focused?.id ?? null} />
+              <RaceView
+                ranked={ranked}
+                onPick={goFocus}
+                flashes={flashes}
+                columnMode={raceColumnMode}
+                compact
+                selectedId={focused?.id ?? null}
+              />
             </div>
           </div>
         ) : (
@@ -989,7 +1012,17 @@ const STAGE_TABS: { id: OverviewTab; label: string }[] = [
   { id: "grid", label: "▦ MULTIVIEW" },
 ];
 
-function StageTabs({ tab, onTab }: { tab: OverviewTab; onTab: (t: OverviewTab) => void }) {
+function StageTabs({
+  tab,
+  onTab,
+  raceColumnMode,
+  onRaceColumnMode,
+}: {
+  tab: OverviewTab;
+  onTab: (tab: OverviewTab) => void;
+  raceColumnMode: RaceColumnMode;
+  onRaceColumnMode: (mode: RaceColumnMode) => void;
+}) {
   return (
     <div className="arena-stage-tabs flex items-center gap-2 px-4 h-12 border-b border-[#00FBFF]/20 bg-[#001417] shrink-0">
       <span className="arena-stage-label font-dotGothic text-lg text-[#00FBFF]/70 mr-2">OVERVIEW</span>
@@ -1007,7 +1040,25 @@ function StageTabs({ tab, onTab }: { tab: OverviewTab; onTab: (t: OverviewTab) =
           {t.label}
         </button>
       ))}
-      <span className="arena-stage-hint ml-auto text-sm text-[#00FBFF]/55">click any agent to watch its log ▸</span>
+      <div className="arena-race-mode ml-auto flex items-center gap-2">
+        <span className="arena-race-mode-label text-xs font-bold tracking-widest text-[#00FBFF]/45">FLAG VIEW</span>
+        <div className="flex items-center rounded border border-[#00FBFF]/25 p-0.5">
+          {(["challenges", "order"] as const).map(mode => (
+            <button
+              key={mode}
+              onClick={() => onRaceColumnMode(mode)}
+              aria-pressed={raceColumnMode === mode}
+              title={mode === "challenges" ? "Keep every flag in its challenge column" : "Show flags in capture order"}
+              className={`arena-race-mode-tab rounded px-2 py-0.5 text-xs font-bold tracking-wider transition ${
+                raceColumnMode === mode ? "bg-[#00FBFF]/15 text-[#00FBFF]" : "text-[#00FBFF]/50 hover:text-[#00FBFF]"
+              }`}
+            >
+              {mode === "challenges" ? "1–12" : "SOLVE ORDER"}
+            </button>
+          ))}
+        </div>
+      </div>
+      <span className="arena-stage-hint ml-2 text-sm text-[#00FBFF]/55">click any agent to watch its log ▸</span>
     </div>
   );
 }
@@ -1166,24 +1217,32 @@ function ConsoleRow({ line }: { line: ConsoleEntry }) {
 
 /* ------------------------------------------------------------ OverviewStage */
 
-type OverviewTab = "race" | "grid";
-
 function OverviewStage({
   ranked,
   tab,
   onPick,
   flashes,
+  raceColumnMode,
   selectedId,
 }: {
   ranked: Agent[];
   tab: OverviewTab;
   onPick: (id: string) => void;
   flashes: string[];
+  raceColumnMode: RaceColumnMode;
   selectedId: string | null;
 }) {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto console-scroll">
-      {tab === "race" && <RaceView ranked={ranked} onPick={onPick} flashes={flashes} selectedId={selectedId} />}
+      {tab === "race" && (
+        <RaceView
+          ranked={ranked}
+          onPick={onPick}
+          flashes={flashes}
+          columnMode={raceColumnMode}
+          selectedId={selectedId}
+        />
+      )}
       {tab === "grid" && <GridView ranked={ranked} onPick={onPick} selectedId={selectedId} />}
     </div>
   );
@@ -1195,12 +1254,14 @@ function RaceView({
   ranked,
   onPick,
   flashes,
+  columnMode,
   compact,
   selectedId,
 }: {
   ranked: Agent[];
   onPick: (id: string) => void;
   flashes: string[];
+  columnMode: RaceColumnMode;
   compact?: boolean;
   selectedId?: string | null;
 }) {
@@ -1284,7 +1345,7 @@ function RaceView({
     >
       {sting && <RaceFinishSting key={sting.key} agent={sting.agent} place={sting.place} />}
 
-      {/* ruler — one column per captured flag, in capture order */}
+      {/* The shared ruler is challenge IDs in fixed mode and capture positions in order mode. */}
       <div className={`arena-race-ruler flex items-center ${rowGap} px-2 pb-1`}>
         <span className="arena-race-rank w-10 shrink-0" />
         <span className="w-4 shrink-0" />
@@ -1303,15 +1364,25 @@ function RaceView({
           COST
         </span>
         <div className="arena-race-flags flex-1 flex gap-1">
-          {slots.map(k => (
-            <span
-              key={k}
-              title={`Capture ${k + 1} of ${total}`}
-              className={`flex-1 text-center ${dataText} font-bold tabular-nums text-[#00FBFF]/55`}
-            >
-              {k + 1}
-            </span>
-          ))}
+          {columnMode === "challenges"
+            ? CHALLENGES.map(challenge => (
+                <span
+                  key={challenge.id}
+                  title={`Challenge #${challenge.id} · ${challenge.name}`}
+                  className={`flex-1 text-center ${dataText} font-bold tabular-nums text-[#00FBFF]/55`}
+                >
+                  {challenge.id}
+                </span>
+              ))
+            : slots.map(k => (
+                <span
+                  key={k}
+                  title={`Capture ${k + 1} of ${total}`}
+                  className={`flex-1 text-center ${dataText} font-bold tabular-nums text-[#00FBFF]/55`}
+                >
+                  {k + 1}
+                </span>
+              ))}
         </div>
         <span className={`arena-race-result w-28 shrink-0 text-right ${dataText} tracking-widest text-[#00FBFF]/55`}>
           RESULT
@@ -1405,66 +1476,122 @@ function RaceView({
               {a.cost !== null ? `$${a.cost.toFixed(2)}` : a.usagePending ? <PendingUsage /> : "N/A"}
             </span>
 
+            {/* Order mode reads as the route the agent took; challenge mode parks every
+                flag under its own number, so a gap in a row is a challenge nobody's row
+                can hide. Same cells either way — only what a column means changes. */}
             <div className="arena-race-flags flex-1 flex gap-1">
-              {slots.map(k => {
-                const flagId = a.solved[k];
-                if (flagId !== undefined) {
-                  const ch = CHALLENGES[flagId - 1];
-                  const flashing = flashes.includes(`${a.id}:${flagId}`);
-                  const tip = `#${flagId} ${ch?.name ?? ""} · captured ${k + 1} of ${total}`;
-                  return (
-                    <span
-                      key={k}
-                      data-tip={tip}
-                      aria-label={tip}
-                      className={`arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums transition-colors ${
-                        flashing ? "flag-pop" : ""
-                      }`}
-                      style={{ background: a.color, borderColor: a.color, color: "#00181c" }}
-                    >
-                      {flagId}
-                    </span>
-                  );
-                }
-                if (k === a.solved.length && !done(a)) {
-                  const color = STATUS_STYLE[a.status].color;
-                  const target = activeTarget(a);
-                  const tip =
-                    target !== null
-                      ? `${STATUS_STYLE[a.status].label} · target #${target} ${CHALLENGES[target - 1]?.name ?? ""}`
-                      : STATUS_STYLE[a.status].label;
-                  // The in-flight slot names the entrant's reported target — an
-                  // outlined number, so it can't read as a captured flag.
-                  return (
-                    <span
-                      key={k}
-                      data-tip={tip}
-                      aria-label={tip}
-                      className={`arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums ${
-                        a.status === "working" ? "cell-working" : "opacity-40"
-                      }`}
-                      style={{ background: `${color}1f`, borderColor: color, color }}
-                    >
-                      {target ?? "…"}
-                    </span>
-                  );
-                }
-                return (
-                  <span
-                    key={k}
-                    data-tip="Not captured yet"
-                    aria-label="Not captured yet"
-                    className={`arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] border`}
-                    style={{ background: "#00fbff08", borderColor: "#00fbff1a" }}
-                  />
-                );
-              })}
+              {columnMode === "challenges"
+                ? CHALLENGES.map(challenge => {
+                    const captureIndex = a.solved.indexOf(challenge.id);
+                    if (captureIndex !== -1) {
+                      const flashing = flashes.includes(`${a.id}:${challenge.id}`);
+                      const tip = `#${challenge.id} ${challenge.name} · captured ${captureIndex + 1} of ${total}`;
+                      return (
+                        <span
+                          key={challenge.id}
+                          data-tip={tip}
+                          aria-label={tip}
+                          className={`arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums transition-colors ${
+                            flashing ? "flag-pop" : ""
+                          }`}
+                          style={{ background: a.color, borderColor: a.color, color: "#00181c" }}
+                        >
+                          {challenge.id}
+                        </span>
+                      );
+                    }
+                    // With fixed columns the target belongs under its own number rather
+                    // than in the next free slot, so the row shows what is being worked on.
+                    if (activeTarget(a) === challenge.id) {
+                      const color = STATUS_STYLE[a.status].color;
+                      const tip = `${STATUS_STYLE[a.status].label} · target #${challenge.id} ${challenge.name}`;
+                      return (
+                        <span
+                          key={challenge.id}
+                          data-tip={tip}
+                          aria-label={tip}
+                          className={`arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums ${
+                            a.status === "working" ? "cell-working" : "opacity-40"
+                          }`}
+                          style={{ background: `${color}1f`, borderColor: color, color }}
+                        >
+                          {challenge.id}
+                        </span>
+                      );
+                    }
+                    const tip = `#${challenge.id} ${challenge.name} · not captured yet`;
+                    return (
+                      <span
+                        key={challenge.id}
+                        data-tip={tip}
+                        aria-label={tip}
+                        className={`arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] border`}
+                        style={{ background: "#00fbff08", borderColor: "#00fbff1a" }}
+                      />
+                    );
+                  })
+                : slots.map(k => {
+                    const flagId = a.solved[k];
+                    if (flagId !== undefined) {
+                      const ch = CHALLENGES[flagId - 1];
+                      const flashing = flashes.includes(`${a.id}:${flagId}`);
+                      const tip = `#${flagId} ${ch?.name ?? ""} · captured ${k + 1} of ${total}`;
+                      return (
+                        <span
+                          key={k}
+                          data-tip={tip}
+                          aria-label={tip}
+                          className={`arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums transition-colors ${
+                            flashing ? "flag-pop" : ""
+                          }`}
+                          style={{ background: a.color, borderColor: a.color, color: "#00181c" }}
+                        >
+                          {flagId}
+                        </span>
+                      );
+                    }
+                    if (k === a.solved.length && !done(a)) {
+                      const color = STATUS_STYLE[a.status].color;
+                      const target = activeTarget(a);
+                      const tip =
+                        target !== null
+                          ? `${STATUS_STYLE[a.status].label} · target #${target} ${CHALLENGES[target - 1]?.name ?? ""}`
+                          : STATUS_STYLE[a.status].label;
+                      // The in-flight slot names the entrant's reported target — an
+                      // outlined number, so it can't read as a captured flag.
+                      return (
+                        <span
+                          key={k}
+                          data-tip={tip}
+                          aria-label={tip}
+                          className={`arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums ${
+                            a.status === "working" ? "cell-working" : "opacity-40"
+                          }`}
+                          style={{ background: `${color}1f`, borderColor: color, color }}
+                        >
+                          {target ?? "…"}
+                        </span>
+                      );
+                    }
+                    return (
+                      <span
+                        key={k}
+                        data-tip="Not captured yet"
+                        aria-label="Not captured yet"
+                        className={`arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] border`}
+                        style={{ background: "#00fbff08", borderColor: "#00fbff1a" }}
+                      />
+                    );
+                  })}
             </div>
 
             <span className={`arena-race-result w-28 text-right ${numText} tabular-nums shrink-0 text-[#00FBFF]/85`}>
               {done(a) ? (
-                <span className="agent-finish-time font-bold" style={{ color: podium?.tone ?? "#00ff9c" }}>
-                  ◆ {fmtClock(a.finishedAt ?? 0)}
+                <span
+                  className="agent-finish-time whitespace-nowrap font-bold"
+                  style={{ color: podium?.tone ?? "#00ff9c" }}
+                >
+                  ◆ {fmtFinishTime(a.finishedAt ?? 0)}
                 </span>
               ) : (
                 `${a.solved.length}/${total}`
