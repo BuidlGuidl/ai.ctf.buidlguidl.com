@@ -397,7 +397,7 @@ function ArenaScreen() {
   if (route.runId && !runId && (connectionStatus === "not-found" || connectionStatus === "error")) {
     return (
       <RunExitPanel
-        title="RUN UNAVAILABLE"
+        title="RUN NOT FOUND"
         message={
           connectionStatus === "not-found"
             ? "This arena run no longer exists. The backend may have restarted."
@@ -454,7 +454,7 @@ function ArenaScreen() {
 
       {runFailed && (
         <div className="flex shrink-0 items-center gap-4 border-b border-[#FF5861]/50 bg-[#FF5861]/10 px-5 py-3 text-[#FF5861]">
-          <span className="font-dotGothic text-xl tracking-widest">RUN FAILED</span>
+          <span className="font-dotGothic text-xl tracking-widest">RUN ENDED WITH AN ERROR</span>
           <span className="min-w-0 flex-1 text-sm text-[#FF5861]/80">
             {runError ?? "The backend ended the run without a reason."}
           </span>
@@ -591,7 +591,7 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
       <header className="relative z-20 flex h-14 shrink-0 items-center gap-3 border-b border-[#FFBE00]/25 bg-black/65 px-4 sm:px-5">
         <span className="flex items-center gap-2 text-sm font-bold tracking-[0.18em] text-[#00ff9c] lg:mr-3">
           <span className="h-2.5 w-2.5 rounded-full bg-[#00ff9c] shadow-[0_0_10px_#00ff9c]" />
-          RUN COMPLETE
+          FINISHED
         </span>
         <div className="hidden font-dotGothic text-lg tracking-wide text-[#00FBFF] lg:block lg:text-xl">
           BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · RUN SUMMARY
@@ -601,7 +601,7 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
             onClick={onViewData}
             className="rounded border border-[#00FBFF]/30 px-2.5 py-1 text-sm font-bold tracking-[0.12em] text-[#00FBFF]/75 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
           >
-            ARENA DATA ▸
+            RACE DATA ▸
           </button>
           <RainbowKitCustomConnectButton />
         </div>
@@ -609,9 +609,9 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
 
       <main className="console-scroll relative z-20 flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:py-8">
         <section className="final-lock-in mx-auto max-w-5xl text-center">
-          <div className="text-sm font-bold tracking-[0.35em] text-[#00ff9c]">RUN FINISHED</div>
+          <div className="text-sm font-bold tracking-[0.35em] text-[#00ff9c]">FINAL</div>
           <h1 className="final-title mt-2 font-dotGothic text-3xl tracking-[0.12em] text-white sm:text-5xl">
-            FINAL RESULTS
+            RUN SUMMARY
           </h1>
         </section>
 
@@ -624,7 +624,7 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
         {rest.length > 0 && (
           <section className="mx-auto mt-8 max-w-6xl pb-5 md:mt-10">
             <div className="mb-3 flex items-center gap-3 text-sm font-bold tracking-[0.24em] text-[#00FBFF]/70">
-              <span>FINAL STANDINGS</span>
+              <span>FINAL RESULTS</span>
               <span className="h-px flex-1 bg-[#00FBFF]/15" />
               <span>{ranked.length} RESULTS</span>
             </div>
@@ -1007,7 +1007,7 @@ function StageTabs({ tab, onTab }: { tab: OverviewTab; onTab: (t: OverviewTab) =
           {t.label}
         </button>
       ))}
-      <span className="arena-stage-hint ml-auto text-sm text-[#00FBFF]/55">click any agent to watch its log ▸</span>
+      <span className="arena-stage-hint ml-auto text-sm text-[#00FBFF]/55">select an agent to follow its log ▸</span>
     </div>
   );
 }
@@ -1040,7 +1040,7 @@ function AgentLog({ focused, onClose }: { focused: Agent; onClose: () => void })
           </span>
           <button
             onClick={onClose}
-            title="back to run log"
+            title="back to race"
             className="w-7 h-7 shrink-0 rounded border border-[#00FBFF]/25 text-[#00FBFF]/60 hover:text-[#00FBFF] hover:border-[#00FBFF] transition"
           >
             ✕
@@ -1624,7 +1624,7 @@ function ChallengeBoard({
   const focusedTarget = focused && activeTarget(focused);
   return (
     <div className="arena-challenge-board h-56 shrink-0 flex flex-col border-t border-[#00FBFF]/20 bg-[#010607]">
-      <SectionHead label="CHALLENGE BOARD" hint="click for details" />
+      <SectionHead label="CHALLENGES" hint="select for details" />
       <div className="arena-challenge-grid flex-1 min-h-0 overflow-y-auto console-scroll p-2 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-1.5 content-start">
         {CHALLENGES.map(c => {
           const mine = focused?.solved.includes(c.id) ?? false;
@@ -1655,7 +1655,7 @@ function ChallengeBoard({
               </div>
               <div className="text-white/80 truncate">{c.name}</div>
               <div className="text-sm text-[#00FBFF]/70">
-                {count}/{agents.length} cleared
+                {count}/{agents.length} solved
               </div>
             </button>
           );
@@ -1765,9 +1765,9 @@ function ChallengeDetails({
 
           <div>
             <div className="flex items-center justify-between mb-1.5 text-[#00FBFF]/70">
-              <span className="tracking-widest text-sm">FIELD PROGRESS</span>
+              <span className="tracking-widest text-sm">AGENT PROGRESS</span>
               <span className="tabular-nums">
-                {cleared.length}/{agents.length} cleared
+                {cleared.length}/{agents.length} solved
               </span>
             </div>
             <div className="h-2 rounded bg-[#00FBFF]/10 overflow-hidden">
@@ -1779,11 +1779,11 @@ function ChallengeDetails({
           </div>
 
           <div className="space-y-1.5">
-            <div className="tracking-widest text-sm text-[#00FBFF]/70">CAPTURED BY</div>
-            <AgentChips list={cleared} empty="nobody has cracked this one yet" />
+            <div className="tracking-widest text-sm text-[#00FBFF]/70">SOLVED BY</div>
+            <AgentChips list={cleared} empty="No agent has solved this challenge yet." />
           </div>
 
-          <div className="pt-1 text-sm text-[#00FBFF]/55">click an agent to watch its log · Esc to close</div>
+          <div className="pt-1 text-sm text-[#00FBFF]/55">Select an agent to follow its log · Esc to close</div>
         </div>
       </div>
     </div>
@@ -1835,7 +1835,7 @@ function ArenaStream() {
   return (
     <div className="arena-stream flex-1 min-h-0 flex flex-col bg-[#010607]">
       <div className="arena-stream-header flex items-center gap-2 px-3 h-11 border-b border-[#00FBFF]/15 bg-[#00141733] shrink-0">
-        <span className="shrink-0 text-base font-bold text-[#00FBFF] tracking-widest">RUN LOG</span>
+        <span className="shrink-0 text-base font-bold text-[#00FBFF] tracking-widest">LIVE FEED</span>
         <div className="console-scroll ml-auto flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap">
           {STREAM_FILTERS.map(f => (
             <button
@@ -1857,7 +1857,7 @@ function ArenaStream() {
         ref={scrollRef}
         className="arena-stream-lines flex-1 min-h-0 overflow-y-auto console-scroll px-3 py-1.5 text-base space-y-1"
       >
-        {rows.length === 0 && <div className="text-[#00FBFF]/50 italic">waiting for run activity…</div>}
+        {rows.length === 0 && <div className="text-[#00FBFF]/50 italic">waiting for the first event…</div>}
         {rows.map(r => ("msg" in r ? <ChatRow key={r.id} msg={r.msg} /> : <FeedRow key={r.id} item={r.item} />))}
       </div>
     </div>
@@ -2000,9 +2000,9 @@ function OperatorStrip({
       <div className="mb-1 flex items-center gap-2 text-sm font-bold text-[#FFBE00]">
         <span>🎬 NEXT-TURN INJECTION</span>
         {focused ? (
-          <span className="truncate text-[#00FBFF]/70">focused: {focused.handle}</span>
+          <span className="truncate text-[#00FBFF]/70">to {focused.handle}</span>
         ) : (
-          <span className="truncate text-[#FFBE00]/90">→ all agents</span>
+          <span className="truncate text-[#FFBE00]/90">broadcast to all agents</span>
         )}
         <div className="ml-auto flex items-center gap-2">
           <OperatorAddress address={address} />
@@ -2018,7 +2018,7 @@ function OperatorStrip({
                 if (event.key === "Enter") void send(focused ? onSteer : onBroadcast);
               }}
               disabled={busy || archived}
-              placeholder={archived ? "run ended · controls unavailable" : "message to inject on the next turn…"}
+              placeholder={archived ? "run finished — controls locked" : "message for the agent's next turn…"}
               className="flex-1 min-w-0 bg-[#00181c] border border-[#00FBFF]/20 rounded px-2 py-1 text-base text-white placeholder-[#00FBFF]/45 focus:outline-none focus:border-[#FFBE00]/60 disabled:cursor-not-allowed disabled:opacity-55"
             />
             {/* One button; the stage picks the target. Cyan when directed at the
@@ -2045,7 +2045,7 @@ function OperatorStrip({
                     : "border-[#FFBE00]/50 text-[#FFBE00]"
                 }`}
               >
-                {armed ? "CONFIRM RESTART" : "RESTART"}
+                {armed ? "CONFIRM RESTART" : "RESTART AGENT"}
               </button>
             )}
           </div>
@@ -2059,7 +2059,7 @@ function OperatorStrip({
         </>
       ) : address ? (
         <div className="flex items-center gap-2">
-          {hadSession && <span className="text-sm text-[#FFBE00]/90">operator session expired</span>}
+          {hadSession && <span className="text-sm text-[#FFBE00]/90">OPERATOR SESSION EXPIRED</span>}
           <button
             onClick={() => void signIn()}
             disabled={busy}
@@ -2069,7 +2069,7 @@ function OperatorStrip({
           </button>
         </div>
       ) : (
-        <span className="text-sm text-[#00FBFF]/70">connect a wallet — top right</span>
+        <span className="text-sm text-[#00FBFF]/70">CONNECT A WALLET TO USE OPERATOR CONTROLS</span>
       )}
       {error && <div className="mt-1 text-sm text-[#FF5861]">{error}</div>}
     </div>
