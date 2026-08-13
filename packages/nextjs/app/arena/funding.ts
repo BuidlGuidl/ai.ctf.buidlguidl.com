@@ -8,6 +8,17 @@ import { base, baseSepolia, hardhat } from "viem/chains";
 //   none   — funding is unavailable and the controls stay disabled
 export type FundingMode = "local" | "batch" | "none";
 
+// Mirrors the backend's chains.json fundingThresholdEth; keep in sync.
+const FUNDING_THRESHOLD_ETH: Record<number, string> = {
+  [hardhat.id]: "0.05",
+  [base.id]: "0.005",
+  [baseSepolia.id]: "0.005",
+};
+
+export function fundingThresholdEth(chainId?: number): string {
+  return (chainId === undefined ? undefined : FUNDING_THRESHOLD_ETH[chainId]) ?? "0.05";
+}
+
 // Multicall3 is deployed at the same canonical address on both Base networks.
 export const MULTICALL3_ADDRESS: Record<number, Address> = {
   [base.id]: "0xcA11bde05977b3631167028862bE2a173976CA11",
