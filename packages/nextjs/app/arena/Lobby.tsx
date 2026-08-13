@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { ModelName } from "./ModelName";
 import {
   FundingMode,
@@ -555,9 +556,12 @@ export function ArenaLobby({
             ? "FAILED"
             : "LOBBY"}
         </span>
-        <div className="lobby-header-title font-dotGothic text-xl md:text-2xl tracking-wide lobby-title-glow">
+        <Link
+          href="/arena"
+          className="lobby-header-title font-dotGothic text-xl md:text-2xl tracking-wide lobby-title-glow transition-opacity hover:opacity-80"
+        >
           BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · AGENT ARENA
-        </div>
+        </Link>
         <div className="lobby-header-badges hidden lg:flex items-center gap-1 text-sm text-[#00FBFF]/70">
           <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{agents.length} AGENTS</span>
           <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{CHALLENGES.length} CHALLENGES</span>

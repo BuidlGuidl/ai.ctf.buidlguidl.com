@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
 } from "react";
+import Link from "next/link";
 import { ArenaLobby } from "./Lobby";
 import { ModelName } from "./ModelName";
 import { OperatorAddress } from "./OperatorAddress";
@@ -674,6 +675,14 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
             </div>
           </section>
         )}
+
+        <Link
+          href="/arena"
+          className="final-result-in mx-auto mt-6 block w-fit text-center text-xs font-bold tracking-widest text-[#00FBFF]/60 transition hover:text-[#00FBFF]"
+          style={{ animationDelay: `${1.25 + rest.length * 0.08}s` }}
+        >
+          ← BACK TO ARENA
+        </Link>
       </main>
 
       <ArenaStyles />
@@ -872,9 +881,12 @@ function TopBar({
         />
         {allFinished ? "FINISHED" : runFailed ? "FAILED" : runStopping ? "STOPPING" : "RUNNING"}
       </span>
-      <div className="arena-topbar-title hidden sm:block font-dotGothic text-xl md:text-2xl text-[#00FBFF] tracking-wide title-glow">
+      <Link
+        href="/arena"
+        className="arena-topbar-title hidden sm:block font-dotGothic text-xl md:text-2xl text-[#00FBFF] tracking-wide title-glow transition-opacity hover:opacity-80"
+      >
         BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · AGENT ARENA
-      </div>
+      </Link>
       <div className="hidden 2xl:flex items-center gap-1 text-sm text-[#00FBFF]/70">
         <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{agentCount} AGENTS</span>
         <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{CHALLENGES.length} CHALLENGES</span>
