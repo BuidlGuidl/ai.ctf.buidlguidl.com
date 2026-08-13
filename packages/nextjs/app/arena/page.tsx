@@ -57,8 +57,8 @@ const USAGE_PENDING_TOOLTIP = "Filled in at the end of the run when live usage i
 function PendingUsage() {
   return (
     <span
-      className="cursor-help underline decoration-dotted underline-offset-2"
-      title={USAGE_PENDING_TOOLTIP}
+      className="tooltip tooltip-bottom cursor-help underline decoration-dotted underline-offset-2 [--tooltip-color:#0a1e23] [--tooltip-text-color:#00FBFFcc] before:border before:border-[#00FBFF]/40 before:text-[10px] before:shadow-[0_0_14px_rgba(0,251,255,0.25)] after:border-b-[#00FBFF]/60"
+      data-tip={USAGE_PENDING_TOOLTIP}
       aria-label={USAGE_PENDING_TOOLTIP}
     >
       ?
@@ -1321,7 +1321,7 @@ function RaceView({
                 onPick(a.id);
               }
             }}
-            className={`arena-race-row relative w-full flex items-center ${rowGap} px-2 ${
+            className={`arena-race-row relative hover:z-10 w-full flex items-center ${rowGap} px-2 ${
               compact ? "py-0.5" : "py-2"
             } rounded hover:bg-[#00FBFF]/5 will-change-transform text-left group cursor-pointer ${
               leadTaker === a.id ? "lead-take" : ""
