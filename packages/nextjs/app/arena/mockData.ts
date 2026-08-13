@@ -28,6 +28,7 @@ export interface Agent {
   status: AgentStatus;
   tokens: number;
   cost: number | null;
+  usagePending: boolean;
   lastSolveAt: string | null;
   finishedAt: number | null;
   currentChallengeId: number | null;

@@ -52,6 +52,19 @@ export const dynamic = "force-dynamic";
 type PodiumPlace = 1 | 2 | 3;
 
 const fmtTokens = (tokens: number) => `${(tokens / 1000).toFixed(0)}k`;
+const USAGE_PENDING_TOOLTIP = "Filled in at the end of the run, live usage is unavailable";
+
+function PendingUsage() {
+  return (
+    <span
+      className="tooltip tooltip-bottom cursor-help underline decoration-dotted underline-offset-2 [--tooltip-color:#0a1e23] [--tooltip-text-color:#00FBFFcc] before:border before:border-[#00FBFF]/40 before:text-[10px] before:shadow-[0_0_14px_rgba(0,251,255,0.25)] after:border-b-[#00FBFF]/60"
+      data-tip={USAGE_PENDING_TOOLTIP}
+      aria-label={USAGE_PENDING_TOOLTIP}
+    >
+      ?
+    </span>
+  );
+}
 
 const fmtClock = (s: number) => {
   const h = Math.floor(s / 3600);
@@ -109,7 +122,12 @@ function secondsFrom(start: string | null, end: string | null): number | null {
   return Math.max(0, Math.floor((Date.parse(end) - Date.parse(start)) / 1000));
 }
 
-function agentsFromRun(entrants: EntrantSummary[] | null, startedAt: string | null): Agent[] {
+function agentsFromRun(
+  entrants: EntrantSummary[] | null,
+  startedAt: string | null,
+  runState: RunState | null,
+): Agent[] {
+  const usagePending = runState !== "finished" && runState !== "failed";
   if (!entrants) {
     return ROSTER.map(entrant => {
       const display = displayForEntrant(entrant.id, entrant.harness, entrant.model);
@@ -127,6 +145,7 @@ function agentsFromRun(entrants: EntrantSummary[] | null, startedAt: string | nu
         status: "idle",
         tokens: 0,
         cost: null,
+        usagePending,
         lastSolveAt: null,
         finishedAt: null,
         currentChallengeId: null,
@@ -152,6 +171,7 @@ function agentsFromRun(entrants: EntrantSummary[] | null, startedAt: string | nu
       status: entrant.status,
       tokens: entrant.inputTokens + entrant.outputTokens,
       cost: entrant.costUsd,
+      usagePending,
       lastSolveAt: lastSolve,
       finishedAt: secondsFrom(startedAt, clearedAt),
       currentChallengeId: entrant.currentChallengeId,
@@ -242,7 +262,10 @@ function ArenaScreen() {
     return connectRun(currentRunId);
   }, [currentRunId]);
 
-  const agents = useMemo(() => agentsFromRun(runEntrants, runStartedAt), [runEntrants, runStartedAt]);
+  const agents = useMemo(
+    () => agentsFromRun(runEntrants, runStartedAt, runState),
+    [runEntrants, runStartedAt, runState],
+  );
   const startMatch = useCallback(() => setLiveStarted(true), []);
 
   const goFocus = useCallback((id: string) => route.go({ agent: id }), [route]);
@@ -1298,7 +1321,7 @@ function RaceView({
                 onPick(a.id);
               }
             }}
-            className={`arena-race-row relative w-full flex items-center ${rowGap} px-2 ${
+            className={`arena-race-row relative hover:z-10 w-full flex items-center ${rowGap} px-2 ${
               compact ? "py-0.5" : "py-2"
             } rounded hover:bg-[#00FBFF]/5 will-change-transform text-left group cursor-pointer ${
               leadTaker === a.id ? "lead-take" : ""
@@ -1354,10 +1377,10 @@ function RaceView({
               <ModelName name={a.handle} effort={a.effort} />
             </span>
             <span className={`arena-race-tokens w-16 text-right ${dataText} tabular-nums shrink-0 text-[#00FBFF]/75`}>
-              {fmtTokens(a.tokens)}
+              {a.usagePending && a.tokens === 0 ? <PendingUsage /> : fmtTokens(a.tokens)}
             </span>
             <span className={`arena-race-cost w-20 text-right ${dataText} tabular-nums shrink-0 text-[#FFBE00]/90`}>
-              {a.cost === null ? "—" : `$${a.cost.toFixed(2)}`}
+              {a.cost !== null ? `$${a.cost.toFixed(2)}` : a.usagePending ? <PendingUsage /> : "N/A"}
             </span>
 
             <div className="arena-race-flags flex-1 flex gap-1">
