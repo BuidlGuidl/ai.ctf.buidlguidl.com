@@ -651,11 +651,19 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
                             {agent.solved.length} FLAGS
                           </span>
                         )}
-                        <span className="w-[104px] shrink-0 text-right text-lg font-bold tabular-nums text-[#00ff9c]">
-                          {agent.finishedAt === null
-                            ? `${agent.solved.length}/${CHALLENGES.length}`
-                            : fmtClock(agent.finishedAt)}
-                        </span>
+                        <div className="min-w-[104px] shrink-0 text-right">
+                          <div className="text-lg font-bold tabular-nums text-[#00ff9c]">
+                            {agent.finishedAt === null
+                              ? `${agent.solved.length}/${CHALLENGES.length}`
+                              : fmtClock(agent.finishedAt)}
+                          </div>
+                          <div className="mt-0.5 whitespace-nowrap text-xs tracking-[0.12em] tabular-nums">
+                            <span className="text-[#00FBFF]/50">{fmtTokens(agent.tokens)} TOK · </span>
+                            <span className={agent.cost === null ? "text-[#00FBFF]/50" : "text-[#FFBE00]/70"}>
+                              {agent.cost === null ? "N/A" : `$${agent.cost.toFixed(2)}`}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     );
                   })}
@@ -728,12 +736,12 @@ function FinalistCard({ agent, place }: { agent: Agent; place: PodiumPlace }) {
         >
           {agent.finishedAt === null ? `${agent.solved.length}/${CHALLENGES.length} FLAGS` : fmtClock(agent.finishedAt)}
         </div>
-        {/* When the hero slot carries the flags, the footer switches to tokens
-            so the same number doesn't print twice. */}
+        {/* When the hero slot carries the flags, the footer only needs tokens.
+            When it carries the clock, the footer keeps flags ahead of tokens. */}
         <div className="mt-1 text-sm tracking-[0.16em] text-[#00FBFF]/60">
           {agent.finishedAt === null
-            ? `${fmtTokens(agent.tokens)} TOKENS`
-            : `${agent.solved.length}/${CHALLENGES.length} FLAGS`}{" "}
+            ? `${fmtTokens(agent.tokens)} TOK`
+            : `${agent.solved.length}/${CHALLENGES.length} FLAGS · ${fmtTokens(agent.tokens)} TOK`}{" "}
           · {agent.cost === null ? "COST N/A" : `$${agent.cost.toFixed(2)}`}
         </div>
       </article>
