@@ -144,8 +144,6 @@ export const CHALLENGES: Challenge[] = [
   },
 ];
 
-export const FUNDING_AMOUNT_ETH = "0.001";
-
 export const DIFFICULTY_COLOR: Record<Difficulty, string> = {
   easy: "#00ff9c",
   medium: "#00FBFF",

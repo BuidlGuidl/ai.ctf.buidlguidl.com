@@ -1,9 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { ModelName } from "./ModelName";
-import { FundingMode, MULTICALL3_ABI, MULTICALL3_ADDRESS, fundingMode, localTestClient } from "./funding";
-import { Agent, CHALLENGES, FUNDING_AMOUNT_ETH } from "./mockData";
+import {
+  FundingMode,
+  MULTICALL3_ABI,
+  MULTICALL3_ADDRESS,
+  fundingMode,
+  fundingThresholdEth,
+  localTestClient,
+} from "./funding";
+import { Agent, CHALLENGES } from "./mockData";
 import { type FundingStatus, fundingStatus, useAgentBalances } from "./useAgentBalances";
 import { useArenaRoute } from "./useArenaRoute";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
@@ -91,7 +99,6 @@ export function ArenaLobby({
   const [log, setLog] = useState<{ id: number; text: string; color: string }[]>([]);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [muted, setMuted] = useState(false);
-  const [amount, setAmount] = useState(FUNDING_AMOUNT_ETH);
   const [funding, setFunding] = useState(false);
   const [starting, setStarting] = useState(false);
   const [signingSeed, setSigningSeed] = useState(false);
@@ -206,11 +213,23 @@ export function ArenaLobby({
   const { targetNetwork } = useTargetNetwork();
   const { switchChain } = useSwitchChain();
   const fundingChainId = run?.chainId ?? targetNetwork.id;
+  const fundingThreshold = fundingThresholdEth(fundingChainId);
+  const [amount, setAmount] = useState(fundingThreshold);
+  const amountEdited = useRef(false);
   const mode = fundingMode(fundingChainId);
   const wrongNetwork = mode === "batch" && isConnected && chain?.id !== fundingChainId;
   const walletReady = mode === "local" || (isConnected && !wrongNetwork);
   const canFund = mode !== "none" && walletReady;
   const transactor = useTransactor();
+
+  useEffect(() => {
+    if (!amountEdited.current) setAmount(fundingThreshold);
+  }, [fundingThreshold]);
+
+  const handleAmountChange = useCallback((value: string) => {
+    amountEdited.current = true;
+    setAmount(value);
+  }, []);
 
   const addresses = useMemo(() => agents.flatMap(agent => (agent.address ? [agent.address] : [])), [agents]);
   const fundingActive = phase === "preparing" || phase === "funding" || phase === "ready" || phase === "launching";
@@ -537,9 +556,12 @@ export function ArenaLobby({
             ? "FAILED"
             : "LOBBY"}
         </span>
-        <div className="lobby-header-title font-dotGothic text-xl md:text-2xl tracking-wide lobby-title-glow">
+        <Link
+          href="/arena"
+          className="lobby-header-title font-dotGothic text-xl md:text-2xl tracking-wide lobby-title-glow transition-opacity hover:opacity-80"
+        >
           BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · AGENT ARENA
-        </div>
+        </Link>
         <div className="lobby-header-badges hidden lg:flex items-center gap-1 text-sm text-[#00FBFF]/70">
           <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{agents.length} AGENTS</span>
           <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{CHALLENGES.length} CHALLENGES</span>
@@ -703,7 +725,8 @@ export function ArenaLobby({
               fundingProjection={fundingProjection}
               required={required}
               amount={amount}
-              onAmountChange={setAmount}
+              fundingThreshold={fundingThreshold}
+              onAmountChange={handleAmountChange}
               onFund={fundAll}
               onConnect={openConnectModal}
               onSwitchNetwork={() => switchChain({ chainId: targetNetwork.id })}
@@ -869,6 +892,7 @@ function FundingBoard({
   fundingProjection,
   required,
   amount,
+  fundingThreshold,
   onAmountChange,
   onFund,
   onConnect,
@@ -887,6 +911,7 @@ function FundingBoard({
   fundingProjection: Record<string, FundingProjection>;
   required: bigint;
   amount: string;
+  fundingThreshold: string;
   onAmountChange: (v: string) => void;
   onFund: () => void;
   onConnect?: () => void;
@@ -905,7 +930,7 @@ function FundingBoard({
   const needsConnect = mode === "batch" && !isConnected;
   return (
     <div className="lobby-funding-board w-full max-w-4xl">
-      <div className="lobby-funding-controls flex flex-wrap items-center gap-3 mb-3">
+      <div className="lobby-funding-controls flex flex-wrap items-center gap-3 mb-1">
         <span className="text-base font-bold tracking-widest text-[#00FBFF]/75">▤ AGENT WALLETS</span>
         <div className="ml-auto flex items-center gap-2">
           <label className="flex items-center gap-1.5 text-base text-[#00FBFF]/70">
@@ -951,6 +976,7 @@ function FundingBoard({
           )}
         </div>
       </div>
+      <p className="mb-3 text-sm text-[#00FBFF]/60">Race starts when every agent hits {fundingThreshold} ETH</p>
 
       {balancesUnreachable && (
         <div className="mb-3 px-3 py-2 rounded border border-[#FF5861]/40 bg-[#FF5861]/10 text-base text-[#FF5861]">

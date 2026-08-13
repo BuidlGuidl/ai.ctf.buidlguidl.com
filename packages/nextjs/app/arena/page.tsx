@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
 } from "react";
+import Link from "next/link";
 import { ArenaLobby } from "./Lobby";
 import { ModelName } from "./ModelName";
 import { OperatorAddress } from "./OperatorAddress";
@@ -53,11 +54,13 @@ type PodiumPlace = 1 | 2 | 3;
 
 const fmtTokens = (tokens: number) => `${(tokens / 1000).toFixed(0)}k`;
 const USAGE_PENDING_TOOLTIP = "Filled in at the end of the run, live usage is unavailable";
+const ARENA_TIP =
+  "tooltip tooltip-bottom [--tooltip-color:#0a1e23] [--tooltip-text-color:#00FBFFcc] before:border before:border-[#00FBFF]/40 before:text-[10px] before:shadow-[0_0_14px_rgba(0,251,255,0.25)] after:border-b-[#00FBFF]/60";
 
 function PendingUsage() {
   return (
     <span
-      className="tooltip tooltip-bottom cursor-help underline decoration-dotted underline-offset-2 [--tooltip-color:#0a1e23] [--tooltip-text-color:#00FBFFcc] before:border before:border-[#00FBFF]/40 before:text-[10px] before:shadow-[0_0_14px_rgba(0,251,255,0.25)] after:border-b-[#00FBFF]/60"
+      className={`${ARENA_TIP} cursor-help underline decoration-dotted underline-offset-2`}
       data-tip={USAGE_PENDING_TOOLTIP}
       aria-label={USAGE_PENDING_TOOLTIP}
     >
@@ -651,11 +654,19 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
                             {agent.solved.length} FLAGS
                           </span>
                         )}
-                        <span className="w-[104px] shrink-0 text-right text-lg font-bold tabular-nums text-[#00ff9c]">
-                          {agent.finishedAt === null
-                            ? `${agent.solved.length}/${CHALLENGES.length}`
-                            : fmtClock(agent.finishedAt)}
-                        </span>
+                        <div className="min-w-[104px] shrink-0 text-right">
+                          <div className="text-lg font-bold tabular-nums text-[#00ff9c]">
+                            {agent.finishedAt === null
+                              ? `${agent.solved.length}/${CHALLENGES.length}`
+                              : fmtClock(agent.finishedAt)}
+                          </div>
+                          <div className="mt-0.5 whitespace-nowrap text-xs tracking-[0.12em] tabular-nums">
+                            <span className="text-[#00FBFF]/50">{fmtTokens(agent.tokens)} TOK · </span>
+                            <span className={agent.cost === null ? "text-[#00FBFF]/50" : "text-[#FFBE00]/70"}>
+                              {agent.cost === null ? "N/A" : `$${agent.cost.toFixed(2)}`}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     );
                   })}
@@ -664,6 +675,14 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
             </div>
           </section>
         )}
+
+        <Link
+          href="/arena"
+          className="final-result-in mx-auto mt-6 block w-fit text-center text-xs font-bold tracking-widest text-[#00FBFF]/60 transition hover:text-[#00FBFF]"
+          style={{ animationDelay: `${1.25 + rest.length * 0.08}s` }}
+        >
+          ← BACK TO ARENA
+        </Link>
       </main>
 
       <ArenaStyles />
@@ -728,12 +747,12 @@ function FinalistCard({ agent, place }: { agent: Agent; place: PodiumPlace }) {
         >
           {agent.finishedAt === null ? `${agent.solved.length}/${CHALLENGES.length} FLAGS` : fmtClock(agent.finishedAt)}
         </div>
-        {/* When the hero slot carries the flags, the footer switches to tokens
-            so the same number doesn't print twice. */}
+        {/* When the hero slot carries the flags, the footer only needs tokens.
+            When it carries the clock, the footer keeps flags ahead of tokens. */}
         <div className="mt-1 text-sm tracking-[0.16em] text-[#00FBFF]/60">
           {agent.finishedAt === null
-            ? `${fmtTokens(agent.tokens)} TOKENS`
-            : `${agent.solved.length}/${CHALLENGES.length} FLAGS`}{" "}
+            ? `${fmtTokens(agent.tokens)} TOK`
+            : `${agent.solved.length}/${CHALLENGES.length} FLAGS · ${fmtTokens(agent.tokens)} TOK`}{" "}
           · {agent.cost === null ? "COST N/A" : `$${agent.cost.toFixed(2)}`}
         </div>
       </article>
@@ -862,9 +881,12 @@ function TopBar({
         />
         {allFinished ? "FINISHED" : runFailed ? "FAILED" : runStopping ? "STOPPING" : "RUNNING"}
       </span>
-      <div className="arena-topbar-title hidden sm:block font-dotGothic text-xl md:text-2xl text-[#00FBFF] tracking-wide title-glow">
+      <Link
+        href="/arena"
+        className="arena-topbar-title hidden sm:block font-dotGothic text-xl md:text-2xl text-[#00FBFF] tracking-wide title-glow transition-opacity hover:opacity-80"
+      >
         BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · AGENT ARENA
-      </div>
+      </Link>
       <div className="hidden 2xl:flex items-center gap-1 text-sm text-[#00FBFF]/70">
         <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{agentCount} AGENTS</span>
         <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{CHALLENGES.length} CHALLENGES</span>
@@ -1389,11 +1411,13 @@ function RaceView({
                 if (flagId !== undefined) {
                   const ch = CHALLENGES[flagId - 1];
                   const flashing = flashes.includes(`${a.id}:${flagId}`);
+                  const tip = `#${flagId} ${ch?.name ?? ""} · captured ${k + 1} of ${total}`;
                   return (
                     <span
                       key={k}
-                      title={`#${flagId} ${ch?.name ?? ""} · captured ${k + 1} of ${total}`}
-                      className={`arena-race-cell relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums transition-colors ${
+                      data-tip={tip}
+                      aria-label={tip}
+                      className={`arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums transition-colors ${
                         flashing ? "flag-pop" : ""
                       }`}
                       style={{ background: a.color, borderColor: a.color, color: "#00181c" }}
@@ -1405,17 +1429,18 @@ function RaceView({
                 if (k === a.solved.length && !done(a)) {
                   const color = STATUS_STYLE[a.status].color;
                   const target = activeTarget(a);
+                  const tip =
+                    target !== null
+                      ? `${STATUS_STYLE[a.status].label} · target #${target} ${CHALLENGES[target - 1]?.name ?? ""}`
+                      : STATUS_STYLE[a.status].label;
                   // The in-flight slot names the entrant's reported target — an
                   // outlined number, so it can't read as a captured flag.
                   return (
                     <span
                       key={k}
-                      title={
-                        target !== null
-                          ? `${STATUS_STYLE[a.status].label} · target #${target} ${CHALLENGES[target - 1]?.name ?? ""}`
-                          : STATUS_STYLE[a.status].label
-                      }
-                      className={`arena-race-cell relative flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums ${
+                      data-tip={tip}
+                      aria-label={tip}
+                      className={`arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums ${
                         a.status === "working" ? "cell-working" : "opacity-40"
                       }`}
                       style={{ background: `${color}1f`, borderColor: color, color }}
@@ -1427,8 +1452,9 @@ function RaceView({
                 return (
                   <span
                     key={k}
-                    title="Not captured yet"
-                    className={`arena-race-cell relative flex-1 ${cellH} rounded-[3px] border`}
+                    data-tip="Not captured yet"
+                    aria-label="Not captured yet"
+                    className={`arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] border`}
                     style={{ background: "#00fbff08", borderColor: "#00fbff1a" }}
                   />
                 );
