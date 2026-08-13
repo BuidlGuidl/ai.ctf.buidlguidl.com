@@ -52,7 +52,7 @@ export const dynamic = "force-dynamic";
 type PodiumPlace = 1 | 2 | 3;
 
 const fmtTokens = (tokens: number) => `${(tokens / 1000).toFixed(0)}k`;
-const USAGE_PENDING_TOOLTIP = "Filled in at the end of the run when live usage is unavailable";
+const USAGE_PENDING_TOOLTIP = "Filled in at the end of the run, live usage is unavailable";
 
 function PendingUsage() {
   return (
