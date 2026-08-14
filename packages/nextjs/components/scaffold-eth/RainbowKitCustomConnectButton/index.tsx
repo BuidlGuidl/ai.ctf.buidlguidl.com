@@ -8,7 +8,7 @@ import { AddressQRCodeModal } from "./AddressQRCodeModal";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import CopyToClipboard from "react-copy-to-clipboard";
 import type { Address } from "viem";
-import { useDisconnect } from "wagmi";
+import { useDisconnect, useSwitchChain } from "wagmi";
 import { useOutsideClick } from "~~/hooks/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 import { getBlockExplorerAddressLink } from "~~/utils/scaffold-eth";
@@ -23,6 +23,7 @@ const menuItemClassName = "w-full whitespace-nowrap rounded px-2 py-1.5 text-lef
  */
 export const RainbowKitCustomConnectButton = () => {
   const { disconnect } = useDisconnect();
+  const { switchChain } = useSwitchChain();
   const { targetNetwork } = useTargetNetwork();
   const [addressCopied, setAddressCopied] = useState(false);
   const dropdownRef = useRef<HTMLDetailsElement>(null);
@@ -35,7 +36,7 @@ export const RainbowKitCustomConnectButton = () => {
 
   return (
     <ConnectButton.Custom>
-      {({ account, chain, openChainModal, openConnectModal, authenticationStatus, mounted }) => {
+      {({ account, chain, openConnectModal, authenticationStatus, mounted }) => {
         const connected =
           mounted && account && chain && (!authenticationStatus || authenticationStatus === "authenticated");
         const ready = mounted && authenticationStatus !== "loading";
@@ -67,13 +68,46 @@ export const RainbowKitCustomConnectButton = () => {
                 CONNECT
               </button>
             ) : chain.unsupported || chain.id !== targetNetwork.id ? (
-              <button
-                className={`${chipClassName} border-[#FF5861]/60 text-[#FF5861]`}
-                onClick={openChainModal}
-                type="button"
-              >
-                WRONG NETWORK
-              </button>
+              // Not RainbowKit's chain modal: with the arena's authentication
+              // provider mounted, openChainModal is a no-op until the wallet has
+              // signed in — and signing in needs the right network first.
+              <details ref={dropdownRef} className="dropdown dropdown-end">
+                <summary
+                  className={`${chipClassName} border-[#FF5861]/60 text-[#FF5861] flex items-center gap-1.5 hover:bg-[#FF5861]/10`}
+                >
+                  WRONG NETWORK
+                  <span className="text-[8px]">▾</span>
+                </summary>
+                <ul
+                  tabIndex={0}
+                  className="dropdown-content bg-black border border-[#FF5861]/25 rounded mt-1 z-[70] p-1 text-[11px] font-mono text-[#00FBFF] min-w-44"
+                >
+                  <li>
+                    <button
+                      className={menuItemClassName}
+                      onClick={() => {
+                        closeDropdown();
+                        switchChain({ chainId: targetNetwork.id });
+                      }}
+                      type="button"
+                    >
+                      SWITCH TO {targetNetwork.name.toUpperCase()}
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      className={`${menuItemClassName} text-[#FF5861]`}
+                      onClick={() => {
+                        closeDropdown();
+                        disconnect();
+                      }}
+                      type="button"
+                    >
+                      DISCONNECT
+                    </button>
+                  </li>
+                </ul>
+              </details>
             ) : authenticationStatus === "unauthenticated" ? (
               <div className="flex items-center gap-1.5">
                 {/* The wallet about to sign, visible before it signs: a non-operator
