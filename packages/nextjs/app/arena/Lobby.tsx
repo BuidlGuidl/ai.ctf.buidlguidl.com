@@ -326,7 +326,7 @@ export function ArenaLobby({
           pushLog(`${pending.length} agents funded ✓ · ${formatEther(total)} ETH`, GREEN);
         }
       } catch {
-        pushLog("funding failed — press FUND AGENTS to retry", RED);
+        pushLog("funding failed — press FUND ALL AGENTS to retry", RED);
       }
       await refetchBalances();
     } finally {
@@ -582,17 +582,17 @@ export function ArenaLobby({
           <div className="lobby-hero text-center mb-6">
             <div className="lobby-hero-title font-dotGothic text-3xl md:text-4xl tracking-widest lobby-title-glow">
               {phase === "idle"
-                ? "READY TO START"
+                ? "READY FOR A NEW RUN"
                 : phase === "created"
-                ? "RUN NEVER STARTED"
+                ? "RUN NOT STARTED"
                 : phase === "signature"
-                ? "SIGNATURE REQUIRED"
+                ? "AUTHORIZE AGENT WALLETS"
                 : phase === "preparing"
-                ? "PREPARING AGENT WALLETS"
+                ? "PREPARING AGENTS"
                 : phase === "funding"
-                ? "WAITING FOR FUNDING"
+                ? "FUNDING AGENTS"
                 : phase === "ready"
-                ? "RUN READY"
+                ? "ALL AGENTS READY"
                 : phase === "launching"
                 ? run?.state === "stopping"
                   ? "RUN STOPPING"
@@ -601,11 +601,11 @@ export function ArenaLobby({
                   : "RUN IN PROGRESS"
                 : phase === "failed"
                 ? "RUN FAILED"
-                : "WAITING FOR AGENTS"}
+                : "AGENTS JOINING"}
             </div>
             <div className="lobby-hero-subtitle mt-2 text-sm text-[#00FBFF]/55 tracking-wide">
               {phase === "idle" ? null : phase === "created" ? (
-                <span className="text-[#FFBE00]">this run was created but its start never landed</span>
+                <span className="text-[#FFBE00]">This run was created but never started.</span>
               ) : phase === "launching" ? (
                 <span className="text-[#00ff9c] animate-pulse">
                   {run?.state === "stopping"
@@ -615,7 +615,7 @@ export function ArenaLobby({
                     : "The run is live."}
                 </span>
               ) : phase === "signature" ? (
-                <span className="text-[#FFBE00]">Confirm in your wallet to set up the agents</span>
+                <span className="text-[#FFBE00]">Sign once to create this run&apos;s agent wallets.</span>
               ) : phase === "failed" ? (
                 <span className="text-[#FF5861]">
                   {runError ?? error ?? "Something went wrong — try starting over"}
@@ -664,7 +664,7 @@ export function ArenaLobby({
                   disabled={!agents.length || !operator.sessionLoaded || !operator.configured || starting}
                   className="lobby-cta group px-10 py-3 rounded-md font-dotGothic text-lg tracking-widest border-2 border-[#00FBFF] text-[#00FBFF] hover:bg-[#00FBFF] hover:text-black transition disabled:opacity-40"
                 >
-                  {starting ? "OPENING LOBBY…" : operator.authenticated ? "▶ OPEN LOBBY" : "▶ SIGN IN & OPEN LOBBY"}
+                  {starting ? "CREATING RUN…" : operator.authenticated ? "▶ CREATE RUN" : "▶ SIGN IN & CREATE RUN"}
                 </button>
               )}
               {!operator.sessionLoaded ? (
@@ -752,7 +752,7 @@ export function ArenaLobby({
           <div className="lobby-primary-action mt-10 h-16 flex items-center justify-center gap-3">
             {phase === "connecting" && (
               <div className="text-[#00FBFF]/50 text-sm tracking-widest font-dotGothic lobby-blink">
-                ● ● ● CONNECTING AGENTS ● ● ●
+                ● ● ● AGENTS JOINING ● ● ●
               </div>
             )}
             {phase === "created" && (
@@ -788,7 +788,7 @@ export function ArenaLobby({
             )}
             {phase === "funding" && (
               <div className="text-[#FFBE00]/70 text-sm tracking-widest font-dotGothic lobby-blink">
-                ● ● ● WAITING FOR FUNDING ● ● ●
+                ● ● ● FUNDING AGENTS ● ● ●
               </div>
             )}
             {phase === "ready" && (
@@ -816,7 +816,7 @@ export function ArenaLobby({
 
           {phase === "created" && (
             <div className="mt-3 text-[11px] text-[#00FBFF]/40 tracking-wide">
-              nothing was prepared yet — start it again, or leave it: a run that never started blocks nobody
+              Nothing was prepared. Start this run again or return to the arena.
             </div>
           )}
           {phase === "ready" && (
@@ -826,7 +826,7 @@ export function ArenaLobby({
           )}
           {phase === "funding" && (
             <div className="lobby-phase-note mt-3 text-base text-[#00FBFF]/70 tracking-wide">
-              Agents start once every wallet is funded — the amount above sets each manual top-up.
+              The run starts when every agent wallet is funded.
             </div>
           )}
           {canStopRun && (operator.authenticated || operator.hadSession) && (
@@ -839,7 +839,7 @@ export function ArenaLobby({
                     stopArmed ? "animate-pulse bg-[#FF5861] text-black border-[#FF5861]" : "text-[#FF5861]/80"
                   }`}
                 >
-                  {stoppingRun ? "STOPPING…" : stopArmed ? "CONFIRM STOP" : "■ STOP THIS RUN"}
+                  {stoppingRun ? "STOPPING…" : stopArmed ? "CONFIRM STOP" : "■ STOP RUN"}
                 </button>
               ) : (
                 <button
@@ -931,7 +931,7 @@ function FundingBoard({
   return (
     <div className="lobby-funding-board w-full max-w-4xl">
       <div className="lobby-funding-controls flex flex-wrap items-center gap-3 mb-1">
-        <span className="text-base font-bold tracking-widest text-[#00FBFF]/75">▤ AGENT WALLETS</span>
+        <span className="text-base font-bold tracking-widest text-[#00FBFF]/75">▤ AGENT FUNDING</span>
         <div className="ml-auto flex items-center gap-2">
           <label className="flex items-center gap-1.5 text-base text-[#00FBFF]/70">
             <span className="tracking-widest">EACH</span>
@@ -961,7 +961,7 @@ function FundingBoard({
               className="px-4 py-1.5 rounded border-2 font-dotGothic text-sm tracking-widest transition disabled:opacity-30 disabled:cursor-not-allowed"
               style={{ borderColor: YELLOW, color: YELLOW }}
             >
-              {funding ? "SENDING…" : "▶ FUND AGENTS"}
+              {funding ? "FUNDING…" : "▶ FUND ALL AGENTS"}
             </button>
           ) : (
             // The arena covers the site header, so this is the only way in.
@@ -976,7 +976,7 @@ function FundingBoard({
           )}
         </div>
       </div>
-      <p className="mb-3 text-sm text-[#00FBFF]/60">Race starts when every agent hits {fundingThreshold} ETH</p>
+      <p className="mb-3 text-sm uppercase text-[#00FBFF]/60">Run starts when every agent has {fundingThreshold} ETH</p>
 
       {balancesUnreachable && (
         <div className="mb-3 px-3 py-2 rounded border border-[#FF5861]/40 bg-[#FF5861]/10 text-base text-[#FF5861]">
@@ -1069,9 +1069,9 @@ function FundingRow({
 
       <span className="lobby-funding-status w-52 shrink-0 whitespace-nowrap text-right text-sm font-bold tracking-widest">
         {status === "funded" ? (
-          <span style={{ color: GREEN }}>FUNDED ✓</span>
+          <span style={{ color: GREEN }}>READY ✓</span>
         ) : status === "partial" ? (
-          <span style={{ color: YELLOW }}>PARTIAL</span>
+          <span style={{ color: YELLOW }}>NEEDS FUNDS</span>
         ) : (
           <span className="lobby-blink" style={{ color: YELLOW }}>
             WAITING FOR FUNDING
@@ -1135,7 +1135,7 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
             <div className="lobby-slot-harness text-base text-[#00FBFF]/75 leading-tight">{agent.harness}</div>
           </>
         ) : (
-          <div className="text-base text-[#00FBFF]/55 tracking-widest">{idle ? "AWAITING AGENT" : "———"}</div>
+          <div className="text-base text-[#00FBFF]/55 tracking-widest">{idle ? "NOT ASSIGNED" : "———"}</div>
         )}
       </div>
 
@@ -1148,7 +1148,7 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
             CONNECTING…
           </span>
         ) : (
-          <span className="text-[#00FBFF]/25">{idle ? "STANDBY" : "PENDING"}</span>
+          <span className="text-[#00FBFF]/25">{idle ? "NOT CONNECTED" : "WAITING"}</span>
         )}
       </div>
     </div>
