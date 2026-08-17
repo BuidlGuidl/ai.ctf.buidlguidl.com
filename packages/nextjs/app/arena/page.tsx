@@ -2,6 +2,7 @@
 
 import {
   type CSSProperties,
+  type MouseEvent,
   Suspense,
   useCallback,
   useEffect,
@@ -12,6 +13,7 @@ import {
   useState,
 } from "react";
 import Link from "next/link";
+import { ContractSource } from "./ContractSource";
 import { ArenaLobby } from "./Lobby";
 import { ModelName } from "./ModelName";
 import { OperatorAddress } from "./OperatorAddress";
@@ -56,6 +58,10 @@ type RaceColumnMode = "challenges" | "order";
 
 const fmtTokens = (tokens: number) => `${(tokens / 1000).toFixed(0)}k`;
 const USAGE_PENDING_TOOLTIP = "Filled in at the end of the run, live usage is unavailable";
+// A flag cell opens the challenge (and its contract) instead of focusing the
+// agent, so the ring is the hint that the cell is its own target.
+const CELL_LINK =
+  "cursor-pointer hover:shadow-[0_0_0_1px_#00FBFF] focus-visible:outline-none focus-visible:shadow-[0_0_0_1px_#00FBFF]";
 const ARENA_TIP =
   "tooltip tooltip-bottom [--tooltip-color:#0a1e23] [--tooltip-text-color:#00FBFFcc] before:border before:border-[#00FBFF]/40 before:text-[10px] before:shadow-[0_0_14px_rgba(0,251,255,0.25)] after:border-b-[#00FBFF]/60";
 
@@ -497,6 +503,7 @@ function ArenaScreen() {
                   ranked={ranked}
                   tab={overviewTab}
                   onPick={goFocus}
+                  onOpenChallenge={setOpenChallenge}
                   flashes={flashes}
                   raceColumnMode={raceColumnMode}
                   selectedId={focused?.id ?? null}
@@ -542,6 +549,7 @@ function ArenaScreen() {
               <RaceView
                 ranked={ranked}
                 onPick={goFocus}
+                onOpenChallenge={setOpenChallenge}
                 flashes={flashes}
                 columnMode={raceColumnMode}
                 compact
@@ -1221,6 +1229,7 @@ function OverviewStage({
   ranked,
   tab,
   onPick,
+  onOpenChallenge,
   flashes,
   raceColumnMode,
   selectedId,
@@ -1228,6 +1237,7 @@ function OverviewStage({
   ranked: Agent[];
   tab: OverviewTab;
   onPick: (id: string) => void;
+  onOpenChallenge: (id: number) => void;
   flashes: string[];
   raceColumnMode: RaceColumnMode;
   selectedId: string | null;
@@ -1238,6 +1248,7 @@ function OverviewStage({
         <RaceView
           ranked={ranked}
           onPick={onPick}
+          onOpenChallenge={onOpenChallenge}
           flashes={flashes}
           columnMode={raceColumnMode}
           selectedId={selectedId}
@@ -1253,6 +1264,7 @@ function OverviewStage({
 function RaceView({
   ranked,
   onPick,
+  onOpenChallenge,
   flashes,
   columnMode,
   compact,
@@ -1260,6 +1272,7 @@ function RaceView({
 }: {
   ranked: Agent[];
   onPick: (id: string) => void;
+  onOpenChallenge: (id: number) => void;
   flashes: string[];
   columnMode: RaceColumnMode;
   compact?: boolean;
@@ -1274,6 +1287,11 @@ function RaceView({
   // Columns are capture-order slots, not fixed challenges — slot k holds the k-th
   // flag an agent captured, so a row reads left-to-right as its capture history.
   const slots = Array.from({ length: total }, (_, k) => k);
+  // The row behind the cell focuses the agent, so a cell click has to stop there.
+  const openCell = (id: number) => (event: MouseEvent) => {
+    event.stopPropagation();
+    onOpenChallenge(id);
+  };
 
   // FLIP: when the ranking changes, slide each row from where it was to where it
   // now sits so a rank change reads as a physical move up (or down) the board.
@@ -1366,13 +1384,15 @@ function RaceView({
         <div className="arena-race-flags flex-1 flex gap-1">
           {columnMode === "challenges"
             ? CHALLENGES.map(challenge => (
-                <span
+                <button
                   key={challenge.id}
-                  title={`Challenge #${challenge.id} · ${challenge.name}`}
-                  className={`flex-1 text-center ${dataText} font-bold tabular-nums text-[#00FBFF]/55`}
+                  type="button"
+                  onClick={() => onOpenChallenge(challenge.id)}
+                  title={`Challenge #${challenge.id} · ${challenge.name} · open the contract`}
+                  className={`flex-1 text-center ${dataText} font-bold tabular-nums text-[#00FBFF]/55 transition hover:text-[#00FBFF]`}
                 >
                   {challenge.id}
-                </span>
+                </button>
               ))
             : slots.map(k => (
                 <span
@@ -1485,47 +1505,57 @@ function RaceView({
                     const captureIndex = a.solved.indexOf(challenge.id);
                     if (captureIndex !== -1) {
                       const flashing = flashes.includes(`${a.id}:${challenge.id}`);
-                      const tip = `#${challenge.id} ${challenge.name} · captured ${captureIndex + 1} of ${total}`;
+                      const tip = `#${challenge.id} ${challenge.name} · captured ${
+                        captureIndex + 1
+                      } of ${total} · click for the contract`;
                       return (
-                        <span
+                        <button
                           key={challenge.id}
+                          type="button"
+                          onClick={openCell(challenge.id)}
                           data-tip={tip}
                           aria-label={tip}
-                          className={`arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums transition-colors ${
+                          className={`arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums transition-colors ${CELL_LINK} ${
                             flashing ? "flag-pop" : ""
                           }`}
                           style={{ background: a.color, borderColor: a.color, color: "#00181c" }}
                         >
                           {challenge.id}
-                        </span>
+                        </button>
                       );
                     }
                     // With fixed columns the target belongs under its own number rather
                     // than in the next free slot, so the row shows what is being worked on.
                     if (activeTarget(a) === challenge.id) {
                       const color = STATUS_STYLE[a.status].color;
-                      const tip = `${STATUS_STYLE[a.status].label} · target #${challenge.id} ${challenge.name}`;
+                      const tip = `${STATUS_STYLE[a.status].label} · target #${challenge.id} ${
+                        challenge.name
+                      } · click for the contract`;
                       return (
-                        <span
+                        <button
                           key={challenge.id}
+                          type="button"
+                          onClick={openCell(challenge.id)}
                           data-tip={tip}
                           aria-label={tip}
-                          className={`arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums ${
+                          className={`arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums ${CELL_LINK} ${
                             a.status === "working" ? "cell-working" : "opacity-40"
                           }`}
                           style={{ background: `${color}1f`, borderColor: color, color }}
                         >
                           {challenge.id}
-                        </span>
+                        </button>
                       );
                     }
-                    const tip = `#${challenge.id} ${challenge.name} · not captured yet`;
+                    const tip = `#${challenge.id} ${challenge.name} · not captured yet · click for the contract`;
                     return (
-                      <span
+                      <button
                         key={challenge.id}
+                        type="button"
+                        onClick={openCell(challenge.id)}
                         data-tip={tip}
                         aria-label={tip}
-                        className={`arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] border`}
+                        className={`arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] border ${CELL_LINK}`}
                         style={{ background: "#00fbff08", borderColor: "#00fbff1a" }}
                       />
                     );
@@ -1535,19 +1565,23 @@ function RaceView({
                     if (flagId !== undefined) {
                       const ch = CHALLENGES[flagId - 1];
                       const flashing = flashes.includes(`${a.id}:${flagId}`);
-                      const tip = `#${flagId} ${ch?.name ?? ""} · captured ${k + 1} of ${total}`;
+                      const tip = `#${flagId} ${ch?.name ?? ""} · captured ${
+                        k + 1
+                      } of ${total} · click for the contract`;
                       return (
-                        <span
+                        <button
                           key={k}
+                          type="button"
+                          onClick={openCell(flagId)}
                           data-tip={tip}
                           aria-label={tip}
-                          className={`arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums transition-colors ${
+                          className={`arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums transition-colors ${CELL_LINK} ${
                             flashing ? "flag-pop" : ""
                           }`}
                           style={{ background: a.color, borderColor: a.color, color: "#00181c" }}
                         >
                           {flagId}
-                        </span>
+                        </button>
                       );
                     }
                     if (k === a.solved.length && !done(a)) {
@@ -1555,21 +1589,33 @@ function RaceView({
                       const target = activeTarget(a);
                       const tip =
                         target !== null
-                          ? `${STATUS_STYLE[a.status].label} · target #${target} ${CHALLENGES[target - 1]?.name ?? ""}`
+                          ? `${STATUS_STYLE[a.status].label} · target #${target} ${
+                              CHALLENGES[target - 1]?.name ?? ""
+                            } · click for the contract`
                           : STATUS_STYLE[a.status].label;
                       // The in-flight slot names the entrant's reported target — an
                       // outlined number, so it can't read as a captured flag.
-                      return (
-                        <span
+                      const cellClass = `arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums ${
+                        a.status === "working" ? "cell-working" : "opacity-40"
+                      }`;
+                      const cellStyle = { background: `${color}1f`, borderColor: color, color };
+                      // Nothing to open while the target is unreported, so that slot
+                      // stays a plain cell rather than a button that does nothing.
+                      return target !== null ? (
+                        <button
                           key={k}
+                          type="button"
+                          onClick={openCell(target)}
                           data-tip={tip}
                           aria-label={tip}
-                          className={`arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums ${
-                            a.status === "working" ? "cell-working" : "opacity-40"
-                          }`}
-                          style={{ background: `${color}1f`, borderColor: color, color }}
+                          className={`${cellClass} ${CELL_LINK}`}
+                          style={cellStyle}
                         >
-                          {target ?? "…"}
+                          {target}
+                        </button>
+                      ) : (
+                        <span key={k} data-tip={tip} aria-label={tip} className={cellClass} style={cellStyle}>
+                          …
                         </span>
                       );
                     }
@@ -1846,7 +1892,7 @@ function ChallengeDetails({
     >
       <div
         onClick={e => e.stopPropagation()}
-        className="toast-in w-[720px] max-w-[92%] max-h-[80%] overflow-y-auto console-scroll rounded-lg border bg-[#020a0c] shadow-2xl"
+        className="toast-in w-[900px] max-w-[92%] max-h-[86%] overflow-y-auto console-scroll rounded-lg border bg-[#020a0c] shadow-2xl"
         style={{ borderColor: `${dc}66` }}
       >
         <div className="flex items-center gap-3 px-4 h-14 border-b" style={{ borderColor: `${dc}33` }}>
@@ -1889,6 +1935,8 @@ function ChallengeDetails({
               </ul>
             </div>
           )}
+
+          <ContractSource challengeId={challenge.id} accent={dc} />
 
           <div>
             <div className="flex items-center justify-between mb-1.5 text-[#00FBFF]/70">
