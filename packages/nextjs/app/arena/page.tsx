@@ -15,6 +15,7 @@ import Link from "next/link";
 import { ArenaLobby } from "./Lobby";
 import { ModelName } from "./ModelName";
 import { OperatorAddress } from "./OperatorAddress";
+import { SfxToggle } from "./SfxToggle";
 import { Agent, AgentStatus, CHALLENGES, Challenge, DIFFICULTY_COLOR } from "./mockData";
 import { type ArenaView, useArenaRoute } from "./useArenaRoute";
 import type { Address } from "viem";
@@ -25,6 +26,7 @@ import { ArenaApiError, arenaClient } from "~~/services/arena/client";
 import { connectRun } from "~~/services/arena/connect";
 import type { ChatItem, ConsoleEntry, FeedItem } from "~~/services/arena/projection";
 import { ROSTER, displayForEntrant } from "~~/services/arena/roster";
+import { playSfx, useArenaSfx } from "~~/services/arena/sfx";
 import {
   type ConnectionStatus,
   selectChat,
@@ -32,6 +34,7 @@ import {
   selectConnectionStatus,
   selectConsoleFor,
   selectFeed,
+  selectFirstBlood,
   selectLastFlagEvent,
   selectPendingSteersFor,
   selectPreviewFor,
@@ -233,6 +236,11 @@ function ArenaScreen() {
   // over; a link opened on an already-locked run has no sting to wait for.
   const sawLiveRun = useRef(false);
   const podiumShown = useRef(false);
+  // Connecting replays the run's history, so whatever the store is already
+  // holding has happened without us — it lights the board, but announcing it
+  // would fire a burst of captures at whoever just opened the link.
+  const heardFlag = useRef(false);
+  const heardRunState = useRef<RunState | null>(null);
   const route = useArenaRoute();
   const runId = useArenaStore(selectRunId);
   const runState = useArenaStore(selectRunState);
@@ -242,9 +250,11 @@ function ArenaScreen() {
   const connectionStatus = useArenaStore(selectConnectionStatus);
   const connectionError = useArenaStore(selectConnectionError);
   const lastFlagEvent = useArenaStore(selectLastFlagEvent);
+  const firstBlood = useArenaStore(selectFirstBlood);
   const runFinishedAt = useArenaStore(selectRunFinishedAt);
   const runError = useArenaStore(selectRunError);
   const operator = useOperatorSession();
+  useArenaSfx();
 
   // The run in the URL is the connection: landing on one, leaving it, or walking
   // back to it with the browser has to move the page with it. Every reset for a
@@ -267,6 +277,8 @@ function ArenaScreen() {
     setCeremonyReady(false);
     podiumShown.current = false;
     sawLiveRun.current = false;
+    heardFlag.current = false;
+    heardRunState.current = null;
   }, [routeRunId]);
 
   const currentRunId = useArenaStore(state => state.currentRunId);
@@ -301,6 +313,15 @@ function ArenaScreen() {
     if (runState && runState !== "finished" && runState !== "failed") sawLiveRun.current = true;
   }, [runState]);
 
+  // A run that was already over when the page attached gets no verdict sound.
+  useEffect(() => {
+    if (!runState) return;
+    const previous = heardRunState.current;
+    heardRunState.current = runState;
+    if (previous === null || previous === runState) return;
+    if (runState === "failed") playSfx("fail");
+  }, [runState]);
+
   // A link with no view lands on the board while the race is live and on the
   // podium once it is locked; anything the operator picked is spelled out in the
   // URL and wins over both.
@@ -320,9 +341,20 @@ function ArenaScreen() {
   // leave and tears down the connection and the view state with it.
   const backToLobby = useCallback(() => route.go({ run: null, view: null, agent: null }, { replace: true }), [route]);
 
+  const firstBloodRef = useRef(firstBlood);
+  firstBloodRef.current = firstBlood;
+
   useEffect(() => {
     if (!lastFlagEvent) return;
     const key = `${lastFlagEvent.payload.entrantId}:${lastFlagEvent.payload.challengeId}`;
+    if (heardFlag.current) {
+      const blood = firstBloodRef.current;
+      const opener =
+        blood !== null &&
+        blood.entrantId === lastFlagEvent.payload.entrantId &&
+        blood.challengeId === lastFlagEvent.payload.challengeId;
+      playSfx(opener ? "firstBlood" : "flag");
+    }
     setFlashes(previous => [...previous, key]);
     const priorTimer = flashTimers.current.get(key);
     if (priorTimer) clearTimeout(priorTimer);
@@ -334,6 +366,13 @@ function ArenaScreen() {
       }, 3200),
     );
   }, [lastFlagEvent]);
+
+  // Declared after the effect above on purpose: on the commit that seeds the
+  // projection the capture effect must still see an unheard run, so the replayed
+  // history passes silently and everything from the next commit on is live.
+  useEffect(() => {
+    if (runId) heardFlag.current = true;
+  }, [runId]);
 
   useEffect(() => {
     const timers = flashTimers.current;
@@ -355,6 +394,7 @@ function ArenaScreen() {
   useEffect(() => {
     if (!ceremonyReady || podiumShown.current || !sawLiveRun.current) return;
     podiumShown.current = true;
+    playSfx("podium");
     route.go({ view: "results" }, { replace: true });
   }, [ceremonyReady, route]);
 
@@ -626,6 +666,7 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
           >
             RACE DATA ▸
           </button>
+          <SfxToggle className="hidden sm:inline-block" />
           <RainbowKitCustomConnectButton />
         </div>
       </header>
@@ -939,6 +980,7 @@ function TopBar({
           ⏱ {fmtClock(clock)}
         </span>
         {onStop && <RunStopControl timeUp={timeUp} onStop={onStop} />}
+        <SfxToggle className="arena-topbar-sfx hidden sm:inline-block" />
         <RainbowKitCustomConnectButton />
       </div>
     </div>
@@ -1305,6 +1347,7 @@ function RaceView({
     const leader = ranked[0]?.id;
     if (leader && prevLeader.current !== undefined && leader !== prevLeader.current) {
       setLeadTaker(leader);
+      playSfx("lead");
       if (leadTimer.current) clearTimeout(leadTimer.current);
       leadTimer.current = setTimeout(() => setLeadTaker(null), 1800);
     }
@@ -1334,6 +1377,7 @@ function RaceView({
     const place = ranked.indexOf(newcomer) + 1;
     if (place > 3) return;
     if (stingTimer.current) clearTimeout(stingTimer.current);
+    playSfx("finish");
     setSting({ key: `${newcomer.id}:${newcomer.finishedAt ?? 0}`, agent: newcomer, place: place as PodiumPlace });
     stingTimer.current = setTimeout(() => setSting(null), FINISH_STING_MS);
   }, [ranked, total]);
