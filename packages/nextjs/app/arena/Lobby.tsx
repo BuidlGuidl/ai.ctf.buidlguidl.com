@@ -201,6 +201,10 @@ export function ArenaLobby({
   const { switchChain } = useSwitchChain();
   const fundingChainId = run?.chainId ?? targetNetwork.id;
   const fundingThreshold = fundingThresholdEth(fundingChainId);
+  // What the race actually waits for. The amount below is only how much the
+  // operator chooses to send — a wallet stops blocking the run when it clears
+  // this bar, so this is the one the board reports against.
+  const thresholdWei = useMemo(() => parseEther(fundingThreshold), [fundingThreshold]);
   const [amount, setAmount] = useState(fundingThreshold);
   const amountEdited = useRef(false);
   const mode = fundingMode(fundingChainId);
@@ -244,7 +248,7 @@ export function ArenaLobby({
     agent =>
       rowStatus(
         agent.address ? balances[agent.address] : undefined,
-        required,
+        thresholdWei,
         fundingProjection[agent.id]?.funded === true,
       ) === "ready",
   ).length;
@@ -744,7 +748,7 @@ export function ArenaLobby({
               fundingProjection={fundingProjection}
               required={required}
               amount={amount}
-              fundingThreshold={fundingThreshold}
+              thresholdWei={thresholdWei}
               onAmountChange={handleAmountChange}
               onFund={fundAll}
               onConnect={openConnectModal}
@@ -927,7 +931,7 @@ function FundingBoard({
   fundingProjection,
   required,
   amount,
-  fundingThreshold,
+  thresholdWei,
   onAmountChange,
   onFund,
   onConnect,
@@ -946,7 +950,7 @@ function FundingBoard({
   fundingProjection: Record<string, FundingProjection>;
   required: bigint;
   amount: string;
-  fundingThreshold: string;
+  thresholdWei: bigint;
   onAmountChange: (v: string) => void;
   onFund: () => void;
   onConnect?: () => void;
@@ -1011,7 +1015,9 @@ function FundingBoard({
           )}
         </div>
       </div>
-      <p className="mb-3 text-sm uppercase text-[#00FBFF]/60">Run starts when every agent has {fundingThreshold} ETH</p>
+      <p className="mb-3 text-sm uppercase text-[#00FBFF]/60">
+        Run starts when every agent has {formatEther(thresholdWei)} ETH
+      </p>
 
       {balancesUnreachable && (
         <div className="mb-3 px-3 py-2 rounded border border-[#FF5861]/40 bg-[#FF5861]/10 text-base text-[#FF5861]">
@@ -1044,7 +1050,7 @@ function FundingBoard({
             agent={a}
             index={i}
             balance={a.address ? balances[a.address] : undefined}
-            required={required}
+            thresholdWei={thresholdWei}
             backendFunded={fundingProjection[a.id]?.funded === true}
           />
         ))}
@@ -1057,16 +1063,16 @@ function FundingRow({
   agent,
   index,
   balance,
-  required,
+  thresholdWei,
   backendFunded,
 }: {
   agent: Agent;
   index: number;
   balance: bigint | undefined;
-  required: bigint;
+  thresholdWei: bigint;
   backendFunded: boolean;
 }) {
-  const status = rowStatus(balance, required, backendFunded);
+  const status = rowStatus(balance, thresholdWei, backendFunded);
 
   return (
     <div
