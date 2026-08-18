@@ -1,4 +1,4 @@
-// Copied from agents-arena-backend contract/arena-types.ts, master @ f1d3512.
+// Copied from agents-arena-backend contract/arena-types.ts, return-runs @ 7024677.
 // Do not edit here — sync from the backend repo (formatting follows this repo's
 // prettier). Endpoint docs live there in contract/API.md.
 
@@ -23,7 +23,12 @@ export const ROSTER_MODELS: Readonly<Record<HarnessId, readonly string[]>> = {
   // to attack real contracts and refuses on security grounds (#48).
   codex: ["gpt-5.5"],
   claude: ["claude-opus-5", "claude-opus-4-8", "claude-sonnet-5"],
-  opencode: ["openrouter/z-ai/glm-5.2", "openrouter/moonshotai/kimi-k3", "openrouter/deepseek/deepseek-v4-flash-0731"],
+  opencode: [
+    "openrouter/z-ai/glm-5.2",
+    "openrouter/moonshotai/kimi-k3",
+    "openrouter/deepseek/deepseek-v4-pro-0813",
+    "openrouter/qwen/qwen3.8-27b",
+  ],
 };
 
 export const ROSTER_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
@@ -185,6 +190,20 @@ export interface RunResponse {
 }
 
 export type CreateRunResponse = RunResponse;
+
+// GET /runs list item. Deliberately thin — finish time, winner, and scores
+// live on GET /runs/:id — so the list stays one cheap query.
+export interface RunListItem {
+  id: string;
+  state: RunState;
+  createdAt: string;
+  startedAt: string | null;
+  agentCount: number;
+}
+
+export interface RunListResponse {
+  runs: RunListItem[];
+}
 
 export interface SteerRequest {
   text: string;
