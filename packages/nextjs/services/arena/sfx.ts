@@ -9,7 +9,7 @@ const STORAGE_KEY = "arena.sfx.muted";
 
 // Everything is mixed through here, so the whole arena gets quieter or louder in
 // one place and per-cue gains stay comparable to each other.
-const MASTER_GAIN = 0.35;
+const MASTER_GAIN = 0.44;
 
 type Note = {
   freq: number;

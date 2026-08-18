@@ -34,7 +34,6 @@ import {
   selectConnectionStatus,
   selectConsoleFor,
   selectFeed,
-  selectFirstBlood,
   selectLastFlagEvent,
   selectPendingSteersFor,
   selectPreviewFor,
@@ -238,8 +237,9 @@ function ArenaScreen() {
   const podiumShown = useRef(false);
   // Connecting replays the run's history, so whatever the store is already
   // holding has happened without us — it lights the board, but announcing it
-  // would fire a burst of captures at whoever just opened the link.
-  const heardFlag = useRef(false);
+  // would fire a burst of captures at whoever just opened the link. Events at
+  // or below this cursor are that history; only what lands past it gets a sound.
+  const heardEventId = useRef<number | null>(null);
   const heardRunState = useRef<RunState | null>(null);
   const route = useArenaRoute();
   const runId = useArenaStore(selectRunId);
@@ -250,7 +250,6 @@ function ArenaScreen() {
   const connectionStatus = useArenaStore(selectConnectionStatus);
   const connectionError = useArenaStore(selectConnectionError);
   const lastFlagEvent = useArenaStore(selectLastFlagEvent);
-  const firstBlood = useArenaStore(selectFirstBlood);
   const runFinishedAt = useArenaStore(selectRunFinishedAt);
   const runError = useArenaStore(selectRunError);
   const operator = useOperatorSession();
@@ -277,7 +276,7 @@ function ArenaScreen() {
     setCeremonyReady(false);
     podiumShown.current = false;
     sawLiveRun.current = false;
-    heardFlag.current = false;
+    heardEventId.current = null;
     heardRunState.current = null;
   }, [routeRunId]);
 
@@ -341,14 +340,11 @@ function ArenaScreen() {
   // leave and tears down the connection and the view state with it.
   const backToLobby = useCallback(() => route.go({ run: null, view: null, agent: null }, { replace: true }), [route]);
 
-  const firstBloodRef = useRef(firstBlood);
-  firstBloodRef.current = firstBlood;
-
   useEffect(() => {
     if (!lastFlagEvent) return;
     const key = `${lastFlagEvent.payload.entrantId}:${lastFlagEvent.payload.challengeId}`;
-    if (heardFlag.current) {
-      const blood = firstBloodRef.current;
+    if (heardEventId.current !== null && lastFlagEvent.id > heardEventId.current) {
+      const blood = useArenaStore.getState().projection?.firstBlood ?? null;
       const opener =
         blood !== null &&
         blood.entrantId === lastFlagEvent.payload.entrantId &&
@@ -367,11 +363,18 @@ function ArenaScreen() {
     );
   }, [lastFlagEvent]);
 
-  // Declared after the effect above on purpose: on the commit that seeds the
-  // projection the capture effect must still see an unheard run, so the replayed
-  // history passes silently and everything from the next commit on is live.
+  // The seeded projection arrives with its replay already applied, so its
+  // cursor at that moment is the line between history and live. Reading it
+  // here (not effect order) keeps the replay silent, and dropping the cursor
+  // whenever the run leaves the store means a re-entered run re-draws the line.
   useEffect(() => {
-    if (runId) heardFlag.current = true;
+    if (!runId) {
+      heardEventId.current = null;
+      return;
+    }
+    if (heardEventId.current === null) {
+      heardEventId.current = useArenaStore.getState().projection?.lastEventId ?? 0;
+    }
   }, [runId]);
 
   useEffect(() => {
@@ -1347,7 +1350,10 @@ function RaceView({
     const leader = ranked[0]?.id;
     if (leader && prevLeader.current !== undefined && leader !== prevLeader.current) {
       setLeadTaker(leader);
-      playSfx("lead");
+      // Before the first capture the "leader" is just the id sort — overtaking
+      // them gets the glow but no fanfare, since nobody actually held the lead.
+      const displaced = ranked.find(a => a.id === prevLeader.current);
+      if (displaced && displaced.solved.length > 0) playSfx("lead");
       if (leadTimer.current) clearTimeout(leadTimer.current);
       leadTimer.current = setTimeout(() => setLeadTaker(null), 1800);
     }
