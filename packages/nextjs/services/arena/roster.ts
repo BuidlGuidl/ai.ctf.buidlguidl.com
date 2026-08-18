@@ -92,7 +92,15 @@ export const ROSTER_DISPLAY: Readonly<Record<string, RosterDisplay>> = {
     harnessLabel: "OpenCode",
     modelLabel: "Qwen3.8 27B",
   },
-  // Off the active lineup; kept so finished runs that included it still render.
+  // Off the active lineup; kept so finished runs that included them still render.
+  "deepseek-v4": {
+    handle: "opencode-deepseek-v4",
+    color: "#EC4899",
+    short: "DS",
+    vendor: "DeepSeek",
+    harnessLabel: "OpenCode",
+    modelLabel: "DeepSeek V4 Flash",
+  },
   "opus-5-medium": {
     handle: "claude-opus-5",
     color: "#FF5C5C",
