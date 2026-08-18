@@ -1,83 +1,43 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
+import Prism from "prismjs";
+import "prismjs/components/prism-solidity";
 import { CHALLENGE_SOURCES, challengeContractName, challengeSourceUrl } from "~~/data/challengeSources";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 import { getBlockExplorerAddressLink } from "~~/utils/scaffold-eth";
 import { contracts } from "~~/utils/scaffold-eth/contract";
 
-const KEYWORDS = new Set([
-  "abstract",
-  "address",
-  "assembly",
-  "bool",
-  "bytes",
-  "bytes32",
-  "calldata",
-  "constructor",
-  "contract",
-  "else",
-  "emit",
-  "event",
-  "external",
-  "false",
-  "for",
-  "function",
-  "if",
-  "immutable",
-  "import",
-  "interface",
-  "internal",
-  "library",
-  "mapping",
-  "memory",
-  "modifier",
-  "new",
-  "override",
-  "payable",
-  "pragma",
-  "private",
-  "public",
-  "pure",
-  "require",
-  "return",
-  "returns",
-  "revert",
-  "solidity",
-  "storage",
-  "string",
-  "struct",
-  "this",
-  "true",
-  "uint",
-  "uint8",
-  "uint16",
-  "uint256",
-  "using",
-  "view",
-  "virtual",
-  "while",
-]);
-
 // Enough colour to read a challenge on stream — comments dim, strings warm,
-// keywords cyan. Not a parser: it never needs to survive invalid Solidity.
-const TOKENS = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("[^"\n]*"|'[^'\n]*')|\b([A-Za-z_$][\w$]*)\b/g;
+// keywords cyan.
+const TOKEN_CLASSES: Record<string, string> = {
+  comment: "text-[#00FBFF]/35 italic",
+  string: "text-[#FFBE00]/85",
+  number: "text-[#FFBE00]/85",
+  keyword: "text-[#00FBFF] font-bold",
+  builtin: "text-[#00FBFF] font-bold",
+  boolean: "text-[#00FBFF] font-bold",
+};
 
-function highlight(line: string) {
-  const out: { text: string; cls: string }[] = [];
-  let last = 0;
-  for (const m of line.matchAll(TOKENS)) {
-    const at = m.index ?? 0;
-    if (at > last) out.push({ text: line.slice(last, at), cls: "" });
-    const [text, comment, str, word] = m;
-    if (comment) out.push({ text, cls: "text-[#00FBFF]/35 italic" });
-    else if (str) out.push({ text, cls: "text-[#FFBE00]/85" });
-    else if (word && KEYWORDS.has(word)) out.push({ text, cls: "text-[#00FBFF] font-bold" });
-    else out.push({ text, cls: "" });
-    last = at + text.length;
+type TokenRun = { text: string; cls: string };
+
+function flattenTokens(token: Prism.TokenStream, cls = ""): TokenRun[] {
+  if (typeof token === "string") return [{ text: token, cls }];
+  if (Array.isArray(token)) return token.flatMap(part => flattenTokens(part, cls));
+  return flattenTokens(token.content, TOKEN_CLASSES[token.type] ?? "");
+}
+
+function splitTokenRuns(runs: TokenRun[]) {
+  const lines: TokenRun[][] = [[]];
+
+  for (const run of runs) {
+    run.text.split("\n").forEach((text, i) => {
+      if (i > 0) lines.push([]);
+      if (text) lines[lines.length - 1].push({ text, cls: run.cls });
+    });
   }
-  if (last < line.length) out.push({ text: line.slice(last), cls: "" });
-  return out;
+
+  return lines;
 }
 
 export function ContractSource({ challengeId, accent }: { challengeId: number; accent: string }) {
@@ -85,7 +45,10 @@ export function ContractSource({ challengeId, accent }: { challengeId: number; a
   const { targetNetwork } = useTargetNetwork();
   const name = challengeContractName(challengeId);
   const source = CHALLENGE_SOURCES[challengeId] ?? "";
-  const lines = useMemo(() => source.replace(/\s+$/, "").split("\n"), [source]);
+  const lines = useMemo(
+    () => splitTokenRuns(flattenTokens(Prism.tokenize(source.replace(/\s+$/, ""), Prism.languages.solidity))),
+    [source],
+  );
 
   const deployed = contracts?.[targetNetwork.id] as Record<string, { address?: string }> | undefined;
   const address = deployed?.[name]?.address;
@@ -134,7 +97,7 @@ export function ContractSource({ challengeId, accent }: { challengeId: number; a
               <Fragment key={i}>
                 <span className="select-none text-right tabular-nums text-[#00FBFF]/25">{i + 1}</span>
                 <span className="whitespace-pre text-[#9fe7ea]">
-                  {highlight(line).map((part, j) => (
+                  {line.map((part, j) => (
                     <span key={j} className={part.cls}>
                       {part.text}
                     </span>
