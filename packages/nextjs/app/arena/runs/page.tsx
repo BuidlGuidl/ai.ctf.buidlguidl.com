@@ -83,6 +83,9 @@ export default function ArenaRunsPage() {
                   href={`/arena?run=${encodeURIComponent(run.id)}`}
                   className="flex items-center gap-3 rounded-md border border-[#00FBFF]/20 bg-[#00090b]/60 px-3 py-3 transition hover:border-[#00FBFF]/60 hover:bg-[#001014] sm:gap-4 sm:px-4"
                 >
+                  {/* The short id is the run's only name; enough of it to say
+                      "that one" out loud and to tell twin timestamps apart. */}
+                  <span className="w-20 shrink-0 text-xs tracking-wider text-[#00FBFF]/40">#{run.id.slice(0, 8)}</span>
                   <span
                     className={`w-28 shrink-0 rounded border px-2 py-0.5 text-center text-xs font-bold tracking-widest ${
                       STATE_TONE[run.state] ?? "border-[#00FBFF]/20 text-[#00FBFF]/45"

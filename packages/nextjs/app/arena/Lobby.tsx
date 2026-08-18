@@ -675,14 +675,6 @@ export function ArenaLobby({
               ) : !operator.configured ? (
                 <span className="text-base text-[#FFBE00]/90">Operator login is unavailable</span>
               ) : null}
-              {/* The runs left behind. Without this the arena is only ever a new
-                  race: a finished run walks out of reach the moment its URL goes. */}
-              <Link
-                href="/arena/runs"
-                className="mt-2 text-xs font-bold tracking-widest text-[#00FBFF]/50 transition hover:text-[#00FBFF]"
-              >
-                PREVIOUS RUNS ▸
-              </Link>
             </div>
           )}
 
@@ -757,6 +749,18 @@ export function ArenaLobby({
                 return <Slot key={a.id} agent={a} state={st} idle={phase === "idle"} index={i} />;
               })}
             </div>
+          )}
+
+          {/* The runs left behind, right under the roster card. Without this the
+              arena is only ever a new race: a finished run walks out of reach the
+              moment its URL goes. */}
+          {phase === "idle" && (
+            <Link
+              href="/arena/runs"
+              className="mt-6 text-xs font-bold tracking-widest text-[#00FBFF]/50 transition hover:text-[#00FBFF]"
+            >
+              PREVIOUS RUNS ▸
+            </Link>
           )}
 
           {/* primary action */}

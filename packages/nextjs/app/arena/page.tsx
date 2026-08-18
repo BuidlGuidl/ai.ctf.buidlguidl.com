@@ -719,14 +719,16 @@ function FinalCeremony({
         >
           <button
             onClick={onViewData}
-            className="rounded border border-[#00FBFF]/40 px-4 py-2 font-dotGothic text-sm tracking-widest text-[#00FBFF]/80 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
+            className="inline-flex h-11 min-w-[15rem] items-center justify-center rounded border border-[#00FBFF]/40 px-4 font-dotGothic text-sm leading-none tracking-widest text-[#00FBFF]/80 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
           >
             ◂ SEE THE {stage === "grid" ? "MULTIVIEW" : "RACE BOARD"}
           </button>
-          {/* Red because this one leaves the run — the only button here that does. */}
+          {/* Amber because this one leaves the run — the only button here that does.
+              Both boxes are pinned to the same size: the ◂ glyph comes from a
+              fallback font whose taller metrics would otherwise grow one button. */}
           <button
             onClick={onExit}
-            className="rounded border border-[#FF5861]/40 px-4 py-2 font-dotGothic text-sm tracking-widest text-[#FF5861]/80 transition hover:border-[#FF5861] hover:text-[#FF5861]"
+            className="inline-flex h-11 min-w-[15rem] items-center justify-center rounded border border-[#FFBE00]/40 px-4 font-dotGothic text-sm leading-none tracking-widest text-[#FFBE00]/80 transition hover:border-[#FFBE00] hover:text-[#FFBE00]"
           >
             START A NEW RACE ▸
           </button>
