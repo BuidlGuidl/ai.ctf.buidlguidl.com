@@ -1,4 +1,4 @@
-// Copied from agents-arena-backend contract/arena-types.ts, master @ f1d3512.
+// Copied from agents-arena-backend contract/arena-types.ts, return-runs @ 7024677.
 // Do not edit here — sync from the backend repo (formatting follows this repo's
 // prettier). Endpoint docs live there in contract/API.md.
 
@@ -185,6 +185,20 @@ export interface RunResponse {
 }
 
 export type CreateRunResponse = RunResponse;
+
+// GET /runs list item. Deliberately thin — finish time, winner, and scores
+// live on GET /runs/:id — so the list stays one cheap query.
+export interface RunListItem {
+  id: string;
+  state: RunState;
+  createdAt: string;
+  startedAt: string | null;
+  agentCount: number;
+}
+
+export interface RunListResponse {
+  runs: RunListItem[];
+}
 
 export interface SteerRequest {
   text: string;
