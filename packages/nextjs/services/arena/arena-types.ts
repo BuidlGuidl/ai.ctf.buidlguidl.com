@@ -23,7 +23,12 @@ export const ROSTER_MODELS: Readonly<Record<HarnessId, readonly string[]>> = {
   // to attack real contracts and refuses on security grounds (#48).
   codex: ["gpt-5.5"],
   claude: ["claude-opus-5", "claude-opus-4-8", "claude-sonnet-5"],
-  opencode: ["openrouter/z-ai/glm-5.2", "openrouter/moonshotai/kimi-k3", "openrouter/deepseek/deepseek-v4-flash-0731"],
+  opencode: [
+    "openrouter/z-ai/glm-5.2",
+    "openrouter/moonshotai/kimi-k3",
+    "openrouter/deepseek/deepseek-v4-pro-0813",
+    "openrouter/qwen/qwen3.8-27b",
+  ],
 };
 
 export const ROSTER_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
