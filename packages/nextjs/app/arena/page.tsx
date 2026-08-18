@@ -23,6 +23,7 @@ import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 import type { EntrantSummary, RunState } from "~~/services/arena/arena-types";
 import { ArenaApiError, arenaClient } from "~~/services/arena/client";
 import { connectRun } from "~~/services/arena/connect";
+import { forgetRun, rememberRun } from "~~/services/arena/lastRun";
 import type { ChatItem, ConsoleEntry, FeedItem } from "~~/services/arena/projection";
 import { ROSTER, displayForEntrant } from "~~/services/arena/roster";
 import {
@@ -262,7 +263,12 @@ function ArenaScreen() {
     // the old one's id.
     const store = useArenaStore.getState();
     store.clear();
-    if (routeRunId) store.setCurrentRunId(routeRunId);
+    if (routeRunId) {
+      store.setCurrentRunId(routeRunId);
+      // Remembered on the way in, so leaving for the lobby is never a one-way
+      // door: the lobby offers this run back until a newer one replaces it.
+      rememberRun(routeRunId);
+    }
     setLiveStarted(false);
     setCeremonyReady(false);
     podiumShown.current = false;
@@ -274,6 +280,11 @@ function ArenaScreen() {
     if (!currentRunId) return;
     return connectRun(currentRunId);
   }, [currentRunId]);
+
+  // A run the backend has lost is not worth offering back from the lobby.
+  useEffect(() => {
+    if (routeRunId && connectionStatus === "not-found") forgetRun(routeRunId);
+  }, [connectionStatus, routeRunId]);
 
   const agents = useMemo(
     () => agentsFromRun(runEntrants, runStartedAt, runState),
@@ -425,7 +436,14 @@ function ArenaScreen() {
   }
 
   if (view === "results" && allFinished) {
-    return <FinalCeremony ranked={ranked} onViewData={() => setView(stageBeforePodium.current)} />;
+    return (
+      <FinalCeremony
+        ranked={ranked}
+        stage={stageBeforePodium.current}
+        onViewData={() => setView(stageBeforePodium.current)}
+        onExit={backToLobby}
+      />
+    );
   }
 
   return (
@@ -599,7 +617,20 @@ function RunExitPanel({ title, message, onBack }: { title: string; message: stri
 /* ---------------------------------------------------------- FinalCeremony */
 
 // The end card: podium for the top three, then everyone else in finish order.
-function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: () => void }) {
+// Both ways out are spelled out: the run's own stage is still there behind the
+// podium, and leaving for the lobby means a brand new run — never a step back
+// into this one.
+function FinalCeremony({
+  ranked,
+  stage,
+  onViewData,
+  onExit,
+}: {
+  ranked: Agent[];
+  stage: OverviewTab;
+  onViewData: () => void;
+  onExit: () => void;
+}) {
   if (!ranked.length) return null;
 
   const rest = ranked.slice(3);
@@ -622,9 +653,10 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
         <div className="ml-auto flex shrink-0 items-center gap-2">
           <button
             onClick={onViewData}
+            title="the run stays open — this is its board, still readable now that it is locked"
             className="rounded border border-[#00FBFF]/30 px-2.5 py-1 text-sm font-bold tracking-[0.12em] text-[#00FBFF]/75 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
           >
-            RACE DATA ▸
+            ◂ BACK TO {stage === "grid" ? "MULTIVIEW" : "RACE BOARD"}
           </button>
           <RainbowKitCustomConnectButton />
         </div>
@@ -699,13 +731,26 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
           </section>
         )}
 
-        <Link
-          href="/arena"
-          className="final-result-in mx-auto mt-6 block w-fit text-center text-xs font-bold tracking-widest text-[#00FBFF]/60 transition hover:text-[#00FBFF]"
+        <div
+          className="final-result-in mx-auto mt-8 flex w-fit flex-col items-center gap-2 text-center"
           style={{ animationDelay: `${1.25 + rest.length * 0.08}s` }}
         >
-          ← BACK TO ARENA
-        </Link>
+          <button
+            onClick={onViewData}
+            className="rounded border border-[#00FBFF]/40 px-4 py-2 font-dotGothic text-sm tracking-widest text-[#00FBFF]/80 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
+          >
+            ◂ BACK TO {stage === "grid" ? "MULTIVIEW" : "RACE BOARD"}
+          </button>
+          <button
+            onClick={onExit}
+            className="mt-2 text-xs font-bold tracking-widest text-[#00FBFF]/50 transition hover:text-[#00FBFF]"
+          >
+            LEAVE RUN · SET UP A NEW ONE ▸
+          </button>
+          <span className="max-w-xs text-[11px] tracking-wide text-[#00FBFF]/35">
+            Leaving takes you to the lobby to start a fresh race. This one stays open — reopen it there any time.
+          </span>
+        </div>
       </main>
 
       <ArenaStyles />
@@ -906,6 +951,7 @@ function TopBar({
       </span>
       <Link
         href="/arena"
+        title="leave this run for the lobby — the run keeps going and can be reopened there"
         className="arena-topbar-title hidden sm:block font-dotGothic text-xl md:text-2xl text-[#00FBFF] tracking-wide title-glow transition-opacity hover:opacity-80"
       >
         BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · AGENT ARENA

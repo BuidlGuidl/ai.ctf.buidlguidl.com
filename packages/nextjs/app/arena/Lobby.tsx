@@ -20,8 +20,9 @@ import { useAccount, useSwitchChain } from "wagmi";
 import { Address, BlockieAvatar, RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import { useTransactor } from "~~/hooks/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
-import type { RunState } from "~~/services/arena/arena-types";
+import type { RunSnapshot, RunState } from "~~/services/arena/arena-types";
 import { ArenaApiError, arenaClient } from "~~/services/arena/client";
+import { forgetRun, readLastRun } from "~~/services/arena/lastRun";
 import type { FundingProjection } from "~~/services/arena/projection";
 import { ROSTER } from "~~/services/arena/roster";
 import { selectFunding, selectRun, selectRunError, useArenaStore } from "~~/services/arena/store";
@@ -46,6 +47,18 @@ const YELLOW = "#FFBE00";
 const RED = "#FF5861";
 const STOP_ARM_MS = 6000;
 const STOP_CONFIRM_DWELL_MS = 400;
+
+const LAST_RUN_COPY: Record<RunState, string> = {
+  created: "never started",
+  awaiting_signature: "waiting for a signature",
+  preparing: "still preparing",
+  awaiting_funding: "waiting for funding",
+  ready: "ready to start",
+  running: "still running",
+  stopping: "stopping",
+  finished: "finished",
+  failed: "failed",
+};
 
 const SETUP_STATE_COPY: Record<RunState, string> = {
   created: "Run created",
@@ -87,6 +100,33 @@ function tone(ctx: AudioContext, freq: number, dur = 0.09, type: OscillatorType 
   o.stop(now + dur);
 }
 
+// The last run this browser opened, if the backend still has it. Probed rather
+// than trusted: runs do not outlive a backend restart, and offering one that is
+// gone would lead straight to the not-found panel.
+function useLastRun(enabled: boolean): RunSnapshot | null {
+  const [lastRun, setLastRun] = useState<RunSnapshot | null>(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const runId = readLastRun();
+    if (!runId) {
+      setLastRun(null);
+      return;
+    }
+    const controller = new AbortController();
+    arenaClient
+      .getRun(runId, controller.signal)
+      .then(snapshot => setLastRun(snapshot))
+      .catch(cause => {
+        if (controller.signal.aborted) return;
+        if (cause instanceof ArenaApiError && cause.status === 404) forgetRun(runId);
+      });
+    return () => controller.abort();
+  }, [enabled]);
+
+  return enabled ? lastRun : null;
+}
+
 export function ArenaLobby({
   agents,
   onLaunch,
@@ -118,7 +158,8 @@ export function ArenaLobby({
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
   const logId = useRef(0);
-  const restoredLiveRun = useRef(run?.state === "running" || run?.state === "stopping" || run?.state === "finished");
+  // The run this lobby started, if any — the only one the 3-2-1 belongs to.
+  const launchedHere = useRef<string | null>(null);
   const lastRunState = useRef<string | null>(null);
   const stopArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stopConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -133,6 +174,7 @@ export function ArenaLobby({
     run?.state === "awaiting_funding" ||
     run?.state === "ready";
   const stoppedBeforeStart = run?.startedAt == null && (run?.state === "stopping" || run?.state === "finished");
+  const lastRun = useLastRun(!run && !starting);
 
   useEffect(
     () => () => {
@@ -141,10 +183,6 @@ export function ArenaLobby({
     },
     [],
   );
-
-  useEffect(() => {
-    if (!run) restoredLiveRun.current = false;
-  }, [run]);
 
   useEffect(() => {
     if (canStopRun) return;
@@ -359,6 +397,7 @@ export function ArenaLobby({
         durationMs: Math.round(minutes * 60_000),
       });
       createdRunId = created.id;
+      launchedHere.current = created.id;
       // The URL is what connects the page to a run, so naming it here is the
       // whole handover. Entering a run is a navigation and takes a history
       // entry: back returns to the lobby.
@@ -396,6 +435,7 @@ export function ArenaLobby({
     setBlockingRun(null);
     try {
       if (!operator.authenticated) await operator.signIn();
+      launchedHere.current = run.id;
       const started = await arenaClient.startRun(run.id);
       useArenaStore.getState().syncSnapshot(started);
     } catch (cause) {
@@ -502,9 +542,13 @@ export function ArenaLobby({
     }
   }, [canStopRun, operator, pushLog, run, signInOperator, stopArmed, stoppingRun]);
 
+  const runId = run?.id ?? null;
   useEffect(() => {
     if (phase !== "launching") return;
-    if (restoredLiveRun.current) {
+    // Only a race this lobby just started gets counted in. One opened from a
+    // link — or reopened from the lobby after the podium — is already under way
+    // or already over, so it goes straight through to the arena.
+    if (launchedHere.current !== runId) {
       onLaunch();
       return;
     }
@@ -525,7 +569,7 @@ export function ArenaLobby({
       }
     }, 900);
     return () => clearInterval(tick);
-  }, [beep, onLaunch, phase]);
+  }, [beep, onLaunch, phase, runId]);
 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col bg-black text-[#00FBFF] font-mono overflow-hidden lobby-root">
@@ -672,6 +716,21 @@ export function ArenaLobby({
               ) : !operator.configured ? (
                 <span className="text-base text-[#FFBE00]/90">Operator login is unavailable</span>
               ) : null}
+              {/* The run left behind. Without this the arena is only ever a new
+                  race: a finished run walks out of reach the moment its URL goes. */}
+              {lastRun && (
+                <div className="mt-2 flex flex-col items-center gap-1">
+                  <button
+                    onClick={() => route.go({ run: lastRun.id })}
+                    className="rounded border border-[#00FBFF]/30 px-4 py-1.5 font-dotGothic text-sm tracking-widest text-[#00FBFF]/75 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
+                  >
+                    ◂ REOPEN LAST RUN
+                  </button>
+                  <span className="text-xs tracking-wide text-[#00FBFF]/40">
+                    {LAST_RUN_COPY[lastRun.state]} · {lastRun.entrants.length} agents
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
