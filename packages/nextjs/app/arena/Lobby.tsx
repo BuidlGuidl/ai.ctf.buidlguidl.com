@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ModelName } from "./ModelName";
+import { SfxToggle } from "./SfxToggle";
 import {
   FundingMode,
   MULTICALL3_ABI,
@@ -24,6 +25,7 @@ import type { RunState } from "~~/services/arena/arena-types";
 import { ArenaApiError, arenaClient } from "~~/services/arena/client";
 import type { FundingProjection } from "~~/services/arena/projection";
 import { ROSTER } from "~~/services/arena/roster";
+import { playSfx, unlockSfx } from "~~/services/arena/sfx";
 import { selectFunding, selectRun, selectRunError, useArenaStore } from "~~/services/arena/store";
 import { useOperatorSession, useSeedSigner } from "~~/services/arena/useOperatorSession";
 
@@ -73,20 +75,6 @@ function activeRunConflict(cause: unknown): ActiveRunConflict | null {
     : null;
 }
 
-function tone(ctx: AudioContext, freq: number, dur = 0.09, type: OscillatorType = "square", gain = 0.05) {
-  const o = ctx.createOscillator();
-  const g = ctx.createGain();
-  o.type = type;
-  o.frequency.value = freq;
-  o.connect(g);
-  g.connect(ctx.destination);
-  const now = ctx.currentTime;
-  g.gain.setValueAtTime(gain, now);
-  g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-  o.start(now);
-  o.stop(now + dur);
-}
-
 export function ArenaLobby({
   agents,
   onLaunch,
@@ -98,7 +86,6 @@ export function ArenaLobby({
 }) {
   const [log, setLog] = useState<{ id: number; text: string; color: string }[]>([]);
   const [countdown, setCountdown] = useState<number | null>(null);
-  const [muted, setMuted] = useState(false);
   const [funding, setFunding] = useState(false);
   const [starting, setStarting] = useState(false);
   const [signingSeed, setSigningSeed] = useState(false);
@@ -114,11 +101,9 @@ export function ArenaLobby({
   const fundingProjection = useArenaStore(selectFunding);
   const runError = useArenaStore(selectRunError);
 
-  const audioRef = useRef<AudioContext | null>(null);
-  const mutedRef = useRef(muted);
-  mutedRef.current = muted;
   const logId = useRef(0);
-  const restoredLiveRun = useRef(run?.state === "running" || run?.state === "stopping" || run?.state === "finished");
+  // The run this lobby started, if any — the only one the 3-2-1 belongs to.
+  const launchedHere = useRef<string | null>(null);
   const lastRunState = useRef<string | null>(null);
   const stopArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stopConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -141,10 +126,6 @@ export function ArenaLobby({
     },
     [],
   );
-
-  useEffect(() => {
-    if (!run) restoredLiveRun.current = false;
-  }, [run]);
 
   useEffect(() => {
     if (canStopRun) return;
@@ -178,12 +159,6 @@ export function ArenaLobby({
     : run.state === "running" || run.state === "stopping" || run.state === "finished"
     ? "launching"
     : "failed";
-
-  const beep = useCallback((freq: number, dur?: number, type?: OscillatorType, gain?: number) => {
-    const ctx = audioRef.current;
-    if (!ctx || mutedRef.current) return;
-    tone(ctx, freq, dur, type, gain);
-  }, []);
 
   const pushLog = useCallback((text: string, color: string) => {
     setLog(prev => [{ id: ++logId.current, text, color }, ...prev].slice(0, 60));
@@ -335,14 +310,7 @@ export function ArenaLobby({
   }, [agents, amount, fundingChainId, mode, targetNetwork, transactor, pushLog, refetchBalances]);
 
   const openLobby = useCallback(async () => {
-    if (!audioRef.current) {
-      try {
-        audioRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-      } catch {
-        audioRef.current = null;
-      }
-    }
-    audioRef.current?.resume();
+    unlockSfx();
     setStarting(true);
     setError(null);
     setBlockingRun(null);
@@ -359,6 +327,7 @@ export function ArenaLobby({
         durationMs: Math.round(minutes * 60_000),
       });
       createdRunId = created.id;
+      launchedHere.current = created.id;
       // The URL is what connects the page to a run, so naming it here is the
       // whole handover. Entering a run is a navigation and takes a history
       // entry: back returns to the lobby.
@@ -396,6 +365,7 @@ export function ArenaLobby({
     setBlockingRun(null);
     try {
       if (!operator.authenticated) await operator.signIn();
+      launchedHere.current = run.id;
       const started = await arenaClient.startRun(run.id);
       useArenaStore.getState().syncSnapshot(started);
     } catch (cause) {
@@ -502,30 +472,34 @@ export function ArenaLobby({
     }
   }, [canStopRun, operator, pushLog, run, signInOperator, stopArmed, stoppingRun]);
 
+  const runId = run?.id ?? null;
   useEffect(() => {
     if (phase !== "launching") return;
-    if (restoredLiveRun.current) {
+    // Only a race this lobby just started gets counted in. One opened from a
+    // link — or reopened from the lobby after the podium — is already under way
+    // or already over, so it goes straight through to the arena.
+    if (launchedHere.current !== runId) {
       onLaunch();
       return;
     }
     let n = 3;
     setCountdown(n);
-    beep(440, 0.12, "square", 0.06);
+    playSfx("countdown");
     const tick = setInterval(() => {
       n -= 1;
       if (n > 0) {
         setCountdown(n);
-        beep(440, 0.12, "square", 0.06);
+        playSfx("countdown");
       } else if (n === 0) {
         setCountdown(0);
-        beep(880, 0.3, "sawtooth", 0.07);
+        playSfx("launch");
       } else {
         clearInterval(tick);
         onLaunch();
       }
     }, 900);
     return () => clearInterval(tick);
-  }, [beep, onLaunch, phase]);
+  }, [onLaunch, phase, runId]);
 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col bg-black text-[#00FBFF] font-mono overflow-hidden lobby-root">
@@ -566,13 +540,7 @@ export function ArenaLobby({
           <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{agents.length} AGENTS</span>
           <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{CHALLENGES.length} CHALLENGES</span>
         </div>
-        <button
-          onClick={() => setMuted(m => !m)}
-          className="lobby-sfx ml-auto text-sm px-2 py-1 rounded border border-[#00FBFF]/25 text-[#00FBFF]/75 hover:text-[#00FBFF] hover:border-[#00FBFF]/60 transition"
-          title={muted ? "unmute lobby SFX" : "mute lobby SFX"}
-        >
-          {muted ? "🔇 SFX OFF" : "🔊 SFX ON"}
-        </button>
+        <SfxToggle className="lobby-sfx ml-auto" />
         <RainbowKitCustomConnectButton />
       </div>
 
@@ -746,6 +714,18 @@ export function ArenaLobby({
                 return <Slot key={a.id} agent={a} state={st} idle={phase === "idle"} index={i} />;
               })}
             </div>
+          )}
+
+          {/* The runs left behind, right under the roster card. Without this the
+              arena is only ever a new race: a finished run walks out of reach the
+              moment its URL goes. */}
+          {phase === "idle" && (
+            <Link
+              href="/arena/runs"
+              className="mt-6 text-xs font-bold tracking-widest text-[#00FBFF]/50 transition hover:text-[#00FBFF]"
+            >
+              PREVIOUS RUNS ▸
+            </Link>
           )}
 
           {/* primary action */}
