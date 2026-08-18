@@ -967,6 +967,10 @@ function FundingBoard({
   // The local shortcut needs no wallet, so the connect button only stands in for
   // the batch path — and only until a wallet is actually connected.
   const needsConnect = mode === "batch" && !isConnected;
+  // Funding under the threshold is legal and does nothing: the wallets fill up,
+  // the rows stay yellow, and the race never leaves the gate. The line that
+  // names the threshold turns yellow too rather than let that read as a bug.
+  const belowThreshold = required > 0n && required < thresholdWei;
   return (
     <div className="lobby-funding-board w-full max-w-4xl">
       <div className="lobby-funding-controls flex flex-wrap items-center gap-3 mb-1">
@@ -1015,7 +1019,10 @@ function FundingBoard({
           )}
         </div>
       </div>
-      <p className="mb-3 text-sm uppercase text-[#00FBFF]/60">
+      <p
+        className="mb-3 text-sm uppercase transition-colors"
+        style={{ color: belowThreshold ? YELLOW : "rgba(0, 251, 255, 0.6)" }}
+      >
         Run starts when every agent has {formatEther(thresholdWei)} ETH
       </p>
 
