@@ -17,6 +17,7 @@ import { ContractSource } from "./ContractSource";
 import { ArenaLobby } from "./Lobby";
 import { ModelName } from "./ModelName";
 import { OperatorAddress } from "./OperatorAddress";
+import { SfxToggle } from "./SfxToggle";
 import { Agent, AgentStatus, CHALLENGES, Challenge, DIFFICULTY_COLOR } from "./mockData";
 import { type ArenaView, useArenaRoute } from "./useArenaRoute";
 import type { Address } from "viem";
@@ -27,6 +28,7 @@ import { ArenaApiError, arenaClient } from "~~/services/arena/client";
 import { connectRun } from "~~/services/arena/connect";
 import type { ChatItem, ConsoleEntry, FeedItem } from "~~/services/arena/projection";
 import { ROSTER, displayForEntrant } from "~~/services/arena/roster";
+import { playSfx, useArenaSfx } from "~~/services/arena/sfx";
 import {
   type ConnectionStatus,
   selectChat,
@@ -239,6 +241,12 @@ function ArenaScreen() {
   // over; a link opened on an already-locked run has no sting to wait for.
   const sawLiveRun = useRef(false);
   const podiumShown = useRef(false);
+  // Connecting replays the run's history, so whatever the store is already
+  // holding has happened without us — it lights the board, but announcing it
+  // would fire a burst of captures at whoever just opened the link. Events at
+  // or below this cursor are that history; only what lands past it gets a sound.
+  const heardEventId = useRef<number | null>(null);
+  const heardRunState = useRef<RunState | null>(null);
   const route = useArenaRoute();
   const runId = useArenaStore(selectRunId);
   const runState = useArenaStore(selectRunState);
@@ -251,6 +259,7 @@ function ArenaScreen() {
   const runFinishedAt = useArenaStore(selectRunFinishedAt);
   const runError = useArenaStore(selectRunError);
   const operator = useOperatorSession();
+  useArenaSfx();
 
   // The run in the URL is the connection: landing on one, leaving it, or walking
   // back to it with the browser has to move the page with it. Every reset for a
@@ -273,6 +282,8 @@ function ArenaScreen() {
     setCeremonyReady(false);
     podiumShown.current = false;
     sawLiveRun.current = false;
+    heardEventId.current = null;
+    heardRunState.current = null;
   }, [routeRunId]);
 
   const currentRunId = useArenaStore(state => state.currentRunId);
@@ -307,6 +318,15 @@ function ArenaScreen() {
     if (runState && runState !== "finished" && runState !== "failed") sawLiveRun.current = true;
   }, [runState]);
 
+  // A run that was already over when the page attached gets no verdict sound.
+  useEffect(() => {
+    if (!runState) return;
+    const previous = heardRunState.current;
+    heardRunState.current = runState;
+    if (previous === null || previous === runState) return;
+    if (runState === "failed") playSfx("fail");
+  }, [runState]);
+
   // A link with no view lands on the board while the race is live and on the
   // podium once it is locked; anything the operator picked is spelled out in the
   // URL and wins over both.
@@ -329,6 +349,14 @@ function ArenaScreen() {
   useEffect(() => {
     if (!lastFlagEvent) return;
     const key = `${lastFlagEvent.payload.entrantId}:${lastFlagEvent.payload.challengeId}`;
+    if (heardEventId.current !== null && lastFlagEvent.id > heardEventId.current) {
+      const blood = useArenaStore.getState().projection?.firstBlood ?? null;
+      const opener =
+        blood !== null &&
+        blood.entrantId === lastFlagEvent.payload.entrantId &&
+        blood.challengeId === lastFlagEvent.payload.challengeId;
+      playSfx(opener ? "firstBlood" : "flag");
+    }
     setFlashes(previous => [...previous, key]);
     const priorTimer = flashTimers.current.get(key);
     if (priorTimer) clearTimeout(priorTimer);
@@ -340,6 +368,20 @@ function ArenaScreen() {
       }, 3200),
     );
   }, [lastFlagEvent]);
+
+  // The seeded projection arrives with its replay already applied, so its
+  // cursor at that moment is the line between history and live. Reading it
+  // here (not effect order) keeps the replay silent, and dropping the cursor
+  // whenever the run leaves the store means a re-entered run re-draws the line.
+  useEffect(() => {
+    if (!runId) {
+      heardEventId.current = null;
+      return;
+    }
+    if (heardEventId.current === null) {
+      heardEventId.current = useArenaStore.getState().projection?.lastEventId ?? 0;
+    }
+  }, [runId]);
 
   useEffect(() => {
     const timers = flashTimers.current;
@@ -361,6 +403,7 @@ function ArenaScreen() {
   useEffect(() => {
     if (!ceremonyReady || podiumShown.current || !sawLiveRun.current) return;
     podiumShown.current = true;
+    playSfx("podium");
     route.go({ view: "results" }, { replace: true });
   }, [ceremonyReady, route]);
 
@@ -648,6 +691,7 @@ function FinalCeremony({
           BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · RUN SUMMARY
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
+          <SfxToggle className="hidden sm:inline-block" />
           <RainbowKitCustomConnectButton />
         </div>
       </header>
@@ -975,6 +1019,7 @@ function TopBar({
           ⏱ {fmtClock(clock)}
         </span>
         {onStop && <RunStopControl timeUp={timeUp} onStop={onStop} />}
+        <SfxToggle className="arena-topbar-sfx hidden sm:inline-block" />
         <RainbowKitCustomConnectButton />
       </div>
     </div>
@@ -1351,6 +1396,10 @@ function RaceView({
     const leader = ranked[0]?.id;
     if (leader && prevLeader.current !== undefined && leader !== prevLeader.current) {
       setLeadTaker(leader);
+      // Before the first capture the "leader" is just the id sort — overtaking
+      // them gets the glow but no fanfare, since nobody actually held the lead.
+      const displaced = ranked.find(a => a.id === prevLeader.current);
+      if (displaced && displaced.solved.length > 0) playSfx("lead");
       if (leadTimer.current) clearTimeout(leadTimer.current);
       leadTimer.current = setTimeout(() => setLeadTaker(null), 1800);
     }
@@ -1380,6 +1429,7 @@ function RaceView({
     const place = ranked.indexOf(newcomer) + 1;
     if (place > 3) return;
     if (stingTimer.current) clearTimeout(stingTimer.current);
+    playSfx("finish");
     setSting({ key: `${newcomer.id}:${newcomer.finishedAt ?? 0}`, agent: newcomer, place: place as PodiumPlace });
     stingTimer.current = setTimeout(() => setSting(null), FINISH_STING_MS);
   }, [ranked, total]);
