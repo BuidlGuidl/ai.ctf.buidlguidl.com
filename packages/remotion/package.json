@@ -1,0 +1,26 @@
+{
+  "name": "@se-2/remotion",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "compositions": "remotion compositions src/index.ts",
+    "render": "remotion render src/index.ts",
+    "render:starter": "remotion render src/index.ts AgentArena-Landscape out/agent-arena-starter.mp4",
+    "still": "remotion still src/index.ts",
+    "studio": "remotion studio src/index.ts"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.261",
+    "@remotion/google-fonts": "4.0.261",
+    "@remotion/transitions": "4.0.261",
+    "react": "~18.2.0",
+    "react-dom": "~18.2.0",
+    "remotion": "4.0.261"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.21",
+    "@types/react-dom": "^18.0.6",
+    "typescript": "5.5.3"
+  }
+}
