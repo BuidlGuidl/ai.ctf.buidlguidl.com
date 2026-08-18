@@ -10,8 +10,8 @@ export const ROSTER = [
   { id: "sonnet-5", harness: "claude", model: "claude-sonnet-5", effort: "high" },
   { id: "kimi-k3", harness: "opencode", model: "openrouter/moonshotai/kimi-k3", effort: "high" },
   { id: "opus-48", harness: "claude", model: "claude-opus-4-8", effort: "high" },
-  { id: "deepseek-v4", harness: "opencode", model: "openrouter/deepseek/deepseek-v4-flash-0731", effort: "high" },
-  { id: "opus-5-medium", harness: "claude", model: "claude-opus-5", effort: "medium" },
+  { id: "deepseek-v4-pro", harness: "opencode", model: "openrouter/deepseek/deepseek-v4-pro-0813", effort: "high" },
+  { id: "qwen38-27b", harness: "opencode", model: "openrouter/qwen/qwen3.8-27b", effort: "high" },
   { id: "gpt-55-xhigh", harness: "codex", model: "gpt-5.5", effort: "xhigh" },
   { id: "gpt-55-medium", harness: "codex", model: "gpt-5.5", effort: "medium" },
 ] as const satisfies readonly RosterEntry[];
@@ -76,14 +76,23 @@ export const ROSTER_DISPLAY: Readonly<Record<string, RosterDisplay>> = {
     harnessLabel: "Claude Code",
     modelLabel: "Opus 4.8",
   },
-  "deepseek-v4": {
-    handle: "opencode-deepseek-v4",
+  "deepseek-v4-pro": {
+    handle: "opencode-deepseek-v4-pro",
     color: "#EC4899",
     short: "DS",
     vendor: "DeepSeek",
     harnessLabel: "OpenCode",
-    modelLabel: "DeepSeek V4 Flash",
+    modelLabel: "DeepSeek V4 Pro",
   },
+  "qwen38-27b": {
+    handle: "opencode-qwen38-27b",
+    color: "#A3E635",
+    short: "QW",
+    vendor: "Alibaba",
+    harnessLabel: "OpenCode",
+    modelLabel: "Qwen3.8 27B",
+  },
+  // Off the active lineup; kept so finished runs that included it still render.
   "opus-5-medium": {
     handle: "claude-opus-5",
     color: "#FF5C5C",
