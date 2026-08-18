@@ -56,7 +56,6 @@ export function ContractSource({ challengeId, accent }: { challengeId: number; a
   return (
     <div className="rounded border border-[#00FBFF]/15 bg-[#00090b]">
       <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-[#00FBFF]/10">
-        <span className="tracking-widest text-sm text-[#00FBFF]/70">CONTRACT</span>
         <span className="font-bold text-white">{name}.sol</span>
         <button
           onClick={() => setOpen(o => !o)}
