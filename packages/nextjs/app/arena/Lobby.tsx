@@ -13,7 +13,7 @@ import {
   localTestClient,
 } from "./funding";
 import { Agent, CHALLENGES } from "./mockData";
-import { type FundingStatus, fundingStatus, useAgentBalances } from "./useAgentBalances";
+import { fundingStatus, useAgentBalances } from "./useAgentBalances";
 import { useArenaRoute } from "./useArenaRoute";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { encodeFunctionData, formatEther, parseEther } from "viem";
@@ -40,6 +40,10 @@ type Phase =
   | "launching"
   | "failed";
 type SlotState = "waiting" | "joining" | "ready";
+// A funded wallet is not the same thing as a funded entrant: the chain says the
+// money landed, the backend says it saw it land. Both are green — the operator
+// has nothing left to do either way — but only the second one starts the run.
+type RowStatus = "waiting" | "partial" | "funded" | "ready";
 type ActiveRunConflict = { id: string; state: string };
 
 const CY = "#00FBFF";
@@ -54,12 +58,18 @@ const SETUP_STATE_COPY: Record<RunState, string> = {
   awaiting_signature: "Waiting for signature",
   preparing: "Assigning agent wallets",
   awaiting_funding: "Waiting for agent funding",
-  ready: "All agents ready",
+  ready: "All agents funded — waiting for the go",
   running: "The run is live",
   stopping: "Stopping the run",
   finished: "Run finished",
   failed: "Run setup failed",
 };
+
+function rowStatus(balance: bigint | undefined, required: bigint, backendFunded: boolean): RowStatus {
+  if (backendFunded) return "ready";
+  const status = fundingStatus(balance, required);
+  return status === "funded" ? "funded" : status;
+}
 
 function shortAddress(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
@@ -88,6 +98,7 @@ export function ArenaLobby({
   const [countdown, setCountdown] = useState<number | null>(null);
   const [funding, setFunding] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [launching, setLaunching] = useState(false);
   const [signingSeed, setSigningSeed] = useState(false);
   const [signingInOperator, setSigningInOperator] = useState(false);
   const [stoppingRun, setStoppingRun] = useState(false);
@@ -225,7 +236,17 @@ export function ArenaLobby({
   const requiredRef = useRef(required);
   requiredRef.current = required;
 
-  const fundedCount = agents.filter(agent => fundingProjection[agent.id]?.funded).length;
+  // Counted off the chain as well as the backend: the operator sends one
+  // transaction and then watches this number, so it has to move when the money
+  // lands, not when the backend gets around to saying so.
+  const fundedCount = agents.filter(agent => {
+    const status = rowStatus(
+      agent.address ? balances[agent.address] : undefined,
+      required,
+      fundingProjection[agent.id]?.funded === true,
+    );
+    return status === "funded" || status === "ready";
+  }).length;
   const progressCount = fundingActive ? fundedCount : readyCount;
   const progressDone = agents.length > 0 && progressCount === agents.length;
 
@@ -386,6 +407,35 @@ export function ArenaLobby({
       setStarting(false);
     }
   }, [operator, pushLog, run]);
+
+  // The race starts when the director says so, not when the last wallet lands.
+  // The backend parks a funded run at `ready` for exactly this call.
+  const startRace = useCallback(async () => {
+    if (!run || run.state !== "ready" || launching) return;
+    setLaunching(true);
+    setError(null);
+    setBlockingRun(null);
+    try {
+      if (!operator.authenticated) await operator.signIn();
+      // Claiming the run here is what earns the 3-2-1: a lobby reopened on a
+      // parked run never went through openLobby, and this is still its start.
+      launchedHere.current = run.id;
+      const started = await arenaClient.startRun(run.id);
+      useArenaStore.getState().syncSnapshot(started);
+    } catch (cause) {
+      if (cause instanceof ArenaApiError && cause.status === 401) {
+        operator.invalidate();
+        setError("operator session expired — sign in again");
+        pushLog("operator session expired — sign in again", RED);
+      } else {
+        const message = cause instanceof Error ? cause.message : "Could not start the race";
+        setError(message);
+        pushLog(message, RED);
+      }
+    } finally {
+      setLaunching(false);
+    }
+  }, [launching, operator, pushLog, run]);
 
   const submitSeed = useCallback(async () => {
     if (!run || run.state !== "awaiting_signature") return;
@@ -772,9 +822,13 @@ export function ArenaLobby({
               </div>
             )}
             {phase === "ready" && (
-              <div className="text-[#00ff9c] text-sm tracking-widest font-dotGothic lobby-blink">
-                ● ● ● STARTING RACE ● ● ●
-              </div>
+              <button
+                onClick={() => void startRace()}
+                disabled={launching || !operator.sessionLoaded || !operator.configured}
+                className="lobby-cta px-10 py-3 rounded-md font-dotGothic text-lg tracking-widest border-2 border-[#00ff9c] text-[#00ff9c] hover:bg-[#00ff9c] hover:text-black transition disabled:opacity-40"
+              >
+                {launching ? "STARTING…" : operator.authenticated ? "▶ START RACE" : "▶ SIGN IN & START RACE"}
+              </button>
             )}
             {phase === "launching" && countdown !== null && (
               <div
@@ -801,7 +855,7 @@ export function ArenaLobby({
           )}
           {phase === "ready" && (
             <div className="lobby-phase-note mt-3 text-base text-[#00FBFF]/70 tracking-wide">
-              All agents ready — starting the run…
+              Every agent wallet is funded. The race starts when you say go.
             </div>
           )}
           {phase === "funding" && (
@@ -1011,11 +1065,14 @@ function FundingRow({
   required: bigint;
   backendFunded: boolean;
 }) {
-  const balanceStatus = fundingStatus(balance, required);
-  const status: FundingStatus = backendFunded ? "funded" : balanceStatus === "funded" ? "partial" : balanceStatus;
+  const status = rowStatus(balance, required, backendFunded);
+  const paid = status === "funded" || status === "ready";
 
   return (
-    <div className="lobby-funding-row flex items-center gap-3 px-3 py-2 text-base">
+    <div
+      className="lobby-funding-row flex items-center gap-3 px-3 py-2 text-base transition-colors"
+      style={paid ? { background: `${GREEN}12`, boxShadow: `inset 3px 0 0 ${GREEN}` } : undefined}
+    >
       <span className="w-8 shrink-0 text-sm text-[#00FBFF]/55 tabular-nums">P{index + 1}</span>
 
       <span
@@ -1048,10 +1105,12 @@ function FundingRow({
       </span>
 
       <span className="lobby-funding-status w-52 shrink-0 whitespace-nowrap text-right text-sm font-bold tracking-widest">
-        {status === "funded" ? (
+        {status === "ready" ? (
           <span style={{ color: GREEN }}>READY ✓</span>
+        ) : status === "funded" ? (
+          <span style={{ color: GREEN }}>FUNDED ✓</span>
         ) : status === "partial" ? (
-          <span style={{ color: YELLOW }}>NEEDS FUNDS</span>
+          <span style={{ color: YELLOW }}>NEEDS MORE</span>
         ) : (
           <span className="lobby-blink" style={{ color: YELLOW }}>
             WAITING FOR FUNDING

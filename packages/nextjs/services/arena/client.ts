@@ -69,6 +69,8 @@ export const arenaClient = {
     return response.runs;
   },
   getRun: (runId: string, signal?: AbortSignal) => runFetch(`/runs/${encodeURIComponent(runId)}`, { signal }),
+  // Called twice per race: once to prepare and fund, which parks the run at
+  // `ready`, and once from there to send the agents off.
   startRun: (runId: string) => runFetch(`/runs/${encodeURIComponent(runId)}/start`, { method: "POST" }),
   seedRun: (runId: string, body: { signature: string }) =>
     runFetch(`/runs/${encodeURIComponent(runId)}/seed`, { method: "POST", body }),
