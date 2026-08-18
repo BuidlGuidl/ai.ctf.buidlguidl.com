@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import type { RunListItem, RunState } from "~~/services/arena/arena-types";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import type { RunState } from "~~/services/arena/arena-types";
 import { arenaClient } from "~~/services/arena/client";
 
 export const dynamic = "force-dynamic";
@@ -27,25 +27,19 @@ const STATE_TONE: Partial<Record<RunState, string>> = {
 };
 
 export default function ArenaRunsPage() {
-  const [runs, setRuns] = useState<RunListItem[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setRuns(null);
-    setError(null);
-    arenaClient
-      .listRuns(undefined, controller.signal)
-      .then(setRuns)
-      .catch(cause => {
-        if (controller.signal.aborted) return;
-        setError(cause instanceof Error ? cause.message : "Could not load the run list");
-      });
-    return () => controller.abort();
-  }, [attempt]);
-
-  const retry = useCallback(() => setAttempt(n => n + 1), []);
+  // Plain request/response, so react-query fits here even though live runs
+  // stream over SSE into the store. The poll keeps a RUNNING badge honest
+  // without a manual refresh; placeholderData holds the list steady across it.
+  const {
+    data: runs,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ["arenaRuns"],
+    refetchInterval: 10_000,
+    placeholderData: keepPreviousData,
+    queryFn: ({ signal }) => arenaClient.listRuns(undefined, signal),
+  });
 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col overflow-hidden bg-black text-[#00FBFF] font-mono">
@@ -63,17 +57,19 @@ export default function ArenaRunsPage() {
 
       <main className="flex-1 overflow-y-auto px-4 py-8 sm:px-6">
         <div className="mx-auto max-w-3xl">
-          {error ? (
+          {/* A failed background poll keeps the stale list on screen; the error
+              panel is for having nothing to show at all. */}
+          {error && !runs ? (
             <div className="rounded border border-[#FF5861]/40 bg-[#FF5861]/10 px-4 py-3 text-sm text-[#FF5861]">
-              <div>{error}</div>
+              <div>{error instanceof Error ? error.message : "Could not load the run list"}</div>
               <button
-                onClick={retry}
+                onClick={() => refetch()}
                 className="mt-3 rounded border border-[#FF5861]/60 px-3 py-1 font-dotGothic text-sm tracking-widest transition hover:bg-[#FF5861] hover:text-black"
               >
                 RETRY
               </button>
             </div>
-          ) : runs === null ? (
+          ) : runs === undefined ? (
             <div className="animate-pulse font-dotGothic text-lg tracking-widest text-[#00FBFF]/60">
               ◆ LOADING RUNS…
             </div>
