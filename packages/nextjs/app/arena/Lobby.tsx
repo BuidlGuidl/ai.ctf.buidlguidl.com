@@ -40,10 +40,7 @@ type Phase =
   | "launching"
   | "failed";
 type SlotState = "waiting" | "joining" | "ready";
-// A funded wallet is not the same thing as a funded entrant: the chain says the
-// money landed, the backend says it saw it land. Both are green — the operator
-// has nothing left to do either way — but only the second one starts the run.
-type RowStatus = "waiting" | "partial" | "funded" | "ready";
+type RowStatus = "waiting" | "funded" | "ready";
 type ActiveRunConflict = { id: string; state: string };
 
 const CY = "#00FBFF";
@@ -65,10 +62,14 @@ const SETUP_STATE_COPY: Record<RunState, string> = {
   failed: "Run setup failed",
 };
 
+// The row tracks the money, not who noticed it first: nothing sent, something
+// sent but under the target, or enough — and enough is what starts the run. The
+// chain and the backend both answer that last one, a block or two apart, so
+// whichever sees it first turns the row green.
 function rowStatus(balance: bigint | undefined, required: bigint, backendFunded: boolean): RowStatus {
   if (backendFunded) return "ready";
   const status = fundingStatus(balance, required);
-  return status === "funded" ? "funded" : status;
+  return status === "funded" ? "ready" : status === "partial" ? "funded" : "waiting";
 }
 
 function shortAddress(address: string) {
@@ -239,14 +240,14 @@ export function ArenaLobby({
   // Counted off the chain as well as the backend: the operator sends one
   // transaction and then watches this number, so it has to move when the money
   // lands, not when the backend gets around to saying so.
-  const fundedCount = agents.filter(agent => {
-    const status = rowStatus(
-      agent.address ? balances[agent.address] : undefined,
-      required,
-      fundingProjection[agent.id]?.funded === true,
-    );
-    return status === "funded" || status === "ready";
-  }).length;
+  const fundedCount = agents.filter(
+    agent =>
+      rowStatus(
+        agent.address ? balances[agent.address] : undefined,
+        required,
+        fundingProjection[agent.id]?.funded === true,
+      ) === "ready",
+  ).length;
   const progressCount = fundingActive ? fundedCount : readyCount;
   const progressDone = agents.length > 0 && progressCount === agents.length;
 
@@ -1066,12 +1067,11 @@ function FundingRow({
   backendFunded: boolean;
 }) {
   const status = rowStatus(balance, required, backendFunded);
-  const paid = status === "funded" || status === "ready";
 
   return (
     <div
       className="lobby-funding-row flex items-center gap-3 px-3 py-2 text-base transition-colors"
-      style={paid ? { background: `${GREEN}12`, boxShadow: `inset 3px 0 0 ${GREEN}` } : undefined}
+      style={status === "ready" ? { background: `${GREEN}12`, boxShadow: `inset 3px 0 0 ${GREEN}` } : undefined}
     >
       <span className="w-8 shrink-0 text-sm text-[#00FBFF]/55 tabular-nums">P{index + 1}</span>
 
@@ -1108,9 +1108,7 @@ function FundingRow({
         {status === "ready" ? (
           <span style={{ color: GREEN }}>READY ✓</span>
         ) : status === "funded" ? (
-          <span style={{ color: GREEN }}>FUNDED ✓</span>
-        ) : status === "partial" ? (
-          <span style={{ color: YELLOW }}>NEEDS MORE</span>
+          <span style={{ color: YELLOW }}>FUNDED</span>
         ) : (
           <span className="lobby-blink" style={{ color: YELLOW }}>
             WAITING FOR FUNDING
