@@ -425,7 +425,14 @@ function ArenaScreen() {
   }
 
   if (view === "results" && allFinished) {
-    return <FinalCeremony ranked={ranked} onViewData={() => setView(stageBeforePodium.current)} />;
+    return (
+      <FinalCeremony
+        ranked={ranked}
+        stage={stageBeforePodium.current}
+        onViewData={() => setView(stageBeforePodium.current)}
+        onExit={backToLobby}
+      />
+    );
   }
 
   return (
@@ -599,7 +606,20 @@ function RunExitPanel({ title, message, onBack }: { title: string; message: stri
 /* ---------------------------------------------------------- FinalCeremony */
 
 // The end card: podium for the top three, then everyone else in finish order.
-function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: () => void }) {
+// One exit row, both ways out weighted the same: back to the run's own stage,
+// which is still there behind the podium, or out to the lobby for a new race.
+// Leaving costs nothing — the run stays reachable from the runs page.
+function FinalCeremony({
+  ranked,
+  stage,
+  onViewData,
+  onExit,
+}: {
+  ranked: Agent[];
+  stage: OverviewTab;
+  onViewData: () => void;
+  onExit: () => void;
+}) {
   if (!ranked.length) return null;
 
   const rest = ranked.slice(3);
@@ -620,12 +640,6 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
           BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · RUN SUMMARY
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          <button
-            onClick={onViewData}
-            className="rounded border border-[#00FBFF]/30 px-2.5 py-1 text-sm font-bold tracking-[0.12em] text-[#00FBFF]/75 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
-          >
-            RACE DATA ▸
-          </button>
           <RainbowKitCustomConnectButton />
         </div>
       </header>
@@ -699,13 +713,26 @@ function FinalCeremony({ ranked, onViewData }: { ranked: Agent[]; onViewData: ()
           </section>
         )}
 
-        <Link
-          href="/arena"
-          className="final-result-in mx-auto mt-6 block w-fit text-center text-xs font-bold tracking-widest text-[#00FBFF]/60 transition hover:text-[#00FBFF]"
+        <div
+          className="final-result-in mx-auto mt-8 flex w-fit flex-wrap items-center justify-center gap-3 text-center"
           style={{ animationDelay: `${1.25 + rest.length * 0.08}s` }}
         >
-          ← BACK TO ARENA
-        </Link>
+          <button
+            onClick={onViewData}
+            className="inline-flex h-11 min-w-[15rem] items-center justify-center rounded border border-[#00FBFF]/40 px-4 font-dotGothic text-sm leading-none tracking-widest text-[#00FBFF]/80 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
+          >
+            ◂ SEE THE {stage === "grid" ? "MULTIVIEW" : "RACE BOARD"}
+          </button>
+          {/* Amber because this one leaves the run — the only button here that does.
+              Both boxes are pinned to the same size: the ◂ glyph comes from a
+              fallback font whose taller metrics would otherwise grow one button. */}
+          <button
+            onClick={onExit}
+            className="inline-flex h-11 min-w-[15rem] items-center justify-center rounded border border-[#FFBE00]/40 px-4 font-dotGothic text-sm leading-none tracking-widest text-[#FFBE00]/80 transition hover:border-[#FFBE00] hover:text-[#FFBE00]"
+          >
+            START A NEW RACE ▸
+          </button>
+        </div>
       </main>
 
       <ArenaStyles />
@@ -906,6 +933,7 @@ function TopBar({
       </span>
       <Link
         href="/arena"
+        title="leave this run for the lobby — find it again under previous runs"
         className="arena-topbar-title hidden sm:block font-dotGothic text-xl md:text-2xl text-[#00FBFF] tracking-wide title-glow transition-opacity hover:opacity-80"
       >
         BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · AGENT ARENA

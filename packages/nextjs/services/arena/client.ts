@@ -5,6 +5,8 @@ import type {
   HistoryPage,
   NonceResponse,
   RestartResponse,
+  RunListItem,
+  RunListResponse,
   RunResponse,
   RunSnapshot,
   SessionResponse,
@@ -61,6 +63,11 @@ export const arenaClient = {
   getSession: () => arenaFetch<SessionResponse>("/auth/session"),
   logout: () => arenaFetch<void>("/auth/logout", { method: "POST" }),
   createRun: (body: CreateRunRequest) => runFetch("/runs", { method: "POST", body }),
+  listRuns: async (limit?: number, signal?: AbortSignal): Promise<RunListItem[]> => {
+    const suffix = limit === undefined ? "" : `?limit=${limit}`;
+    const response = await arenaFetch<RunListResponse>(`/runs${suffix}`, { signal });
+    return response.runs;
+  },
   getRun: (runId: string, signal?: AbortSignal) => runFetch(`/runs/${encodeURIComponent(runId)}`, { signal }),
   startRun: (runId: string) => runFetch(`/runs/${encodeURIComponent(runId)}/start`, { method: "POST" }),
   seedRun: (runId: string, body: { signature: string }) =>
