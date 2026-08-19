@@ -13,7 +13,7 @@ import {
   localTestClient,
 } from "./funding";
 import { Agent, CHALLENGES } from "./mockData";
-import { type FundingStatus, fundingStatus, useAgentBalances } from "./useAgentBalances";
+import { fundingStatus, useAgentBalances } from "./useAgentBalances";
 import { useArenaRoute } from "./useArenaRoute";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { encodeFunctionData, formatEther, parseEther } from "viem";
@@ -40,6 +40,7 @@ type Phase =
   | "launching"
   | "failed";
 type SlotState = "waiting" | "joining" | "ready";
+type RowStatus = "waiting" | "partial" | "ready";
 type ActiveRunConflict = { id: string; state: string };
 
 const CY = "#00FBFF";
@@ -54,12 +55,22 @@ const SETUP_STATE_COPY: Record<RunState, string> = {
   awaiting_signature: "Waiting for signature",
   preparing: "Assigning agent wallets",
   awaiting_funding: "Waiting for agent funding",
-  ready: "All agents ready",
+  ready: "All agents funded — waiting for the go",
   running: "The run is live",
   stopping: "Stopping the run",
   finished: "Run finished",
   failed: "Run setup failed",
 };
+
+// The row tracks the money, not who noticed it first: nothing sent, something
+// sent but under the target, or enough — and enough is what starts the run. The
+// chain and the backend both answer that last one, a block or two apart, so
+// whichever sees it first turns the row green.
+function rowStatus(balance: bigint | undefined, required: bigint, backendFunded: boolean): RowStatus {
+  if (backendFunded) return "ready";
+  const status = fundingStatus(balance, required);
+  return status === "funded" ? "ready" : status;
+}
 
 function shortAddress(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
@@ -88,6 +99,7 @@ export function ArenaLobby({
   const [countdown, setCountdown] = useState<number | null>(null);
   const [funding, setFunding] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [launching, setLaunching] = useState(false);
   const [signingSeed, setSigningSeed] = useState(false);
   const [signingInOperator, setSigningInOperator] = useState(false);
   const [stoppingRun, setStoppingRun] = useState(false);
@@ -189,6 +201,10 @@ export function ArenaLobby({
   const { switchChain } = useSwitchChain();
   const fundingChainId = run?.chainId ?? targetNetwork.id;
   const fundingThreshold = fundingThresholdEth(fundingChainId);
+  // What the race actually waits for. The amount below is only how much the
+  // operator chooses to send — a wallet stops blocking the run when it clears
+  // this bar, so this is the one the board reports against.
+  const thresholdWei = useMemo(() => parseEther(fundingThreshold), [fundingThreshold]);
   const [amount, setAmount] = useState(fundingThreshold);
   const amountEdited = useRef(false);
   const mode = fundingMode(fundingChainId);
@@ -225,7 +241,17 @@ export function ArenaLobby({
   const requiredRef = useRef(required);
   requiredRef.current = required;
 
-  const fundedCount = agents.filter(agent => fundingProjection[agent.id]?.funded).length;
+  // Counted off the chain as well as the backend: the operator sends one
+  // transaction and then watches this number, so it has to move when the money
+  // lands, not when the backend gets around to saying so.
+  const fundedCount = agents.filter(
+    agent =>
+      rowStatus(
+        agent.address ? balances[agent.address] : undefined,
+        thresholdWei,
+        fundingProjection[agent.id]?.funded === true,
+      ) === "ready",
+  ).length;
   const progressCount = fundingActive ? fundedCount : readyCount;
   const progressDone = agents.length > 0 && progressCount === agents.length;
 
@@ -386,6 +412,40 @@ export function ArenaLobby({
       setStarting(false);
     }
   }, [operator, pushLog, run]);
+
+  // The race starts when the director says so, not when the last wallet lands.
+  // The backend parks a funded run at `ready` for exactly this call.
+  const startRace = useCallback(async () => {
+    if (!run || run.state !== "ready" || launching) return;
+    setLaunching(true);
+    setError(null);
+    setBlockingRun(null);
+    const hadAuth = operator.authenticated;
+    try {
+      if (!hadAuth) await operator.signIn();
+      // Claiming the run here is what earns the 3-2-1: a lobby reopened on a
+      // parked run never went through openLobby, and this is still its start.
+      launchedHere.current = run.id;
+      const started = await arenaClient.startRun(run.id);
+      useArenaStore.getState().syncSnapshot(started);
+    } catch (cause) {
+      // A start that failed is not ours to count down if another lobby lands it.
+      launchedHere.current = null;
+      // A 401 out of signIn means the wallet isn't allowed in — only a session
+      // that was authenticated going in gets the expiry copy.
+      if (hadAuth && cause instanceof ArenaApiError && cause.status === 401) {
+        operator.invalidate();
+        setError("operator session expired — sign in again");
+        pushLog("operator session expired — sign in again", RED);
+      } else {
+        const message = cause instanceof Error ? cause.message : "Could not start the race";
+        setError(message);
+        pushLog(message, RED);
+      }
+    } finally {
+      setLaunching(false);
+    }
+  }, [launching, operator, pushLog, run]);
 
   const submitSeed = useCallback(async () => {
     if (!run || run.state !== "awaiting_signature") return;
@@ -693,7 +753,7 @@ export function ArenaLobby({
               fundingProjection={fundingProjection}
               required={required}
               amount={amount}
-              fundingThreshold={fundingThreshold}
+              thresholdWei={thresholdWei}
               onAmountChange={handleAmountChange}
               onFund={fundAll}
               onConnect={openConnectModal}
@@ -772,9 +832,24 @@ export function ArenaLobby({
               </div>
             )}
             {phase === "ready" && (
-              <div className="text-[#00ff9c] text-sm tracking-widest font-dotGothic lobby-blink">
-                ● ● ● STARTING RACE ● ● ●
-              </div>
+              <button
+                onClick={() => {
+                  if (needsWallet) openConnectModal?.();
+                  else void startRace();
+                }}
+                disabled={
+                  launching || !operator.sessionLoaded || (needsWallet ? !openConnectModal : !operator.configured)
+                }
+                className="lobby-cta px-10 py-3 rounded-md font-dotGothic text-lg tracking-widest border-2 border-[#00ff9c] text-[#00ff9c] hover:bg-[#00ff9c] hover:text-black transition disabled:opacity-40"
+              >
+                {launching
+                  ? "STARTING…"
+                  : operator.authenticated
+                  ? "▶ START RACE"
+                  : needsWallet
+                  ? "▶ CONNECT & START RACE"
+                  : "▶ SIGN IN & START RACE"}
+              </button>
             )}
             {phase === "launching" && countdown !== null && (
               <div
@@ -801,12 +876,12 @@ export function ArenaLobby({
           )}
           {phase === "ready" && (
             <div className="lobby-phase-note mt-3 text-base text-[#00FBFF]/70 tracking-wide">
-              All agents ready — starting the run…
+              Every agent wallet is funded. The race starts when you say go.
             </div>
           )}
           {phase === "funding" && (
             <div className="lobby-phase-note mt-3 text-base text-[#00FBFF]/70 tracking-wide">
-              The run starts when every agent wallet is funded.
+              The start button unlocks when every agent wallet is funded.
             </div>
           )}
           {canStopRun && (operator.authenticated || operator.hadSession) && (
@@ -872,7 +947,7 @@ function FundingBoard({
   fundingProjection,
   required,
   amount,
-  fundingThreshold,
+  thresholdWei,
   onAmountChange,
   onFund,
   onConnect,
@@ -891,7 +966,7 @@ function FundingBoard({
   fundingProjection: Record<string, FundingProjection>;
   required: bigint;
   amount: string;
-  fundingThreshold: string;
+  thresholdWei: bigint;
   onAmountChange: (v: string) => void;
   onFund: () => void;
   onConnect?: () => void;
@@ -908,6 +983,10 @@ function FundingBoard({
   // The local shortcut needs no wallet, so the connect button only stands in for
   // the batch path — and only until a wallet is actually connected.
   const needsConnect = mode === "batch" && !isConnected;
+  // Funding under the threshold is legal and does nothing: the wallets fill up,
+  // the rows stay yellow, and the race never leaves the gate. The line that
+  // names the threshold turns yellow too rather than let that read as a bug.
+  const belowThreshold = required < thresholdWei;
   return (
     <div className="lobby-funding-board w-full max-w-4xl">
       <div className="lobby-funding-controls flex flex-wrap items-center gap-3 mb-1">
@@ -937,7 +1016,7 @@ function FundingBoard({
           ) : !needsConnect ? (
             <button
               onClick={onFund}
-              disabled={funding || locked || !canFund || required === 0n}
+              disabled={funding || locked || !canFund || required <= 0n}
               className="px-4 py-1.5 rounded border-2 font-dotGothic text-sm tracking-widest transition disabled:opacity-30 disabled:cursor-not-allowed"
               style={{ borderColor: YELLOW, color: YELLOW }}
             >
@@ -956,7 +1035,12 @@ function FundingBoard({
           )}
         </div>
       </div>
-      <p className="mb-3 text-sm uppercase text-[#00FBFF]/60">Run starts when every agent has {fundingThreshold} ETH</p>
+      <p
+        className="mb-3 text-sm uppercase transition-colors"
+        style={{ color: belowThreshold ? YELLOW : "rgba(0, 251, 255, 0.6)" }}
+      >
+        Start unlocks when every agent has {formatEther(thresholdWei)} ETH
+      </p>
 
       {balancesUnreachable && (
         <div className="mb-3 px-3 py-2 rounded border border-[#FF5861]/40 bg-[#FF5861]/10 text-base text-[#FF5861]">
@@ -989,7 +1073,7 @@ function FundingBoard({
             agent={a}
             index={i}
             balance={a.address ? balances[a.address] : undefined}
-            required={required}
+            thresholdWei={thresholdWei}
             backendFunded={fundingProjection[a.id]?.funded === true}
           />
         ))}
@@ -1002,20 +1086,22 @@ function FundingRow({
   agent,
   index,
   balance,
-  required,
+  thresholdWei,
   backendFunded,
 }: {
   agent: Agent;
   index: number;
   balance: bigint | undefined;
-  required: bigint;
+  thresholdWei: bigint;
   backendFunded: boolean;
 }) {
-  const balanceStatus = fundingStatus(balance, required);
-  const status: FundingStatus = backendFunded ? "funded" : balanceStatus === "funded" ? "partial" : balanceStatus;
+  const status = rowStatus(balance, thresholdWei, backendFunded);
 
   return (
-    <div className="lobby-funding-row flex items-center gap-3 px-3 py-2 text-base">
+    <div
+      className="lobby-funding-row flex items-center gap-3 px-3 py-2 text-base transition-colors"
+      style={status === "ready" ? { background: `${GREEN}12`, boxShadow: `inset 3px 0 0 ${GREEN}` } : undefined}
+    >
       <span className="w-8 shrink-0 text-sm text-[#00FBFF]/55 tabular-nums">P{index + 1}</span>
 
       <span
@@ -1047,11 +1133,11 @@ function FundingRow({
         {formatEther(balance ?? 0n)} ETH
       </span>
 
-      <span className="lobby-funding-status w-52 shrink-0 whitespace-nowrap text-right text-sm font-bold tracking-widest">
-        {status === "funded" ? (
+      <span className="lobby-funding-status min-w-52 shrink-0 whitespace-nowrap text-right text-sm font-bold tracking-widest">
+        {status === "ready" ? (
           <span style={{ color: GREEN }}>READY ✓</span>
         ) : status === "partial" ? (
-          <span style={{ color: YELLOW }}>NEEDS FUNDS</span>
+          <span style={{ color: YELLOW }}>NEEDS {formatEther(thresholdWei - (balance ?? 0n))} MORE</span>
         ) : (
           <span className="lobby-blink" style={{ color: YELLOW }}>
             WAITING FOR FUNDING
