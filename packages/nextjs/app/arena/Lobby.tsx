@@ -1117,11 +1117,11 @@ function FundingRow({
         {formatEther(balance ?? 0n)} ETH
       </span>
 
-      <span className="lobby-funding-status w-52 shrink-0 whitespace-nowrap text-right text-sm font-bold tracking-widest">
+      <span className="lobby-funding-status min-w-52 shrink-0 whitespace-nowrap text-right text-sm font-bold tracking-widest">
         {status === "ready" ? (
           <span style={{ color: GREEN }}>READY ✓</span>
         ) : status === "funded" ? (
-          <span style={{ color: YELLOW }}>FUNDED</span>
+          <span style={{ color: YELLOW }}>NEEDS {formatEther(thresholdWei - (balance ?? 0n))} MORE</span>
         ) : (
           <span className="lobby-blink" style={{ color: YELLOW }}>
             WAITING FOR FUNDING
