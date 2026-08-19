@@ -40,7 +40,7 @@ type Phase =
   | "launching"
   | "failed";
 type SlotState = "waiting" | "joining" | "ready";
-type RowStatus = "waiting" | "funded" | "ready";
+type RowStatus = "waiting" | "partial" | "ready";
 type ActiveRunConflict = { id: string; state: string };
 
 const CY = "#00FBFF";
@@ -69,7 +69,7 @@ const SETUP_STATE_COPY: Record<RunState, string> = {
 function rowStatus(balance: bigint | undefined, required: bigint, backendFunded: boolean): RowStatus {
   if (backendFunded) return "ready";
   const status = fundingStatus(balance, required);
-  return status === "funded" ? "ready" : status === "partial" ? "funded" : "waiting";
+  return status === "funded" ? "ready" : status;
 }
 
 function shortAddress(address: string) {
@@ -420,15 +420,20 @@ export function ArenaLobby({
     setLaunching(true);
     setError(null);
     setBlockingRun(null);
+    const hadAuth = operator.authenticated;
     try {
-      if (!operator.authenticated) await operator.signIn();
+      if (!hadAuth) await operator.signIn();
       // Claiming the run here is what earns the 3-2-1: a lobby reopened on a
       // parked run never went through openLobby, and this is still its start.
       launchedHere.current = run.id;
       const started = await arenaClient.startRun(run.id);
       useArenaStore.getState().syncSnapshot(started);
     } catch (cause) {
-      if (cause instanceof ArenaApiError && cause.status === 401) {
+      // A start that failed is not ours to count down if another lobby lands it.
+      launchedHere.current = null;
+      // A 401 out of signIn means the wallet isn't allowed in — only a session
+      // that was authenticated going in gets the expiry copy.
+      if (hadAuth && cause instanceof ArenaApiError && cause.status === 401) {
         operator.invalidate();
         setError("operator session expired — sign in again");
         pushLog("operator session expired — sign in again", RED);
@@ -828,11 +833,22 @@ export function ArenaLobby({
             )}
             {phase === "ready" && (
               <button
-                onClick={() => void startRace()}
-                disabled={launching || !operator.sessionLoaded || !operator.configured}
+                onClick={() => {
+                  if (needsWallet) openConnectModal?.();
+                  else void startRace();
+                }}
+                disabled={
+                  launching || !operator.sessionLoaded || (needsWallet ? !openConnectModal : !operator.configured)
+                }
                 className="lobby-cta px-10 py-3 rounded-md font-dotGothic text-lg tracking-widest border-2 border-[#00ff9c] text-[#00ff9c] hover:bg-[#00ff9c] hover:text-black transition disabled:opacity-40"
               >
-                {launching ? "STARTING…" : operator.authenticated ? "▶ START RACE" : "▶ SIGN IN & START RACE"}
+                {launching
+                  ? "STARTING…"
+                  : operator.authenticated
+                  ? "▶ START RACE"
+                  : needsWallet
+                  ? "▶ CONNECT & START RACE"
+                  : "▶ SIGN IN & START RACE"}
               </button>
             )}
             {phase === "launching" && countdown !== null && (
@@ -865,7 +881,7 @@ export function ArenaLobby({
           )}
           {phase === "funding" && (
             <div className="lobby-phase-note mt-3 text-base text-[#00FBFF]/70 tracking-wide">
-              The run starts when every agent wallet is funded.
+              The start button unlocks when every agent wallet is funded.
             </div>
           )}
           {canStopRun && (operator.authenticated || operator.hadSession) && (
@@ -970,7 +986,7 @@ function FundingBoard({
   // Funding under the threshold is legal and does nothing: the wallets fill up,
   // the rows stay yellow, and the race never leaves the gate. The line that
   // names the threshold turns yellow too rather than let that read as a bug.
-  const belowThreshold = required > 0n && required < thresholdWei;
+  const belowThreshold = required < thresholdWei;
   return (
     <div className="lobby-funding-board w-full max-w-4xl">
       <div className="lobby-funding-controls flex flex-wrap items-center gap-3 mb-1">
@@ -1000,7 +1016,7 @@ function FundingBoard({
           ) : !needsConnect ? (
             <button
               onClick={onFund}
-              disabled={funding || locked || !canFund || required === 0n}
+              disabled={funding || locked || !canFund || required <= 0n}
               className="px-4 py-1.5 rounded border-2 font-dotGothic text-sm tracking-widest transition disabled:opacity-30 disabled:cursor-not-allowed"
               style={{ borderColor: YELLOW, color: YELLOW }}
             >
@@ -1023,7 +1039,7 @@ function FundingBoard({
         className="mb-3 text-sm uppercase transition-colors"
         style={{ color: belowThreshold ? YELLOW : "rgba(0, 251, 255, 0.6)" }}
       >
-        Run starts when every agent has {formatEther(thresholdWei)} ETH
+        Start unlocks when every agent has {formatEther(thresholdWei)} ETH
       </p>
 
       {balancesUnreachable && (
@@ -1120,7 +1136,7 @@ function FundingRow({
       <span className="lobby-funding-status min-w-52 shrink-0 whitespace-nowrap text-right text-sm font-bold tracking-widest">
         {status === "ready" ? (
           <span style={{ color: GREEN }}>READY ✓</span>
-        ) : status === "funded" ? (
+        ) : status === "partial" ? (
           <span style={{ color: YELLOW }}>NEEDS {formatEther(thresholdWei - (balance ?? 0n))} MORE</span>
         ) : (
           <span className="lobby-blink" style={{ color: YELLOW }}>
