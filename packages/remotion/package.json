@@ -6,6 +6,7 @@
     "check-types": "tsc --noEmit",
     "compositions": "remotion compositions src/index.ts",
     "render": "remotion render src/index.ts",
+    "render:the-reveal": "remotion render src/index.ts The-Reveal-Landscape out/the-reveal-v3.mp4",
     "render:starter": "remotion render src/index.ts AgentArena-Landscape out/agent-arena-starter.mp4",
     "still": "remotion still src/index.ts",
     "studio": "remotion studio src/index.ts"

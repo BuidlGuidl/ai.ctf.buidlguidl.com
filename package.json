@@ -33,6 +33,7 @@
     "video:check": "yarn workspace @se-2/remotion check-types",
     "video:compositions": "yarn workspace @se-2/remotion compositions",
     "video:render": "yarn workspace @se-2/remotion render",
+    "video:render:the-reveal": "yarn workspace @se-2/remotion render:the-reveal",
     "video:render:starter": "yarn workspace @se-2/remotion render:starter",
     "video:still": "yarn workspace @se-2/remotion still",
     "video:studio": "yarn workspace @se-2/remotion studio",
