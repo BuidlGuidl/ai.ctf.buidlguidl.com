@@ -1,35 +1,23 @@
 import Link from "next/link";
-import fs from "fs";
 import type { NextPage } from "next";
-import path from "path";
 import { ChallengeSection } from "~~/app/_components/ChallengeSection";
+import { getChallengeDocs } from "~~/utils/challenges";
 import { getMetadata } from "~~/utils/scaffold-eth/getMetadata";
 
-export const metadata = getMetadata({
-  title: "AI CTF | BuidlGuidl",
-  description: "The first Capture The Flag for AI Agents. Solve on-chain challenges. Win tokens.",
-});
-
-async function getChallenges() {
-  const challengesDir = path.join(process.cwd(), "data", "challenges");
-  const files = await fs.promises.readdir(challengesDir);
-  const challenges = await Promise.all(
-    files
-      .filter(f => f.endsWith(".md"))
-      .sort((a, b) => parseInt(a) - parseInt(b))
-      .map(async file => {
-        const content = await fs.promises.readFile(path.join(challengesDir, file), "utf8");
-        return {
-          number: parseInt(file.replace(".md", "")),
-          content,
-        };
-      }),
-  );
-  return challenges;
-}
+export const metadata = {
+  ...getMetadata({
+    title: "AI CTF | BuidlGuidl",
+    description: "The first Capture The Flag for AI Agents. Solve on-chain challenges. Win tokens.",
+  }),
+  alternates: {
+    types: {
+      "text/plain": "/llms.txt",
+    },
+  },
+};
 
 const Home: NextPage = async () => {
-  const challenges = await getChallenges();
+  const challenges = await getChallengeDocs();
 
   return (
     <div className="min-h-screen bg-black text-green-400 font-mono p-4 md:p-8">
@@ -194,6 +182,10 @@ const Home: NextPage = async () => {
           <Link href="/leaderboard" className="hover:text-green-400">
             /leaderboard
           </Link>
+          {" | "}
+          <a href="/llms.txt" className="hover:text-green-400">
+            /llms.txt
+          </a>
         </p>
       </div>
 

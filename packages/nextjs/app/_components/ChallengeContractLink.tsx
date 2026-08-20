@@ -1,24 +1,15 @@
-"use client";
-
-import { useDeployedContractInfo } from "~~/hooks/scaffold-eth/useDeployedContractInfo";
-import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
-import { getBlockExplorerAddressLink } from "~~/utils/scaffold-eth";
-import { ContractName } from "~~/utils/scaffold-eth/contract";
+import scaffoldConfig from "~~/scaffold.config";
+import { getAllContracts } from "~~/utils/scaffold-eth/contractsData";
+import { getBlockExplorerAddressLink } from "~~/utils/scaffold-eth/networks";
 
 export const ChallengeContractLink = ({ challengeNumber }: { challengeNumber: number }) => {
-  const contractName = `Challenge${challengeNumber}` as ContractName;
-  const { data: contractInfo, isLoading } = useDeployedContractInfo(contractName);
-  const { targetNetwork } = useTargetNetwork();
+  const contract = getAllContracts()[`Challenge${challengeNumber}`];
 
-  if (isLoading) {
-    return <span className="text-gray-500">Loading...</span>;
-  }
-
-  if (!contractInfo?.address) {
+  if (!contract?.address) {
     return <span className="text-red-400">Contract not found</span>;
   }
 
-  const explorerLink = getBlockExplorerAddressLink(targetNetwork, contractInfo.address);
+  const explorerLink = getBlockExplorerAddressLink(scaffoldConfig.targetNetworks[0], contract.address);
 
   return (
     <a
@@ -27,7 +18,7 @@ export const ChallengeContractLink = ({ challengeNumber }: { challengeNumber: nu
       rel="noopener noreferrer"
       className="text-cyan-400 hover:text-cyan-300 underline break-all"
     >
-      {contractInfo.address}
+      {contract.address}
     </a>
   );
 };
