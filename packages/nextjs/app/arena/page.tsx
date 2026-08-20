@@ -234,7 +234,7 @@ function ArenaScreen() {
   const flashTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const [openChallenge, setOpenChallenge] = useState<number | null>(null);
   const [stopError, setStopError] = useState<string | null>(null);
-  const [raceColumnMode, setRaceColumnMode] = useState<RaceColumnMode>("order");
+  const [raceColumnMode, setRaceColumnMode] = useState<RaceColumnMode>("challenges");
   const [liveStarted, setLiveStarted] = useState(false);
   const [ceremonyReady, setCeremonyReady] = useState(false);
   // Whoever watches the match lock gets the finish sting before the podium takes
