@@ -47,6 +47,7 @@ import {
   selectRunId,
   selectRunStartedAt,
   selectRunState,
+  selectServerOffsetMs,
   selectStatusChangedAt,
   selectStatusSeededAt,
   useArenaStore,
@@ -143,14 +144,29 @@ const activeTarget = (a: Agent): number | null => {
   return CHALLENGES.some(c => c.id === id) ? id : null;
 };
 
+function statusHeldForMs(agent: Agent, now: number | null): number {
+  if (now === null || agent.statusChangedAt === null) return 0;
+  const changedAt = Date.parse(agent.statusChangedAt);
+  return Number.isFinite(changedAt) ? now - changedAt : 0;
+}
+
 // `now` is null while the run is not live, so a locked board never fades. A
 // finisher that cleared every flag is done, not dead, so it keeps full colour.
 function isAgentFaded(agent: Agent, now: number | null): boolean {
   if (now === null || agent.finishedAt !== null) return false;
   if (agent.status === "done") return true;
-  if (agent.status !== "idle" || agent.statusChangedAt === null) return false;
-  const changedAt = Date.parse(agent.statusChangedAt);
-  return Number.isFinite(changedAt) && now - changedAt >= IDLE_FADE_MS;
+  if (agent.status !== "idle") return false;
+  return statusHeldForMs(agent, now) >= IDLE_FADE_MS;
+}
+
+// What the nudge sound is for: an agent that has stopped moving on its own. The
+// faded ones, and on top of them one stuck on a permission prompt — that one
+// keeps its colour and its warning pulse, because it wants the director's
+// attention rather than less of it.
+function isAgentStalled(agent: Agent, now: number | null): boolean {
+  if (isAgentFaded(agent, now)) return true;
+  if (now === null || agent.finishedAt !== null || agent.status !== "blocked") return false;
+  return statusHeldForMs(agent, now) >= IDLE_FADE_MS;
 }
 
 function secondsFrom(start: string | null, end: string | null): number | null {
@@ -274,6 +290,7 @@ function ArenaScreen() {
   const runEntrants = useArenaStore(selectRunEntrants);
   const statusChangedAt = useArenaStore(selectStatusChangedAt);
   const statusSeededAt = useArenaStore(selectStatusSeededAt);
+  const serverOffsetMs = useArenaStore(selectServerOffsetMs);
   const runStartedAt = useArenaStore(selectRunStartedAt);
   const runDeadlineAt = useArenaStore(selectRunDeadlineAt);
   const connectionStatus = useArenaStore(selectConnectionStatus);
@@ -352,28 +369,34 @@ function ArenaScreen() {
     if (runState === "failed") playSfx("fail");
   }, [runState]);
 
-  const raceLive = runState === "running" || runState === "stopping";
-  const pastGrace = runStartedAt !== null && clock.now - Date.parse(runStartedAt) >= FADE_START_GRACE_MS;
-  const fadeNow = raceLive && pastGrace ? clock.now : null;
+  // Not while `stopping`: every entrant goes `done` as the run winds down, and a
+  // board dimming all at once there reads as a field that died rather than as a
+  // race the operator ended. The stamps being compared come from the backend, so
+  // the browser clock is carried onto its clock first.
+  const raceLive = runState === "running";
+  const serverNow = clock.now + serverOffsetMs;
+  const pastGrace = runStartedAt !== null && serverNow - Date.parse(runStartedAt) >= FADE_START_GRACE_MS;
+  const fadeNow = raceLive && pastGrace ? serverNow : null;
 
   useEffect(() => {
     if (!runEntrants || !runId) return;
     const nudged = idleNudged.current;
     if (idleSoundRunId.current !== runId) {
       nudged.clear();
-      agents
-        .filter(agent => agent.status === "idle" && isAgentFaded(agent, fadeNow))
-        .forEach(agent => nudged.add(agent.id));
+      agents.filter(agent => isAgentStalled(agent, fadeNow)).forEach(agent => nudged.add(agent.id));
       idleSoundRunId.current = runId;
       return;
     }
+    // Keyed on the stall, not on `idle`: an agent whose process exited and one
+    // sitting on a permission prompt are both worth hearing about, and neither
+    // passes through `idle`.
     agents.forEach(agent => {
-      if (agent.status !== "idle") {
+      if (!isAgentStalled(agent, fadeNow)) {
         nudged.delete(agent.id);
-      } else if (isAgentFaded(agent, fadeNow) && !nudged.has(agent.id)) {
+      } else if (!nudged.has(agent.id)) {
         nudged.add(agent.id);
-        // A seed stamp means we never saw this agent go quiet, only that it
-        // already was when the page loaded: fade it, but don't announce it.
+        // A seed stamp means we never saw this agent stop, only that it already
+        // had when the page loaded: show it on the board, but don't announce it.
         if (agent.statusChangedAt !== statusSeededAt) playSfx("idle");
       }
     });
