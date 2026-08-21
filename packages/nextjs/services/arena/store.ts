@@ -30,22 +30,49 @@ export const useArenaStore = create<ArenaStore>(set => ({
   connectionError: null,
   pendingSteers: {},
   setCurrentRunId: currentRunId => set({ currentRunId }),
-  seedSnapshot: (run, history = []) =>
-    set({
-      currentRunId: run.id,
-      projection: seedProjection(run, history),
-      connectionError: null,
-      pendingSteers: {},
-    }),
-  syncSnapshot: run =>
+  seedSnapshot: (run, history = []) => {
+    const seededAt = new Date().toISOString();
+    set(current => {
+      const projection = seedProjection(run, history, seededAt);
+      return {
+        currentRunId: run.id,
+        // Same run reseeded (reconnect): a stamp still equal to `seededAt` means no
+        // replayed event touched that entrant, so the live value we already held is
+        // the tighter bound. Anything history did touch is authoritative.
+        projection:
+          current.projection?.run.id === run.id
+            ? {
+                ...projection,
+                statusChangedAt: mergeStatusChangedAt(
+                  projection.statusChangedAt,
+                  current.projection.statusChangedAt,
+                  seededAt,
+                ),
+              }
+            : projection,
+        connectionError: null,
+        pendingSteers: {},
+      };
+    });
+  },
+  syncSnapshot: run => {
+    const seededAt = new Date().toISOString();
     set(current => {
       if (current.projection === null || current.projection.run.id !== run.id) {
-        return { currentRunId: run.id, projection: initialProjection(run), connectionError: null, pendingSteers: {} };
+        return {
+          currentRunId: run.id,
+          projection: initialProjection(run, seededAt),
+          connectionError: null,
+          pendingSteers: {},
+        };
       }
       if (run.lastEventId < current.projection.lastEventId) return current;
+      const statusChangedAt = { ...current.projection.statusChangedAt };
+      for (const entrant of run.entrants) statusChangedAt[entrant.id] ??= seededAt;
       return {
         projection: {
           ...current.projection,
+          statusChangedAt,
           run: {
             ...current.projection.run,
             state: run.state,
@@ -56,7 +83,8 @@ export const useArenaStore = create<ArenaStore>(set => ({
         },
         pendingSteers: {},
       };
-    }),
+    });
+  },
   dispatchEvent: event =>
     set(current => {
       if (current.projection === null) return current;
@@ -121,8 +149,20 @@ function resolvePendingSteers(pending: Record<string, string[]>, event: ArenaEve
 // cursor wound back first. It is restored afterwards to whichever is newer, the
 // head or the last backfilled event: history is fetched after the snapshot, so an
 // event landing in that gap is already applied and must not replay off the stream.
-function seedProjection(run: RunSnapshot, history: ArenaEvent[]): ProjectionState {
-  const base = initialProjection(run);
+function mergeStatusChangedAt(
+  fresh: Record<string, string>,
+  held: Record<string, string>,
+  seededAt: string,
+): Record<string, string> {
+  const merged = { ...fresh };
+  for (const [id, ts] of Object.entries(fresh)) {
+    if (ts === seededAt && held[id] !== undefined) merged[id] = held[id];
+  }
+  return merged;
+}
+
+function seedProjection(run: RunSnapshot, history: ArenaEvent[], seededAt: string): ProjectionState {
+  const base = initialProjection(run, seededAt);
   const oldest = history[0];
   if (oldest === undefined) return base;
 
@@ -136,6 +176,8 @@ export const selectRunId = (state: ArenaStore) => state.projection?.run.id ?? nu
 export const selectRunState = (state: ArenaStore) => state.projection?.run.state ?? null;
 export const selectRunChainId = (state: ArenaStore) => state.projection?.run.chainId ?? null;
 export const selectRunEntrants = (state: ArenaStore) => state.projection?.run.entrants ?? null;
+export const selectStatusChangedAt = (state: ArenaStore) => state.projection?.statusChangedAt ?? null;
+export const selectStatusSeededAt = (state: ArenaStore) => state.projection?.statusSeededAt ?? null;
 export const selectRunStartedAt = (state: ArenaStore) => state.projection?.run.startedAt ?? null;
 export const selectRunDeadlineAt = (state: ArenaStore) => state.projection?.run.deadlineAt ?? null;
 export const selectConnectionStatus = (state: ArenaStore) => state.connectionStatus;
