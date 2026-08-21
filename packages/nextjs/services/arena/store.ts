@@ -151,6 +151,8 @@ export const selectConsoleFor = (entrantId: string) => (state: ArenaStore) =>
   state.projection?.consoleByEntrant[entrantId] ?? EMPTY_CONSOLE;
 export const selectPreviewFor = (entrantId: string) => (state: ArenaStore) =>
   state.projection?.previewsByEntrant[entrantId] ?? EMPTY_PREVIEW;
+export const selectNarrationFor = (entrantId: string) => (state: ArenaStore) =>
+  state.projection?.narrationByEntrant[entrantId] ?? EMPTY_NARRATION;
 export const selectPendingSteersFor = (entrantId: string) => (state: ArenaStore) =>
   state.pendingSteers[entrantId] ?? EMPTY_PENDING_STEERS;
 
@@ -159,4 +161,5 @@ const EMPTY_CHAT: NonNullable<ProjectionState["chat"]> = [];
 const EMPTY_FUNDING: NonNullable<ProjectionState["fundingByEntrant"]> = {};
 const EMPTY_CONSOLE: NonNullable<ProjectionState["consoleByEntrant"][string]> = [];
 const EMPTY_PREVIEW: NonNullable<ProjectionState["previewsByEntrant"][string]> = [];
+const EMPTY_NARRATION: NonNullable<ProjectionState["narrationByEntrant"][string]> = [];
 const EMPTY_PENDING_STEERS: string[] = [];

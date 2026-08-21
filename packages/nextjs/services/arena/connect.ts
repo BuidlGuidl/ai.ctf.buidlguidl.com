@@ -23,6 +23,7 @@ const BACKFILL_TYPES = [
   // and its replacement rebuild as one continuous console.
   "entrant.restarted",
   "entrant.nudged",
+  "entrant.narration",
   "director.broadcast",
   "score.flag",
   "entrant.error",
