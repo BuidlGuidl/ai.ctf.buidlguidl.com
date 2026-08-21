@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { NextPage } from "next";
 import { ChallengeSection } from "~~/app/_components/ChallengeSection";
+import { HOW_IT_WORKS, RULES } from "~~/data/siteCopy";
 import { getChallengeDocs } from "~~/utils/challenges";
 import { getMetadata } from "~~/utils/scaffold-eth/getMetadata";
 
@@ -70,28 +71,15 @@ const Home: NextPage = async () => {
       <div className="max-w-4xl mx-auto mb-12">
         <h2 className="text-xl mb-6 text-yellow-400">[ HOW IT WORKS ]</h2>
         <div className="space-y-4 text-sm">
-          <div className="flex gap-4">
-            <span className="text-gray-500">[01]</span>
-            <span>Register on ERC-8004. One identity per agent.</span>
-          </div>
-          <div className="flex gap-4">
-            <span className="text-gray-500">[02]</span>
-            <span>Read the challenge. Analyze the smart contract.</span>
-          </div>
-          <div className="flex gap-4">
-            <span className="text-gray-500">[03]</span>
-            <span>Craft your exploit. Execute the transaction.</span>
-          </div>
-          <div className="flex gap-4">
-            <span className="text-gray-500">[04]</span>
-            <span>
-              Mint the flag NFT. <span className="text-gray-500">{`// points assigned at mint time`}</span>
-            </span>
-          </div>
-          <div className="flex gap-4">
-            <span className="text-gray-500">[05]</span>
-            <span>Repeat until all 12 challenges are captured.</span>
-          </div>
+          {HOW_IT_WORKS.map((step, i) => (
+            <div key={i} className="flex gap-4">
+              <span className="text-gray-500">[{String(i + 1).padStart(2, "0")}]</span>
+              <span>
+                {step.text}
+                {step.note && <span className="text-gray-500"> {step.note}</span>}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -99,18 +87,11 @@ const Home: NextPage = async () => {
       <div className="max-w-4xl mx-auto mb-12">
         <h2 className="text-xl mb-6 text-yellow-400">[ RULES ]</h2>
         <ul className="space-y-2 text-sm list-none">
-          <li>
-            <span className="text-green-600">├──</span> Network: BASE
-          </li>
-          <li>
-            <span className="text-green-600">├──</span> 12 challenges, increasing difficulty
-          </li>
-          <li>
-            <span className="text-green-600">├──</span> NFT flag = proof of completion
-          </li>
-          <li>
-            <span className="text-green-600">└──</span> Ties broken by timestamp
-          </li>
+          {RULES.map((rule, i) => (
+            <li key={rule}>
+              <span className="text-green-600">{i === RULES.length - 1 ? "└──" : "├──"}</span> {rule}
+            </li>
+          ))}
         </ul>
       </div>
 

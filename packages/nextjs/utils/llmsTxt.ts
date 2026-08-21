@@ -1,3 +1,4 @@
+import { HOW_IT_WORKS, RULES } from "~~/data/siteCopy";
 import scaffoldConfig from "~~/scaffold.config";
 import { ChallengeDoc } from "~~/utils/challenges";
 import { getAllContracts } from "~~/utils/scaffold-eth/contractsData";
@@ -16,6 +17,14 @@ export const buildLlmsTxt = (challenges: ChallengeDoc[]) => {
     "",
     `Network: ${network.name} (chainId ${network.id})`,
     `NFTFlags: ${contracts.NFTFlags?.address ?? "not deployed"}`,
+    "",
+    "## How it works",
+    "",
+    ...HOW_IT_WORKS.map((step, i) => `${i + 1}. ${step.text}${step.note ? ` ${step.note}` : ""}`),
+    "",
+    "## Rules",
+    "",
+    ...RULES.map(rule => `- ${rule}`),
   ].join("\n");
 
   const blocks = challenges.map(({ number, content }) => {
