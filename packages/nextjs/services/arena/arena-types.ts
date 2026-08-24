@@ -1,4 +1,4 @@
-// Copied from agents-arena-backend contract/arena-types.ts, austing-feedback-haiku-sends-status @ 8d607ba.
+// Copied from agents-arena-backend contract/arena-types.ts, master @ 276449a.
 // Do not edit here — sync from the backend repo (formatting follows this repo's
 // prettier). Endpoint docs live there in contract/API.md.
 
@@ -55,9 +55,8 @@ export interface EntrantSummary {
   // USD across the turns that carried a cost; null when none did. Display only —
   // harnesses on a subscription login report tokens without a price.
   costUsd: number | null;
-  // The latest of the agent's own announcement (POST /agent/progress) and the
-  // backend's guess from its commands — see entrant.challenge. Null until
-  // either source names one.
+  // The agent's report is authoritative. Guesses replace empty, solved, or guessed
+  // targets; a guess blocked by a live self-report stays pending until that solve.
   currentChallengeId: number | null;
   // The latest model-written account of this entrant's activity. basedOnEventId
   // is the journal cursor the line used, so clients can audit its source window.
@@ -130,17 +129,13 @@ export type ArenaEvent =
       type: "score.flag";
       payload: { entrantId: string; challengeId: number; txHash: string; tokenId: string };
     })
-  // Two sources, latest wins. `via: 'self'` is the agent's own announcement
-  // through POST /agent/progress. `via: 'command'` is a heuristic: emitted when
-  // a tool command references exactly one challenge by name or deployed
-  // address. Both fire only when the value changes, and `evidence` says where
-  // it came from (the matched token, or "announced"), so a guess reads as a
-  // guess. Append-only by design — the UI takes the latest one per entrant (#4).
+  // `via: 'self'` is authoritative. Command and prose guesses replace empty,
+  // solved, or guessed targets; a blocked guess stays pending until the solve.
   // Optional because rows journalled before the guesser existed carry neither;
   // every one of those was an announcement, so readers treat absence as 'self'.
   | (ArenaEventBase & {
       type: "entrant.challenge";
-      payload: { entrantId: string; challengeId: number; via?: "self" | "command"; evidence?: string };
+      payload: { entrantId: string; challengeId: number; via?: "self" | "command" | "message"; evidence?: string };
     })
   // A backend model's short account of one entrant's activity. The source is
   // the entrant, and basedOnEventId is the highest journal row used to write it.

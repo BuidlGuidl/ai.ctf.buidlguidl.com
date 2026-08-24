@@ -26,7 +26,7 @@ import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 import type { EntrantSummary, RunState } from "~~/services/arena/arena-types";
 import { ArenaApiError, arenaClient } from "~~/services/arena/client";
 import { connectRun } from "~~/services/arena/connect";
-import type { ChatItem, ConsoleEntry, FeedItem, NarrationEntry } from "~~/services/arena/projection";
+import type { ChatItem, ConsoleEntry, FeedItem } from "~~/services/arena/projection";
 import { ROSTER, displayForEntrant } from "~~/services/arena/roster";
 import { playSfx, useArenaSfx } from "~~/services/arena/sfx";
 import {
@@ -35,8 +35,11 @@ import {
   selectConnectionError,
   selectConnectionStatus,
   selectConsoleFor,
+  selectEmptyConsole,
+  selectEmptyNarration,
   selectFeed,
   selectLastFlagEvent,
+  selectNarrationByEntrant,
   selectNarrationFor,
   selectPendingSteersFor,
   selectPreviewFor,
@@ -71,7 +74,7 @@ const ARENA_TIP = `${ARENA_TIP_BASE} tooltip-bottom after:border-b-[#00FBFF]/60`
 // The narration is 2-3 sentences, so it wraps; to the right of the handle it
 // stays inside the row instead of covering the flags below.
 const ARENA_TIP_RIGHT_WRAP = `${ARENA_TIP_BASE} tooltip-right after:border-r-[#00FBFF]/60 before:max-w-xs before:whitespace-pre-line before:text-left before:leading-snug`;
-const EMPTY_NARRATION_BY_ENTRANT: Record<string, NarrationEntry[]> = {};
+const NARRATION_ONLY_STORAGE_KEY = "arena.log.narrationOnly";
 
 function PendingUsage() {
   return (
@@ -85,11 +88,17 @@ function PendingUsage() {
   );
 }
 
-// Wall clock in the viewer's zone, for journal timestamps. fmtClock below is
-// elapsed race time, a different axis.
+const WALL_CLOCK_FORMATTER = new Intl.DateTimeFormat("en-GB", {
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+  numberingSystem: "latn",
+});
+
 const fmtWallClock = (ts: string) => {
   const date = new Date(ts);
-  return Number.isNaN(date.getTime()) ? "--:--:--" : date.toLocaleTimeString([], { hour12: false });
+  return Number.isNaN(date.getTime()) ? "--:--:--" : WALL_CLOCK_FORMATTER.format(date);
 };
 
 const fmtClock = (s: number) => {
@@ -99,27 +108,35 @@ const fmtClock = (s: number) => {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 };
 
-function useNow(intervalMs = 1000) {
+function elapsedSeconds(start: string | number, end: string | number): number | null {
+  const startMs = typeof start === "number" ? start : Date.parse(start);
+  const endMs = typeof end === "number" ? end : Date.parse(end);
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) return null;
+  return Math.floor((endMs - startMs) / 1000);
+}
+
+function useNow(enabled: boolean, resetKey: object) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), intervalMs);
+    setNow(Date.now());
+    if (!enabled) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, [intervalMs]);
+  }, [enabled, resetKey]);
 
   return now;
 }
 
 const fmtAge = (ts: string, now: number) => {
-  const parsed = Date.parse(ts);
-  const seconds = Number.isNaN(parsed) ? 0 : Math.max(0, Math.floor((now - parsed) / 1000));
+  const seconds = elapsedSeconds(ts, now);
+  if (seconds === null) return "—";
   if (seconds < 60) return `${seconds}s`;
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
   return `${Math.floor(seconds / 3600)}h`;
 };
 
-function NarrationAge({ ts }: { ts: string }) {
-  const now = useNow();
+function NarrationAge({ ts, now }: { ts: string; now: number }) {
   return <span className="shrink-0 text-xs tabular-nums text-[#00FBFF]/50">{fmtAge(ts, now)}</span>;
 }
 
@@ -174,9 +191,12 @@ const activeTarget = (a: Agent): number | null => {
   return CHALLENGES.some(c => c.id === id) ? id : null;
 };
 
+const agentRuntimeLabel = (agent: Agent) =>
+  `${agent.harness} + ${agent.model}${agent.effort ? ` · ${agent.effort}` : ""}`;
+
 function secondsFrom(start: string | null, end: string | null): number | null {
   if (!start || !end) return null;
-  return Math.max(0, Math.floor((Date.parse(end) - Date.parse(start)) / 1000));
+  return elapsedSeconds(start, end);
 }
 
 function agentsFromRun(
@@ -236,22 +256,15 @@ function agentsFromRun(
   });
 }
 
-function useArenaClock(
+function arenaClock(
   startedAt: string | null,
   deadlineAt: string | null,
   runState: RunState | null,
   runFinishedAt: string | null,
+  now: number,
 ) {
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    if (!startedAt || runState === "finished" || runState === "failed") return;
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [runState, startedAt]);
-
   const end = runFinishedAt ? Date.parse(runFinishedAt) : now;
-  const elapsed = startedAt ? Math.max(0, Math.floor((end - Date.parse(startedAt)) / 1000)) : 0;
+  const elapsed = startedAt ? elapsedSeconds(startedAt, end) ?? 0 : 0;
   const timeUp = deadlineAt ? end >= Date.parse(deadlineAt) && runState === "running" : false;
   return { seconds: elapsed, timeUp };
 }
@@ -295,6 +308,7 @@ function ArenaScreen() {
   const lastFlagEvent = useArenaStore(selectLastFlagEvent);
   const runFinishedAt = useArenaStore(selectRunFinishedAt);
   const runError = useArenaStore(selectRunError);
+  const narrationClockKey = useArenaStore(selectNarrationByEntrant);
   const operator = useOperatorSession();
   useArenaSfx();
 
@@ -340,6 +354,23 @@ function ArenaScreen() {
   // Lives here, not in AgentLog: the panel remounts per agent, and the viewer
   // comparing narration across lanes should not re-press the toggle each time.
   const [narrationOnly, setNarrationOnly] = useState(false);
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(NARRATION_ONLY_STORAGE_KEY);
+      if (stored !== null) setNarrationOnly(stored === "1");
+    } catch {
+      // Storage can be unavailable in private browsing.
+    }
+  }, []);
+  const toggleNarration = useCallback(() => {
+    const next = !narrationOnly;
+    setNarrationOnly(next);
+    try {
+      window.localStorage.setItem(NARRATION_ONLY_STORAGE_KEY, next ? "1" : "0");
+    } catch {
+      // The preference still applies for this tab.
+    }
+  }, [narrationOnly]);
 
   // Null on the overview: nobody is being observed, so no lane is named — the
   // composer speaks to everyone and the challenge board shows the whole field.
@@ -349,10 +380,12 @@ function ArenaScreen() {
   const allFinished = runState === "finished";
   const runFailed = runState === "failed";
   const runTerminal = allFinished || runFailed;
+  const clockRunning = runStartedAt !== null && !runTerminal;
+  const narrationNow = useNow(clockRunning, narrationClockKey);
   // Only while the race is actually running: a run already stopping takes no
   // second stop, and the backend answers the retry with an error.
   const canStopRace = (operator.authenticated || operator.hadSession) && runState === "running";
-  const clock = useArenaClock(runStartedAt, runDeadlineAt, runState, runFinishedAt);
+  const clock = arenaClock(runStartedAt, runDeadlineAt, runState, runFinishedAt, narrationNow);
 
   useEffect(() => {
     if (runState && runState !== "finished" && runState !== "failed") sawLiveRun.current = true;
@@ -596,6 +629,7 @@ function ArenaScreen() {
                   onOpenChallenge={setOpenChallenge}
                   flashes={flashes}
                   raceColumnMode={raceColumnMode}
+                  narrationNow={narrationNow}
                   selectedId={focused?.id ?? null}
                 />
               </div>
@@ -614,7 +648,9 @@ function ArenaScreen() {
                 focused={focused}
                 onClose={closeLog}
                 narrationOnly={narrationOnly}
-                onToggleNarration={() => setNarrationOnly(current => !current)}
+                narrationNow={narrationNow}
+                runTerminal={runTerminal}
+                onToggleNarration={toggleNarration}
               />
             ) : (
               <ArenaStream />
@@ -653,6 +689,7 @@ function ArenaScreen() {
                 flashes={flashes}
                 columnMode={raceColumnMode}
                 compact
+                narrationNow={narrationNow}
                 selectedId={focused?.id ?? null}
               />
             </div>
@@ -1202,15 +1239,19 @@ function AgentLog({
   focused,
   onClose,
   narrationOnly,
+  narrationNow,
+  runTerminal,
   onToggleNarration,
 }: {
   focused: Agent;
   onClose: () => void;
   narrationOnly: boolean;
+  narrationNow: number;
+  runTerminal: boolean;
   onToggleNarration: () => void;
 }) {
-  const lines = useArenaStore(selectConsoleFor(focused.id));
-  const narration = useArenaStore(selectNarrationFor(focused.id));
+  const lines = useArenaStore(narrationOnly ? selectEmptyConsole : selectConsoleFor(focused.id));
+  const narration = useArenaStore(narrationOnly ? selectNarrationFor(focused.id) : selectEmptyNarration);
   const visibleRows = narrationOnly ? narration : lines;
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -1260,7 +1301,7 @@ function AgentLog({
             onClick={onToggleNarration}
             aria-pressed={narrationOnly}
             title="Show only the narrated summary of what this agent is doing"
-            className={`arena-race-mode-tab rounded px-2 py-0.5 text-xs font-bold tracking-wider transition ${
+            className={`arena-race-mode-tab shrink-0 rounded px-2 py-0.5 text-xs font-bold tracking-wider transition ${
               narrationOnly ? "bg-[#00FBFF]/15 text-[#00FBFF]" : "text-[#00FBFF]/50 hover:text-[#00FBFF]"
             }`}
           >
@@ -1275,17 +1316,22 @@ function AgentLog({
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-3 py-2 text-base leading-snug console-scroll">
         {narrationOnly ? (
           narration.length === 0 ? (
-            <div className="text-[#00FBFF]/40 italic">no narration yet</div>
+            <div className="text-[#00FBFF]/40 italic">
+              {finished || runTerminal ? "no narration available" : "waiting for narration…"}
+            </div>
           ) : (
             narration.map((entry, index) => (
-              <div key={entry.id} className="flex min-w-0 items-start gap-2">
+              <div
+                key={entry.id ?? `snapshot:${entry.ts}:${entry.basedOnEventId}`}
+                className="flex min-w-0 items-start gap-2"
+              >
                 <span className="shrink-0 text-[#00FBFF]/50 tabular-nums">{fmtWallClock(entry.ts)}</span>
                 <span className="min-w-0 flex-1 text-[#7fd8dd]">
                   {entry.text}
                   {index === narration.length - 1 && (
                     <>
                       {" "}
-                      <NarrationAge ts={entry.ts} />
+                      <NarrationAge ts={entry.ts} now={narrationNow} />
                     </>
                   )}
                 </span>
@@ -1299,7 +1345,7 @@ function AgentLog({
           <div className="mt-2 border-t border-[#00ff9c]/20 pt-2 text-[#00ff9c] font-bold">
             ◆ AGENT FINISHED · FINAL LOG
           </div>
-        ) : narrationOnly && narration.length === 0 ? null : (
+        ) : narrationOnly ? null : (
           <div className="text-[#00ff9c] animate-pulse">▋</div>
         )}
       </div>
@@ -1397,6 +1443,7 @@ function OverviewStage({
   onOpenChallenge,
   flashes,
   raceColumnMode,
+  narrationNow,
   selectedId,
 }: {
   ranked: Agent[];
@@ -1405,6 +1452,7 @@ function OverviewStage({
   onOpenChallenge: (id: number) => void;
   flashes: string[];
   raceColumnMode: RaceColumnMode;
+  narrationNow: number;
   selectedId: string | null;
 }) {
   return (
@@ -1416,10 +1464,13 @@ function OverviewStage({
           onOpenChallenge={onOpenChallenge}
           flashes={flashes}
           columnMode={raceColumnMode}
+          narrationNow={narrationNow}
           selectedId={selectedId}
         />
       )}
-      {tab === "grid" && <GridView ranked={ranked} onPick={onPick} selectedId={selectedId} />}
+      {tab === "grid" && (
+        <GridView ranked={ranked} onPick={onPick} narrationNow={narrationNow} selectedId={selectedId} />
+      )}
     </div>
   );
 }
@@ -1433,6 +1484,7 @@ function RaceView({
   flashes,
   columnMode,
   compact,
+  narrationNow,
   selectedId,
 }: {
   ranked: Agent[];
@@ -1441,12 +1493,10 @@ function RaceView({
   flashes: string[];
   columnMode: RaceColumnMode;
   compact?: boolean;
+  narrationNow: number;
   selectedId?: string | null;
 }) {
-  const narrationByEntrant = useArenaStore(state => state.projection?.narrationByEntrant ?? EMPTY_NARRATION_BY_ENTRANT);
-  // No clock of its own: the page re-renders every second off useArenaClock
-  // while the run is live, which is when the age matters.
-  const now = Date.now();
+  const narrationByEntrant = useArenaStore(selectNarrationByEntrant);
   const total = CHALLENGES.length;
   const rowGap = compact ? "gap-3" : "gap-4";
   const cellH = compact ? "h-6" : "h-9";
@@ -1590,7 +1640,10 @@ function RaceView({
         const podium = place ? PODIUM[place] : null;
         const celebrating = sting?.agent.id === a.id;
         const latestNarration = narrationByEntrant[a.id]?.at(-1);
-        const harnessLabel = `${a.harness} + ${a.model}${a.effort ? ` · ${a.effort}` : ""}`;
+        const runtimeLabel = agentRuntimeLabel(a);
+        const narrationTip = latestNarration
+          ? `${runtimeLabel}\n${latestNarration.text} · ${fmtAge(latestNarration.ts, narrationNow)}`
+          : undefined;
         return (
           // A div, not a button: the row holds the explorer link on the blockie and
           // an anchor inside a button is invalid markup.
@@ -1601,6 +1654,7 @@ function RaceView({
               else rowRefs.current.delete(a.id);
             }}
             role="button"
+            aria-label={narrationTip ? `Observe ${a.handle}. ${narrationTip}` : `Observe ${a.handle}. ${runtimeLabel}`}
             aria-pressed={selectedId === a.id}
             tabIndex={0}
             onClick={() => onPick(a.id)}
@@ -1661,12 +1715,8 @@ function RaceView({
               className={`arena-race-agent-column relative ${
                 compact ? "w-56 text-base" : "w-[300px] text-2xl"
               } shrink-0 text-left ${latestNarration ? ARENA_TIP_RIGHT_WRAP : ""}`}
-              data-tip={
-                latestNarration
-                  ? `${harnessLabel}\n${latestNarration.text} · ${fmtAge(latestNarration.ts, now)}`
-                  : undefined
-              }
-              title={latestNarration ? undefined : harnessLabel}
+              data-tip={narrationTip}
+              title={latestNarration ? undefined : runtimeLabel}
             >
               <span className="block truncate font-bold text-white">
                 <ModelName name={a.handle} effort={a.effort} />
@@ -1879,22 +1929,40 @@ function RaceFinishSting({ agent, place }: { agent: Agent; place: PodiumPlace })
 function GridView({
   ranked,
   onPick,
+  narrationNow,
   selectedId,
 }: {
   ranked: Agent[];
   onPick: (id: string) => void;
+  narrationNow: number;
   selectedId: string | null;
 }) {
   return (
     <div className="h-full p-2 grid grid-cols-5 auto-rows-fr gap-2">
       {ranked.map(agent => (
-        <GridCard key={agent.id} agent={agent} onPick={onPick} selected={selectedId === agent.id} />
+        <GridCard
+          key={agent.id}
+          agent={agent}
+          onPick={onPick}
+          narrationNow={narrationNow}
+          selected={selectedId === agent.id}
+        />
       ))}
     </div>
   );
 }
 
-function GridCard({ agent, onPick, selected }: { agent: Agent; onPick: (id: string) => void; selected: boolean }) {
+function GridCard({
+  agent,
+  onPick,
+  narrationNow,
+  selected,
+}: {
+  agent: Agent;
+  onPick: (id: string) => void;
+  narrationNow: number;
+  selected: boolean;
+}) {
   const preview = useArenaStore(selectPreviewFor(agent.id));
   const narration = useArenaStore(selectNarrationFor(agent.id));
   const latestNarration = narration.at(-1);
@@ -1947,7 +2015,7 @@ function GridCard({ agent, onPick, selected }: { agent: Agent; onPick: (id: stri
           title={latestNarration.text}
         >
           <span className="min-w-0 flex-1 line-clamp-2 text-[#7fd8dd]/80">{latestNarration.text}</span>
-          <NarrationAge ts={latestNarration.ts} />
+          <NarrationAge ts={latestNarration.ts} now={narrationNow} />
         </div>
       )}
       <div
@@ -2578,9 +2646,7 @@ function AgentBlockieLink({ agent, compact }: { agent: Agent; compact?: boolean 
   if (!agent.address || runChainId !== targetNetwork.id) {
     return (
       <span
-        title={`${agent.harness} + ${agent.model}${agent.effort ? ` · ${agent.effort}` : ""}${
-          agent.address ? ` · ${agent.address}` : " · assigning address"
-        }`}
+        title={`${agentRuntimeLabel(agent)}${agent.address ? ` · ${agent.address}` : " · assigning address"}`}
         className={className}
         style={{ border: `1px solid ${agent.color}55` }}
       >
@@ -2595,7 +2661,7 @@ function AgentBlockieLink({ agent, compact }: { agent: Agent; compact?: boolean 
       target="_blank"
       rel="noopener noreferrer"
       onClick={e => e.stopPropagation()}
-      title={`${agent.harness} + ${agent.model}${agent.effort ? ` · ${agent.effort}` : ""} · ${agent.address}`}
+      title={`${agentRuntimeLabel(agent)} · ${agent.address}`}
       className={`${className} hover:opacity-80`}
       style={{ border: `1px solid ${agent.color}55` }}
     >

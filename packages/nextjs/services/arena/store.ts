@@ -143,6 +143,8 @@ export const selectConnectionError = (state: ArenaStore) => state.connectionErro
 export const selectFeed = (state: ArenaStore) => state.projection?.feed ?? EMPTY_FEED;
 export const selectChat = (state: ArenaStore) => state.projection?.chat ?? EMPTY_CHAT;
 export const selectFunding = (state: ArenaStore) => state.projection?.fundingByEntrant ?? EMPTY_FUNDING;
+export const selectNarrationByEntrant = (state: ArenaStore) =>
+  state.projection?.narrationByEntrant ?? EMPTY_NARRATION_BY_ENTRANT;
 export const selectLastFlagEvent = (state: ArenaStore) => state.projection?.lastFlagEvent ?? null;
 export const selectFirstBlood = (state: ArenaStore) => state.projection?.firstBlood ?? null;
 export const selectRunFinishedAt = (state: ArenaStore) => state.projection?.runFinishedAt ?? null;
@@ -153,12 +155,15 @@ export const selectPreviewFor = (entrantId: string) => (state: ArenaStore) =>
   state.projection?.previewsByEntrant[entrantId] ?? EMPTY_PREVIEW;
 export const selectNarrationFor = (entrantId: string) => (state: ArenaStore) =>
   state.projection?.narrationByEntrant[entrantId] ?? EMPTY_NARRATION;
+export const selectEmptyConsole = () => EMPTY_CONSOLE;
+export const selectEmptyNarration = () => EMPTY_NARRATION;
 export const selectPendingSteersFor = (entrantId: string) => (state: ArenaStore) =>
   state.pendingSteers[entrantId] ?? EMPTY_PENDING_STEERS;
 
 const EMPTY_FEED: NonNullable<ProjectionState["feed"]> = [];
 const EMPTY_CHAT: NonNullable<ProjectionState["chat"]> = [];
 const EMPTY_FUNDING: NonNullable<ProjectionState["fundingByEntrant"]> = {};
+const EMPTY_NARRATION_BY_ENTRANT: NonNullable<ProjectionState["narrationByEntrant"]> = {};
 const EMPTY_CONSOLE: NonNullable<ProjectionState["consoleByEntrant"][string]> = [];
 const EMPTY_PREVIEW: NonNullable<ProjectionState["previewsByEntrant"][string]> = [];
 const EMPTY_NARRATION: NonNullable<ProjectionState["narrationByEntrant"][string]> = [];

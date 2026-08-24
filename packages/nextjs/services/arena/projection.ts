@@ -42,7 +42,7 @@ export interface FirstBlood {
 }
 
 export interface NarrationEntry {
-  id: number;
+  id: number | null;
   ts: string;
   text: string;
   basedOnEventId: number;
@@ -84,7 +84,7 @@ export function initialProjection(run: RunSnapshot): ProjectionState {
     narrationByEntrant[entrant.id] = entrant.narration
       ? [
           {
-            id: entrant.narration.basedOnEventId,
+            id: null,
             ts: entrant.narration.ts,
             text: entrant.narration.text,
             basedOnEventId: entrant.narration.basedOnEventId,
@@ -311,30 +311,8 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         ...entrant,
         currentChallengeId: event.payload.challengeId,
       }));
-    // The snapshot seeds the latest line before history replays the older ones,
-    // so arrival order is not timeline order: sort on ts (the journal time; the
-    // seed carries no event id). A replay of the seeded line (same ts, same
-    // text) replaces the seed instead of doubling it. basedOnEventId is an audit
-    // pointer, not an identity — a "still waiting" line written after 90 s of
-    // silence reuses the cursor of the line before it.
-    case "entrant.narration": {
-      const entries = next.narrationByEntrant[event.payload.entrantId] ?? [];
-      const merged = [
-        ...entries.filter(entry => entry.ts !== event.ts || entry.text !== event.payload.text),
-        {
-          id: event.id,
-          ts: event.ts,
-          text: event.payload.text,
-          basedOnEventId: event.payload.basedOnEventId,
-        },
-      ]
-        .sort((a, b) => a.ts.localeCompare(b.ts))
-        .slice(-NARRATION_LIMIT);
-      return {
-        ...next,
-        narrationByEntrant: { ...next.narrationByEntrant, [event.payload.entrantId]: merged },
-      };
-    }
+    case "entrant.narration":
+      return appendNarration(next, event);
     case "entrant.error":
       next = appendConsole(next, event.payload.entrantId, {
         id: event.id,
@@ -374,6 +352,33 @@ function updateEntrant(
 function appendConsole(state: ProjectionState, entrantId: string, entry: ConsoleEntry): ProjectionState {
   const entries = [...(state.consoleByEntrant[entrantId] ?? []), entry].slice(-CONSOLE_LIMIT);
   return { ...state, consoleByEntrant: { ...state.consoleByEntrant, [entrantId]: entries } };
+}
+
+function appendNarration(
+  state: ProjectionState,
+  event: Extract<ArenaEvent, { type: "entrant.narration" }>,
+): ProjectionState {
+  const entrantId = event.payload.entrantId;
+  const entries = state.narrationByEntrant[entrantId] ?? [];
+  // The snapshot seed has no journal identity. Real narration events replace it
+  // after replay reaches its audit cursor; real rows dedupe only by their own id.
+  const merged = [
+    ...entries.filter(entry => {
+      if (entry.id !== null) return entry.id !== event.id;
+      const sameLine = entry.ts === event.ts && entry.text === event.payload.text;
+      return !sameLine && event.id < entry.basedOnEventId;
+    }),
+    {
+      id: event.id,
+      ts: event.ts,
+      text: event.payload.text,
+      basedOnEventId: event.payload.basedOnEventId,
+    },
+  ]
+    .sort((a, b) => a.ts.localeCompare(b.ts) || (a.id ?? Number.MAX_SAFE_INTEGER) - (b.id ?? Number.MAX_SAFE_INTEGER))
+    .slice(-NARRATION_LIMIT);
+
+  return { ...state, narrationByEntrant: { ...state.narrationByEntrant, [entrantId]: merged } };
 }
 
 function attachToolResult(
