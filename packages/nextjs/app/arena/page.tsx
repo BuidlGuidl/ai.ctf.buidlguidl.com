@@ -1804,7 +1804,7 @@ function RaceView({
             <span
               className={`arena-race-agent-column relative ${
                 compact ? "w-56 text-base" : "w-[300px] text-2xl"
-              } shrink-0 text-left ${latestNarration ? ARENA_TIP_RIGHT_WRAP : ""}`}
+              } shrink-0 text-left ${latestNarration ? `${ARENA_TIP_RIGHT_WRAP} z-20` : ""}`}
               data-tip={narrationTip}
               title={latestNarration ? undefined : runtimeLabel}
             >
