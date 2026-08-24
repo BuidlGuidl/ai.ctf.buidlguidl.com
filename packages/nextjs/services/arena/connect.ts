@@ -23,6 +23,7 @@ const BACKFILL_TYPES = [
   // and its replacement rebuild as one continuous console.
   "entrant.restarted",
   "entrant.nudged",
+  "entrant.narration",
   "director.broadcast",
   "score.flag",
   "entrant.error",
@@ -44,8 +45,8 @@ async function loadBackfill(runId: string): Promise<ArenaEvent[]> {
       if (!result.hasMore) break;
       before = result.events[0].id;
     }
-  } catch {
-    // A run still repaints from its snapshot without the replayed views.
+  } catch (error) {
+    console.warn("Could not load arena history. The run continues from its snapshot.", error);
     return pages.flat();
   }
 
