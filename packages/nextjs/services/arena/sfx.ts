@@ -3,7 +3,17 @@
 import { useEffect } from "react";
 import create from "zustand";
 
-export type SfxCue = "countdown" | "launch" | "flag" | "firstBlood" | "lead" | "finish" | "podium" | "fail" | "toggle";
+export type SfxCue =
+  | "countdown"
+  | "launch"
+  | "flag"
+  | "firstBlood"
+  | "lead"
+  | "idle"
+  | "finish"
+  | "podium"
+  | "fail"
+  | "toggle";
 
 const STORAGE_KEY = "arena.sfx.muted";
 
@@ -39,6 +49,10 @@ const CUES: Record<SfxCue, Note[]> = {
     { freq: 659, at: 0.06, dur: 0.07, type: "square", gain: 0.035 },
     { freq: 784, at: 0.12, dur: 0.14, type: "square", gain: 0.04 },
   ],
+  idle: [
+    { freq: 330, at: 0, dur: 0.09, type: "triangle", gain: 0.018 },
+    { freq: 247, at: 0.08, dur: 0.13, type: "triangle", gain: 0.014 },
+  ],
   finish: [
     { freq: 784, at: 0, dur: 0.1, type: "square", gain: 0.045 },
     { freq: 1047, at: 0.1, dur: 0.1, type: "square", gain: 0.045 },
@@ -63,6 +77,7 @@ const CUES: Record<SfxCue, Note[]> = {
 const THROTTLE_MS: Partial<Record<SfxCue, number>> = {
   flag: 90,
   lead: 400,
+  idle: 1500,
   finish: 300,
 };
 

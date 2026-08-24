@@ -51,6 +51,11 @@ export interface NarrationEntry {
 export interface ProjectionState {
   run: RunSnapshot;
   lastEventId: number;
+  // Upper bound for "status unchanged since": seeded with the load time, then
+  // tightened by replayed status events. `statusSeededAt` lets the UI tell a
+  // seed stamp from an observed transition.
+  statusChangedAt: Record<string, string>;
+  statusSeededAt: string;
   consoleByEntrant: Record<string, ConsoleEntry[]>;
   previewsByEntrant: Record<string, string[]>;
   narrationByEntrant: Record<string, NarrationEntry[]>;
@@ -72,13 +77,15 @@ const NARRATION_LIMIT = 20;
 const FEED_LIMIT = 40;
 const CHAT_LIMIT = 60;
 
-export function initialProjection(run: RunSnapshot): ProjectionState {
+export function initialProjection(run: RunSnapshot, seededAt: string): ProjectionState {
+  const statusChangedAt: Record<string, string> = {};
   const consoleByEntrant: Record<string, ConsoleEntry[]> = {};
   const previewsByEntrant: Record<string, string[]> = {};
   const narrationByEntrant: Record<string, NarrationEntry[]> = {};
   const fundingByEntrant: Record<string, FundingProjection> = {};
 
   for (const entrant of run.entrants) {
+    statusChangedAt[entrant.id] = seededAt;
     consoleByEntrant[entrant.id] = [];
     previewsByEntrant[entrant.id] = [];
     narrationByEntrant[entrant.id] = entrant.narration
@@ -101,6 +108,8 @@ export function initialProjection(run: RunSnapshot): ProjectionState {
   return {
     run,
     lastEventId: run.lastEventId,
+    statusChangedAt,
+    statusSeededAt: seededAt,
     consoleByEntrant,
     previewsByEntrant,
     narrationByEntrant,
@@ -137,8 +146,19 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         runError: event.payload.reason ?? next.runError,
       };
     case "entrant.status": {
-      const previous = state.run.entrants.find(entrant => entrant.id === event.payload.entrantId)?.status;
-      next = updateEntrant(next, event.payload.entrantId, entrant => ({ ...entrant, status: event.payload.status }));
+      const id = event.payload.entrantId;
+      const previous = state.run.entrants.find(entrant => entrant.id === id)?.status;
+      const previousChangedAt = state.statusChangedAt[id];
+      const changedAt =
+        previous !== event.payload.status ||
+        previousChangedAt === undefined ||
+        Date.parse(event.ts) < Date.parse(previousChangedAt)
+          ? event.ts
+          : previousChangedAt;
+      next = {
+        ...updateEntrant(next, id, entrant => ({ ...entrant, status: event.payload.status })),
+        statusChangedAt: { ...state.statusChangedAt, [id]: changedAt },
+      };
       const item = statusFeedItem(event, previous);
       return item ? appendFeed(next, item) : next;
     }
