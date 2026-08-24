@@ -26,6 +26,7 @@ export interface Agent {
   address: Address | null;
   solved: number[];
   status: AgentStatus;
+  statusChangedAt: string | null;
   tokens: number;
   cost: number | null;
   usagePending: boolean;

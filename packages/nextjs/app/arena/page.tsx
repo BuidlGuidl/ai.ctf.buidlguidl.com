@@ -47,6 +47,9 @@ import {
   selectRunId,
   selectRunStartedAt,
   selectRunState,
+  selectServerOffsetMs,
+  selectStatusChangedAt,
+  selectStatusSeededAt,
   useArenaStore,
 } from "~~/services/arena/store";
 import { useOperatorSession } from "~~/services/arena/useOperatorSession";
@@ -105,6 +108,10 @@ const PODIUM = {
 // `podiumBroadcast` keyframes so the banner is never cut off mid-animation.
 const FINISH_STING_MS = 4600;
 const STOP_ARM_MS = 6000;
+const IDLE_FADE_MS = 20_000;
+// The backend flips a run to `running` before the containers preflight, and the
+// entrants sit `idle` until their first turn. No fading while the race boots.
+const FADE_START_GRACE_MS = 60_000;
 // The confirm stays disabled for a beat after arming, so the second half of a
 // double-click cannot reach it.
 const STOP_CONFIRM_DWELL_MS = 400;
@@ -137,6 +144,31 @@ const activeTarget = (a: Agent): number | null => {
   return CHALLENGES.some(c => c.id === id) ? id : null;
 };
 
+function statusHeldForMs(agent: Agent, now: number | null): number {
+  if (now === null || agent.statusChangedAt === null) return 0;
+  const changedAt = Date.parse(agent.statusChangedAt);
+  return Number.isFinite(changedAt) ? now - changedAt : 0;
+}
+
+// `now` is null while the run is not live, so a locked board never fades. A
+// finisher that cleared every flag is done, not dead, so it keeps full colour.
+function isAgentFaded(agent: Agent, now: number | null): boolean {
+  if (now === null || agent.finishedAt !== null) return false;
+  if (agent.status === "done") return true;
+  if (agent.status !== "idle") return false;
+  return statusHeldForMs(agent, now) >= IDLE_FADE_MS;
+}
+
+// What the nudge sound is for: an agent that has stopped moving on its own. The
+// faded ones, and on top of them one stuck on a permission prompt — that one
+// keeps its colour and its warning pulse, because it wants the director's
+// attention rather than less of it.
+function isAgentStalled(agent: Agent, now: number | null): boolean {
+  if (isAgentFaded(agent, now)) return true;
+  if (now === null || agent.finishedAt !== null || agent.status !== "blocked") return false;
+  return statusHeldForMs(agent, now) >= IDLE_FADE_MS;
+}
+
 function secondsFrom(start: string | null, end: string | null): number | null {
   if (!start || !end) return null;
   return Math.max(0, Math.floor((Date.parse(end) - Date.parse(start)) / 1000));
@@ -144,6 +176,7 @@ function secondsFrom(start: string | null, end: string | null): number | null {
 
 function agentsFromRun(
   entrants: EntrantSummary[] | null,
+  statusChangedAt: Record<string, string> | null,
   startedAt: string | null,
   runState: RunState | null,
 ): Agent[] {
@@ -163,6 +196,7 @@ function agentsFromRun(
         address: null,
         solved: [],
         status: "idle",
+        statusChangedAt: null,
         tokens: 0,
         cost: null,
         usagePending,
@@ -189,6 +223,7 @@ function agentsFromRun(
       address: entrant.address as Address | null,
       solved: entrant.solves.map(solve => solve.challengeId),
       status: entrant.status,
+      statusChangedAt: statusChangedAt?.[entrant.id] ?? null,
       tokens: entrant.inputTokens + entrant.outputTokens,
       cost: entrant.costUsd,
       usagePending,
@@ -216,7 +251,7 @@ function useArenaClock(
   const end = runFinishedAt ? Date.parse(runFinishedAt) : now;
   const elapsed = startedAt ? Math.max(0, Math.floor((end - Date.parse(startedAt)) / 1000)) : 0;
   const timeUp = deadlineAt ? end >= Date.parse(deadlineAt) && runState === "running" : false;
-  return { seconds: elapsed, timeUp };
+  return { now, seconds: elapsed, timeUp };
 }
 
 // The page is one client component reading `useSearchParams`, so it needs a
@@ -234,7 +269,7 @@ function ArenaScreen() {
   const flashTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const [openChallenge, setOpenChallenge] = useState<number | null>(null);
   const [stopError, setStopError] = useState<string | null>(null);
-  const [raceColumnMode, setRaceColumnMode] = useState<RaceColumnMode>("order");
+  const [raceColumnMode, setRaceColumnMode] = useState<RaceColumnMode>("challenges");
   const [liveStarted, setLiveStarted] = useState(false);
   const [ceremonyReady, setCeremonyReady] = useState(false);
   // Whoever watches the match lock gets the finish sting before the podium takes
@@ -247,10 +282,15 @@ function ArenaScreen() {
   // or below this cursor are that history; only what lands past it gets a sound.
   const heardEventId = useRef<number | null>(null);
   const heardRunState = useRef<RunState | null>(null);
+  const idleNudged = useRef(new Set<string>());
+  const idleSoundRunId = useRef<string | null>(null);
   const route = useArenaRoute();
   const runId = useArenaStore(selectRunId);
   const runState = useArenaStore(selectRunState);
   const runEntrants = useArenaStore(selectRunEntrants);
+  const statusChangedAt = useArenaStore(selectStatusChangedAt);
+  const statusSeededAt = useArenaStore(selectStatusSeededAt);
+  const serverOffsetMs = useArenaStore(selectServerOffsetMs);
   const runStartedAt = useArenaStore(selectRunStartedAt);
   const runDeadlineAt = useArenaStore(selectRunDeadlineAt);
   const connectionStatus = useArenaStore(selectConnectionStatus);
@@ -284,6 +324,8 @@ function ArenaScreen() {
     sawLiveRun.current = false;
     heardEventId.current = null;
     heardRunState.current = null;
+    idleNudged.current.clear();
+    idleSoundRunId.current = null;
   }, [routeRunId]);
 
   const currentRunId = useArenaStore(state => state.currentRunId);
@@ -293,8 +335,8 @@ function ArenaScreen() {
   }, [currentRunId]);
 
   const agents = useMemo(
-    () => agentsFromRun(runEntrants, runStartedAt, runState),
-    [runEntrants, runStartedAt, runState],
+    () => agentsFromRun(runEntrants, statusChangedAt, runStartedAt, runState),
+    [runEntrants, runStartedAt, runState, statusChangedAt],
   );
   const startMatch = useCallback(() => setLiveStarted(true), []);
 
@@ -326,6 +368,39 @@ function ArenaScreen() {
     if (previous === null || previous === runState) return;
     if (runState === "failed") playSfx("fail");
   }, [runState]);
+
+  // Not while `stopping`: every entrant goes `done` as the run winds down, and a
+  // board dimming all at once there reads as a field that died rather than as a
+  // race the operator ended. The stamps being compared come from the backend, so
+  // the browser clock is carried onto its clock first.
+  const raceLive = runState === "running";
+  const serverNow = clock.now + serverOffsetMs;
+  const pastGrace = runStartedAt !== null && serverNow - Date.parse(runStartedAt) >= FADE_START_GRACE_MS;
+  const fadeNow = raceLive && pastGrace ? serverNow : null;
+
+  useEffect(() => {
+    if (!runEntrants || !runId) return;
+    const nudged = idleNudged.current;
+    if (idleSoundRunId.current !== runId) {
+      nudged.clear();
+      agents.filter(agent => isAgentStalled(agent, fadeNow)).forEach(agent => nudged.add(agent.id));
+      idleSoundRunId.current = runId;
+      return;
+    }
+    // Keyed on the stall, not on `idle`: an agent whose process exited and one
+    // sitting on a permission prompt are both worth hearing about, and neither
+    // passes through `idle`.
+    agents.forEach(agent => {
+      if (!isAgentStalled(agent, fadeNow)) {
+        nudged.delete(agent.id);
+      } else if (!nudged.has(agent.id)) {
+        nudged.add(agent.id);
+        // A seed stamp means we never saw this agent stop, only that it already
+        // had when the page loaded: show it on the board, but don't announce it.
+        if (agent.statusChangedAt !== statusSeededAt) playSfx("idle");
+      }
+    });
+  }, [agents, fadeNow, runEntrants, runId, statusSeededAt]);
 
   // A link with no view lands on the board while the race is live and on the
   // podium once it is locked; anything the operator picked is spelled out in the
@@ -551,6 +626,7 @@ function ArenaScreen() {
                 />
                 <OverviewStage
                   ranked={ranked}
+                  now={fadeNow}
                   tab={overviewTab}
                   onPick={goFocus}
                   onOpenChallenge={setOpenChallenge}
@@ -598,6 +674,7 @@ function ArenaScreen() {
             <div className="arena-grid-race-scroll h-[190px] overflow-y-auto console-scroll">
               <RaceView
                 ranked={ranked}
+                now={fadeNow}
                 onPick={goFocus}
                 onOpenChallenge={setOpenChallenge}
                 flashes={flashes}
@@ -1300,6 +1377,7 @@ function ConsoleRow({ line }: { line: ConsoleEntry }) {
 
 function OverviewStage({
   ranked,
+  now,
   tab,
   onPick,
   onOpenChallenge,
@@ -1308,6 +1386,7 @@ function OverviewStage({
   selectedId,
 }: {
   ranked: Agent[];
+  now: number | null;
   tab: OverviewTab;
   onPick: (id: string) => void;
   onOpenChallenge: (id: number) => void;
@@ -1320,6 +1399,7 @@ function OverviewStage({
       {tab === "race" && (
         <RaceView
           ranked={ranked}
+          now={now}
           onPick={onPick}
           onOpenChallenge={onOpenChallenge}
           flashes={flashes}
@@ -1327,7 +1407,7 @@ function OverviewStage({
           selectedId={selectedId}
         />
       )}
-      {tab === "grid" && <GridView ranked={ranked} onPick={onPick} selectedId={selectedId} />}
+      {tab === "grid" && <GridView ranked={ranked} now={now} onPick={onPick} selectedId={selectedId} />}
     </div>
   );
 }
@@ -1336,6 +1416,7 @@ function OverviewStage({
 // rows and no harness badge. Its viewport shows five agents and scrolls to the rest.
 function RaceView({
   ranked,
+  now,
   onPick,
   onOpenChallenge,
   flashes,
@@ -1344,6 +1425,7 @@ function RaceView({
   selectedId,
 }: {
   ranked: Agent[];
+  now: number | null;
   onPick: (id: string) => void;
   onOpenChallenge: (id: number) => void;
   flashes: string[];
@@ -1493,6 +1575,10 @@ function RaceView({
         const place = done(a) && i < 3 ? ((i + 1) as PodiumPlace) : null;
         const podium = place ? PODIUM[place] : null;
         const celebrating = sting?.agent.id === a.id;
+        const faded = isAgentFaded(a, now) && selectedId !== a.id;
+        const fadeClass = `transition-opacity duration-300 group-hover:opacity-100 ${
+          faded ? "opacity-50" : "opacity-100"
+        }`;
         return (
           // A div, not a button: the row holds the explorer link on the blockie and
           // an anchor inside a button is invalid markup.
@@ -1530,7 +1616,7 @@ function RaceView({
               />
             )}
             <span
-              className={`arena-race-rank flex w-10 shrink-0 items-center justify-center text-center ${numText} font-bold tabular-nums ${
+              className={`arena-race-rank flex w-10 shrink-0 items-center justify-center text-center ${numText} font-bold tabular-nums ${fadeClass} ${
                 place
                   ? ""
                   : done(a)
@@ -1557,27 +1643,35 @@ function RaceView({
                 i + 1
               )}
             </span>
-            <StatusDot status={a.status} />
-            <AgentBlockieLink agent={a} compact={compact} />
+            <span className={`flex shrink-0 ${fadeClass}`}>
+              <StatusDot status={a.status} />
+            </span>
+            <span className={`flex shrink-0 ${fadeClass}`}>
+              <AgentBlockieLink agent={a} compact={compact} />
+            </span>
             <span
               className={`arena-race-agent-column ${
                 compact ? "w-56 text-base" : "w-[300px] text-2xl"
-              } truncate font-bold text-white shrink-0`}
+              } truncate font-bold text-white shrink-0 ${fadeClass}`}
               title={`${a.harness} + ${a.model}${a.effort ? ` · ${a.effort}` : ""}`}
             >
               <ModelName name={a.handle} effort={a.effort} />
             </span>
-            <span className={`arena-race-tokens w-16 text-right ${dataText} tabular-nums shrink-0 text-[#00FBFF]/75`}>
+            <span
+              className={`arena-race-tokens w-16 text-right ${dataText} tabular-nums shrink-0 text-[#00FBFF]/75 ${fadeClass}`}
+            >
               {a.usagePending && a.tokens === 0 ? <PendingUsage /> : fmtTokens(a.tokens)}
             </span>
-            <span className={`arena-race-cost w-20 text-right ${dataText} tabular-nums shrink-0 text-[#FFBE00]/90`}>
+            <span
+              className={`arena-race-cost w-20 text-right ${dataText} tabular-nums shrink-0 text-[#FFBE00]/90 ${fadeClass}`}
+            >
               {a.cost !== null ? `$${a.cost.toFixed(2)}` : a.usagePending ? <PendingUsage /> : "N/A"}
             </span>
 
             {/* Order mode reads as the route the agent took; challenge mode parks every
                 flag under its own number, so a gap in a row is a challenge nobody's row
                 can hide. Same cells either way — only what a column means changes. */}
-            <div className="arena-race-flags flex-1 flex gap-1">
+            <div className={`arena-race-flags flex-1 flex gap-1 ${fadeClass}`}>
               {columnMode === "challenges"
                 ? CHALLENGES.map(challenge => {
                     const captureIndex = a.solved.indexOf(challenge.id);
@@ -1616,12 +1710,16 @@ function RaceView({
                           onClick={openCell(challenge.id)}
                           data-tip={tip}
                           aria-label={tip}
-                          className={`arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums ${CELL_LINK} ${
-                            a.status === "working" ? "cell-working" : "opacity-40"
-                          }`}
-                          style={{ background: `${color}1f`, borderColor: color, color }}
+                          className={`arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] ${numText} font-bold tabular-nums ${CELL_LINK}`}
                         >
-                          {challenge.id}
+                          <span
+                            className={`absolute inset-0 flex items-center justify-center rounded-[3px] border ${
+                              a.status === "working" ? "cell-working" : "opacity-40"
+                            }`}
+                            style={{ background: `${color}1f`, borderColor: color, color }}
+                          >
+                            {challenge.id}
+                          </span>
                         </button>
                       );
                     }
@@ -1673,7 +1771,8 @@ function RaceView({
                           : STATUS_STYLE[a.status].label;
                       // The in-flight slot names the entrant's reported target — an
                       // outlined number, so it can't read as a captured flag.
-                      const cellClass = `arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] border flex items-center justify-center ${numText} font-bold tabular-nums ${
+                      const cellClass = `arena-race-cell relative ${ARENA_TIP} flex-1 ${cellH} rounded-[3px] ${numText} font-bold tabular-nums`;
+                      const contentClass = `absolute inset-0 flex items-center justify-center rounded-[3px] border ${
                         a.status === "working" ? "cell-working" : "opacity-40"
                       }`;
                       const cellStyle = { background: `${color}1f`, borderColor: color, color };
@@ -1687,13 +1786,16 @@ function RaceView({
                           data-tip={tip}
                           aria-label={tip}
                           className={`${cellClass} ${CELL_LINK}`}
-                          style={cellStyle}
                         >
-                          {target}
+                          <span className={contentClass} style={cellStyle}>
+                            {target}
+                          </span>
                         </button>
                       ) : (
-                        <span key={k} data-tip={tip} aria-label={tip} className={cellClass} style={cellStyle}>
-                          …
+                        <span key={k} data-tip={tip} aria-label={tip} className={cellClass}>
+                          <span className={contentClass} style={cellStyle}>
+                            …
+                          </span>
                         </span>
                       );
                     }
@@ -1709,7 +1811,9 @@ function RaceView({
                   })}
             </div>
 
-            <span className={`arena-race-result w-28 text-right ${numText} tabular-nums shrink-0 text-[#00FBFF]/85`}>
+            <span
+              className={`arena-race-result w-28 text-right ${numText} tabular-nums shrink-0 text-[#00FBFF]/85 ${fadeClass}`}
+            >
               {done(a) ? (
                 <span
                   className="agent-finish-time whitespace-nowrap font-bold"
@@ -1773,26 +1877,40 @@ function RaceFinishSting({ agent, place }: { agent: Agent; place: PodiumPlace })
 
 function GridView({
   ranked,
+  now,
   onPick,
   selectedId,
 }: {
   ranked: Agent[];
+  now: number | null;
   onPick: (id: string) => void;
   selectedId: string | null;
 }) {
   return (
     <div className="h-full p-2 grid grid-cols-5 auto-rows-fr gap-2">
       {ranked.map(agent => (
-        <GridCard key={agent.id} agent={agent} onPick={onPick} selected={selectedId === agent.id} />
+        <GridCard key={agent.id} agent={agent} now={now} onPick={onPick} selected={selectedId === agent.id} />
       ))}
     </div>
   );
 }
 
-function GridCard({ agent, onPick, selected }: { agent: Agent; onPick: (id: string) => void; selected: boolean }) {
+function GridCard({
+  agent,
+  now,
+  onPick,
+  selected,
+}: {
+  agent: Agent;
+  now: number | null;
+  onPick: (id: string) => void;
+  selected: boolean;
+}) {
   const preview = useArenaStore(selectPreviewFor(agent.id));
   const finished = agent.status === "done";
   const target = activeTarget(agent);
+  const faded = isAgentFaded(agent, now) && !selected;
+  const fadeClass = `transition-opacity duration-300 group-hover:opacity-100 ${faded ? "opacity-50" : "opacity-100"}`;
   return (
     <div
       role="button"
@@ -1809,14 +1927,18 @@ function GridCard({ agent, onPick, selected }: { agent: Agent; onPick: (id: stri
         agent.status === "blocked" ? "border-[#FFBE00]/60" : "border-[#00FBFF]/15"
       } ${selected ? "arena-agent-selected" : ""}`}
     >
-      <div className="flex items-center gap-1.5 px-2 h-10 shrink-0 border-b border-[#00FBFF]/10 bg-[#001417]">
+      <div
+        className={`flex items-center gap-1.5 px-2 h-10 shrink-0 border-b border-[#00FBFF]/10 bg-[#001417] ${fadeClass}`}
+      >
         <AgentBlockieLink agent={agent} />
         <span className="text-base font-bold text-white truncate flex-1">
           <ModelName name={agent.handle} effort={agent.effort} />
         </span>
         <StatusDot status={agent.status} />
       </div>
-      <div className="flex items-center gap-2 px-2 h-8 shrink-0 text-sm border-b border-[#00FBFF]/[0.07] bg-[#000d0f]">
+      <div
+        className={`flex items-center gap-2 px-2 h-8 shrink-0 text-sm border-b border-[#00FBFF]/[0.07] bg-[#000d0f] ${fadeClass}`}
+      >
         <span className="truncate" style={{ color: finished ? "#00ff9c" : STATUS_STYLE[agent.status].color }}>
           {agent.finishedAt !== null ? `◆ CLEARED · ${fmtClock(agent.finishedAt)}` : STATUS_STYLE[agent.status].label}
         </span>
@@ -1833,7 +1955,7 @@ function GridCard({ agent, onPick, selected }: { agent: Agent; onPick: (id: stri
         </span>
       </div>
       <div
-        className={`flex-1 min-h-0 flex flex-col justify-end overflow-hidden px-2 py-1 text-sm leading-[1.45] ${
+        className={`flex-1 min-h-0 flex flex-col justify-end overflow-hidden px-2 py-1 text-sm leading-[1.45] ${fadeClass} ${
           finished ? "agent-terminal-locked" : ""
         }`}
       >
@@ -1850,7 +1972,7 @@ function GridCard({ agent, onPick, selected }: { agent: Agent; onPick: (id: stri
           <div className="text-[#00ff9c] animate-pulse shrink-0">▋</div>
         )}
       </div>
-      <div className="h-1 shrink-0 bg-[#00FBFF]/10">
+      <div className={`h-1 shrink-0 bg-[#00FBFF]/10 ${fadeClass}`}>
         <div
           className="h-full transition-all duration-500"
           style={{ width: `${(agent.solved.length / CHALLENGES.length) * 100}%`, background: agent.color }}
