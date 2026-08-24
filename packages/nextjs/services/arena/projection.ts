@@ -41,6 +41,13 @@ export interface FirstBlood {
   ts: string;
 }
 
+export interface NarrationEntry {
+  id: number | null;
+  ts: string;
+  text: string;
+  basedOnEventId: number;
+}
+
 export interface ProjectionState {
   run: RunSnapshot;
   lastEventId: number;
@@ -51,6 +58,7 @@ export interface ProjectionState {
   statusSeededAt: string;
   consoleByEntrant: Record<string, ConsoleEntry[]>;
   previewsByEntrant: Record<string, string[]>;
+  narrationByEntrant: Record<string, NarrationEntry[]>;
   fundingByEntrant: Record<string, FundingProjection>;
   feed: FeedItem[];
   chat: ChatItem[];
@@ -65,6 +73,7 @@ export interface ProjectionState {
 
 const CONSOLE_LIMIT = 70;
 const PREVIEW_LIMIT = 10;
+const NARRATION_LIMIT = 20;
 const FEED_LIMIT = 40;
 const CHAT_LIMIT = 60;
 
@@ -72,12 +81,23 @@ export function initialProjection(run: RunSnapshot, seededAt: string): Projectio
   const statusChangedAt: Record<string, string> = {};
   const consoleByEntrant: Record<string, ConsoleEntry[]> = {};
   const previewsByEntrant: Record<string, string[]> = {};
+  const narrationByEntrant: Record<string, NarrationEntry[]> = {};
   const fundingByEntrant: Record<string, FundingProjection> = {};
 
   for (const entrant of run.entrants) {
     statusChangedAt[entrant.id] = seededAt;
     consoleByEntrant[entrant.id] = [];
     previewsByEntrant[entrant.id] = [];
+    narrationByEntrant[entrant.id] = entrant.narration
+      ? [
+          {
+            id: null,
+            ts: entrant.narration.ts,
+            text: entrant.narration.text,
+            basedOnEventId: entrant.narration.basedOnEventId,
+          },
+        ]
+      : [];
     fundingByEntrant[entrant.id] = { address: entrant.address, wei: null, funded: false };
   }
 
@@ -92,6 +112,7 @@ export function initialProjection(run: RunSnapshot, seededAt: string): Projectio
     statusSeededAt: seededAt,
     consoleByEntrant,
     previewsByEntrant,
+    narrationByEntrant,
     fundingByEntrant,
     feed: [],
     chat: [],
@@ -310,6 +331,8 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         ...entrant,
         currentChallengeId: event.payload.challengeId,
       }));
+    case "entrant.narration":
+      return appendNarration(next, event);
     case "entrant.error":
       next = appendConsole(next, event.payload.entrantId, {
         id: event.id,
@@ -349,6 +372,33 @@ function updateEntrant(
 function appendConsole(state: ProjectionState, entrantId: string, entry: ConsoleEntry): ProjectionState {
   const entries = [...(state.consoleByEntrant[entrantId] ?? []), entry].slice(-CONSOLE_LIMIT);
   return { ...state, consoleByEntrant: { ...state.consoleByEntrant, [entrantId]: entries } };
+}
+
+function appendNarration(
+  state: ProjectionState,
+  event: Extract<ArenaEvent, { type: "entrant.narration" }>,
+): ProjectionState {
+  const entrantId = event.payload.entrantId;
+  const entries = state.narrationByEntrant[entrantId] ?? [];
+  // The snapshot seed has no journal identity. Real narration events replace it
+  // after replay reaches its audit cursor; real rows dedupe only by their own id.
+  const merged = [
+    ...entries.filter(entry => {
+      if (entry.id !== null) return entry.id !== event.id;
+      const sameLine = entry.ts === event.ts && entry.text === event.payload.text;
+      return !sameLine && event.id < entry.basedOnEventId;
+    }),
+    {
+      id: event.id,
+      ts: event.ts,
+      text: event.payload.text,
+      basedOnEventId: event.payload.basedOnEventId,
+    },
+  ]
+    .sort((a, b) => a.ts.localeCompare(b.ts) || (a.id ?? Number.MAX_SAFE_INTEGER) - (b.id ?? Number.MAX_SAFE_INTEGER))
+    .slice(-NARRATION_LIMIT);
+
+  return { ...state, narrationByEntrant: { ...state.narrationByEntrant, [entrantId]: merged } };
 }
 
 function attachToolResult(
