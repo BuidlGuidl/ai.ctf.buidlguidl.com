@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo } from "react";
 import type { SessionResponse } from "./arena-types";
 import { devSigner, operatorSiweMessage, seedTypedData } from "./auth";
 import { arenaClient } from "./client";
-import { useAccount, useSignMessage, useSignTypedData, useSwitchChain } from "wagmi";
+import { useAccount, useConfig, useSignMessage, useSignTypedData, useSwitchChain } from "wagmi";
+import { getAccount } from "wagmi/actions";
 import create from "zustand";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 import { selectRunChainId, useArenaStore } from "~~/services/arena/store";
@@ -96,16 +97,38 @@ export function useAuthenticationStatus(): "loading" | "unauthenticated" | "auth
 
 let pendingSession: Promise<SessionResponse> | null = null;
 
+export function useEnsureChain() {
+  const config = useConfig();
+  const { switchChainAsync } = useSwitchChain();
+
+  return useCallback(
+    async (chainId: number) => {
+      // Read the wallet's chain at call time: a handler that switches and then
+      // signs must not act on the chain this render captured.
+      const account = getAccount(config);
+      if (!account.address || account.chainId === chainId) return;
+      try {
+        await switchChainAsync({ chainId });
+      } catch (cause) {
+        const name = config.chains.find(chain => chain.id === chainId)?.name ?? `chain ${chainId}`;
+        throw new Error(`Switch to ${name}`, { cause });
+      }
+    },
+    [config, switchChainAsync],
+  );
+}
+
 export function useOperatorSession(): OperatorSession {
   const configured = useOperatorSessionStore(state => state.configured);
   const hadSession = useOperatorSessionStore(state => state.hadSession);
   const session = useOperatorSessionStore(state => state.session);
   const setSession = useOperatorSessionStore(state => state.setSession);
-  const { address: connectedAddress, chainId: connectedChainId } = useAccount();
+  const { address: connectedAddress } = useAccount();
   const runChainId = useArenaStore(selectRunChainId);
   const { targetNetwork } = useTargetNetwork();
-  const chainId = connectedChainId ?? runChainId ?? targetNetwork.id;
+  const chainId = runChainId ?? targetNetwork.id;
   const { signMessageAsync } = useSignMessage();
+  const ensureChain = useEnsureChain();
 
   const signingAddress = connectedAddress ?? devSigner?.address;
 
@@ -139,6 +162,7 @@ export function useOperatorSession(): OperatorSession {
 
   const signIn = useCallback(async () => {
     if (!signingAddress) throw new Error("No wallet is ready to sign in");
+    await ensureChain(chainId);
     const { nonce } = await arenaClient.getNonce();
     const message = operatorSiweMessage(signingAddress, nonce, chainId);
     const signature = connectedAddress
@@ -147,7 +171,7 @@ export function useOperatorSession(): OperatorSession {
     if (!signature) throw new Error("The wallet returned no signature");
     const verified = await arenaClient.verify({ message, signature });
     setSession({ authenticated: true, ...verified });
-  }, [chainId, connectedAddress, setSession, signMessageAsync, signingAddress]);
+  }, [chainId, connectedAddress, ensureChain, setSession, signMessageAsync, signingAddress]);
 
   const signOut = useCallback(async () => {
     endOperatorSession();
@@ -171,26 +195,22 @@ export function useOperatorSession(): OperatorSession {
 }
 
 export function useSeedSigner() {
-  const { address: connectedAddress, chainId: connectedChainId } = useAccount();
+  const { address: connectedAddress } = useAccount();
   const { signTypedDataAsync } = useSignTypedData();
-  const { switchChainAsync } = useSwitchChain();
+  const ensureChain = useEnsureChain();
 
   return useCallback(
     async (runId: string, chainId: number) => {
       const typedData = seedTypedData(runId, chainId);
       // A wallet refuses typed data whose domain chain is not the one it has
       // selected. The dev signer holds a raw key, so it never checks.
-      if (connectedAddress && connectedChainId !== chainId) {
-        await switchChainAsync({ chainId }).catch(() => {
-          throw new Error(`Switch the wallet to chain ${chainId} to sign the run seed`);
-        });
-      }
+      await ensureChain(chainId);
       const signature = connectedAddress
         ? await signTypedDataAsync(typedData)
         : await devSigner?.signTypedData(typedData);
       if (!signature) throw new Error("The wallet returned no seed signature");
       return signature;
     },
-    [connectedAddress, connectedChainId, signTypedDataAsync, switchChainAsync],
+    [connectedAddress, ensureChain, signTypedDataAsync],
   );
 }
