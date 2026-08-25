@@ -1,4 +1,4 @@
-// Copied from agents-arena-backend contract/arena-types.ts, master @ 276449a.
+// Copied from agents-arena-backend contract/arena-types.ts, master @ ce07731.
 // Do not edit here — sync from the backend repo (formatting follows this repo's
 // prettier). Endpoint docs live there in contract/API.md.
 
