@@ -5,6 +5,7 @@ import type { SessionResponse } from "./arena-types";
 import { devSigner, operatorSiweMessage, seedTypedData } from "./auth";
 import { arenaClient } from "./client";
 import { useAccount, useConfig, useSignMessage, useSignTypedData, useSwitchChain } from "wagmi";
+import { getAccount } from "wagmi/actions";
 import create from "zustand";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 import { selectRunChainId, useArenaStore } from "~~/services/arena/store";
@@ -97,21 +98,23 @@ export function useAuthenticationStatus(): "loading" | "unauthenticated" | "auth
 let pendingSession: Promise<SessionResponse> | null = null;
 
 export function useEnsureChain() {
-  const { address, chainId: connectedChainId } = useAccount();
-  const { chains } = useConfig();
+  const config = useConfig();
   const { switchChainAsync } = useSwitchChain();
 
   return useCallback(
     async (chainId: number) => {
-      if (!address || connectedChainId === chainId) return;
+      // Read the wallet's chain at call time: a handler that switches and then
+      // signs must not act on the chain this render captured.
+      const account = getAccount(config);
+      if (!account.address || account.chainId === chainId) return;
       try {
         await switchChainAsync({ chainId });
-      } catch {
-        const name = chains.find(chain => chain.id === chainId)?.name ?? `chain ${chainId}`;
-        throw new Error(`Switch to ${name}`);
+      } catch (cause) {
+        const name = config.chains.find(chain => chain.id === chainId)?.name ?? `chain ${chainId}`;
+        throw new Error(`Switch to ${name}`, { cause });
       }
     },
-    [address, chains, connectedChainId, switchChainAsync],
+    [config, switchChainAsync],
   );
 }
 

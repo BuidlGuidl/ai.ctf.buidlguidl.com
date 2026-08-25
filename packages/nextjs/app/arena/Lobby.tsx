@@ -261,11 +261,14 @@ export function ArenaLobby({
     if (!target || mode === "none") return;
     setFunding(true);
     try {
-      try {
-        await ensureChain(fundingChainId);
-      } catch (cause) {
-        pushLog(cause instanceof Error ? cause.message : "Could not switch network", RED);
-        return;
+      // Local funding goes through the test client, never the wallet.
+      if (mode === "batch") {
+        try {
+          await ensureChain(fundingChainId);
+        } catch (cause) {
+          pushLog(cause instanceof Error ? cause.message : "Could not switch network", RED);
+          return;
+        }
       }
       // Read balances before deciding what to send. The poll only refreshes every
       // 2s and the button re-enables the moment a run ends, so resuming inside
