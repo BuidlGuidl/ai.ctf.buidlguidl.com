@@ -26,7 +26,7 @@ import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 import type { EntrantSummary, RunState } from "~~/services/arena/arena-types";
 import { ArenaApiError, arenaClient } from "~~/services/arena/client";
 import { connectRun } from "~~/services/arena/connect";
-import type { ChatItem, ConsoleEntry, FeedItem } from "~~/services/arena/projection";
+import type { ChatItem, ConsoleEntry, FeedItem, NarrationEntry } from "~~/services/arena/projection";
 import { ROSTER, displayForEntrant } from "~~/services/arena/roster";
 import { playSfx, useArenaSfx } from "~~/services/arena/sfx";
 import {
@@ -74,9 +74,6 @@ const CELL_LINK =
 const ARENA_TIP_BASE =
   "tooltip [--tooltip-color:#0a1e23] [--tooltip-text-color:#00FBFFcc] before:border before:border-[#00FBFF]/40 before:text-[10px] before:shadow-[0_0_14px_rgba(0,251,255,0.25)]";
 const ARENA_TIP = `${ARENA_TIP_BASE} tooltip-bottom after:border-b-[#00FBFF]/60`;
-// The narration is 2-3 sentences, so it wraps; to the right of the handle it
-// stays inside the row instead of covering the flags below.
-const ARENA_TIP_RIGHT_WRAP = `${ARENA_TIP_BASE} tooltip-right after:border-r-[#00FBFF]/60 before:max-w-xs before:whitespace-pre-line before:text-left before:leading-snug`;
 const NARRATION_ONLY_STORAGE_KEY = "arena.log.narrationOnly";
 
 function PendingUsage() {
@@ -1802,15 +1799,23 @@ function RaceView({
               <AgentBlockieLink agent={a} compact={compact} />
             </span>
             <span
-              className={`arena-race-agent-column relative ${
+              className={`arena-race-agent-column group/agent relative ${
                 compact ? "w-56 text-base" : "w-[300px] text-2xl"
-              } shrink-0 text-left ${latestNarration ? `${ARENA_TIP_RIGHT_WRAP} z-20` : ""}`}
-              data-tip={narrationTip}
+              } shrink-0 text-left ${latestNarration ? "z-20" : ""}`}
               title={latestNarration ? undefined : runtimeLabel}
             >
               <span className={`block truncate font-bold text-white ${fadeClass}`}>
                 <ModelName name={a.handle} effort={a.effort} />
               </span>
+              {latestNarration && (
+                <NarrationPopover
+                  agent={a}
+                  narration={latestNarration}
+                  now={narrationNow}
+                  compact={compact}
+                  anchor={i < ranked.length / 2 ? "top" : "bottom"}
+                />
+              )}
             </span>
             <span
               className={`arena-race-tokens w-16 text-right ${dataText} tabular-nums shrink-0 text-[#00FBFF]/75 ${fadeClass}`}
@@ -2718,6 +2723,60 @@ function StatusDot({ status }: { status: AgentStatus }) {
       style={{ color: s.color }}
     >
       {s.glyph}
+    </span>
+  );
+}
+
+// The narration is the one thing on the row a director reads word for word, so it
+// gets a panel of its own instead of a daisy tooltip: room for the model in bold,
+// the status it is in right now, and the sentences at a readable size. It hangs to
+// the right of the handle, where it covers flags nobody has captured yet rather
+// than the rows below.
+function NarrationPopover({
+  agent,
+  narration,
+  now,
+  compact,
+  anchor,
+}: {
+  agent: Agent;
+  narration: NarrationEntry;
+  now: number;
+  compact?: boolean;
+  anchor: "top" | "bottom";
+}) {
+  const s = STATUS_STYLE[agent.status];
+  return (
+    <span
+      role="tooltip"
+      className={`pointer-events-none absolute left-full z-30 ${anchor === "top" ? "top-0 -mt-1" : "bottom-0 -mb-1"} ${
+        compact ? "ml-2 w-[26rem]" : "ml-3 w-[32rem]"
+      } scale-95 opacity-0 transition duration-150 group-hover/agent:scale-100 group-hover/agent:opacity-100`}
+    >
+      <span className="block rounded-md border border-[#00FBFF]/45 bg-[#08181c] px-4 py-3 shadow-[0_0_28px_rgba(0,251,255,0.3)]">
+        <span className="flex items-center gap-3">
+          <span className={`min-w-0 flex-1 truncate font-bold text-white ${compact ? "text-lg" : "text-xl"}`}>
+            <ModelName name={agent.handle} effort={agent.effort} />
+          </span>
+          <span
+            className={`shrink-0 rounded px-2 py-0.5 text-xs font-bold uppercase tracking-widest ${
+              agent.status === "blocked" ? "blocked-pulse" : ""
+            }`}
+            style={{ color: s.color, border: `1px solid ${s.color}55`, background: `${s.color}12` }}
+          >
+            {s.glyph} {agent.status}
+          </span>
+        </span>
+        <span className="mt-1 block text-xs tracking-wide text-[#00FBFF]/50">{agentRuntimeLabel(agent)}</span>
+        <span
+          className={`mt-3 block whitespace-pre-line leading-snug text-[#00FBFF]/90 ${
+            compact ? "text-sm" : "text-base"
+          }`}
+        >
+          {narration.text}
+        </span>
+        <span className="mt-2 block text-xs tabular-nums text-[#00FBFF]/45">{fmtAge(narration.ts, now)} ago</span>
+      </span>
     </span>
   );
 }
