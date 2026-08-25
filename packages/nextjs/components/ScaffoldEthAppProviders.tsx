@@ -7,6 +7,7 @@ import { AppProgressBar as ProgressBar } from "next-nprogress-bar";
 import { Toaster } from "react-hot-toast";
 import { WagmiProvider } from "wagmi";
 import { BlockieAvatar } from "~~/components/scaffold-eth";
+import scaffoldConfig from "~~/scaffold.config";
 import { ArenaAuthProvider } from "~~/services/arena/rainbowkitAuth";
 import { wagmiConfig } from "~~/services/web3/wagmiConfig";
 
@@ -27,7 +28,7 @@ export const ScaffoldEthAppProviders = ({ children }: { children: React.ReactNod
       <QueryClientProvider client={queryClient}>
         <ProgressBar height="3px" color="#00FBFF" />
         <ArenaAuthProvider enabled={onArena}>
-          <RainbowKitProvider avatar={BlockieAvatar}>
+          <RainbowKitProvider avatar={BlockieAvatar} initialChain={scaffoldConfig.targetNetworks[0]}>
             {children}
             <Toaster />
           </RainbowKitProvider>

@@ -27,7 +27,7 @@ import type { FundingProjection } from "~~/services/arena/projection";
 import { ROSTER } from "~~/services/arena/roster";
 import { playSfx, unlockSfx } from "~~/services/arena/sfx";
 import { selectFunding, selectRun, selectRunError, useArenaStore } from "~~/services/arena/store";
-import { useOperatorSession, useSeedSigner } from "~~/services/arena/useOperatorSession";
+import { useEnsureChain, useOperatorSession, useSeedSigner } from "~~/services/arena/useOperatorSession";
 
 type Phase =
   | "idle"
@@ -199,6 +199,7 @@ export function ArenaLobby({
   const { openConnectModal } = useConnectModal();
   const { targetNetwork } = useTargetNetwork();
   const { switchChain } = useSwitchChain();
+  const ensureChain = useEnsureChain();
   const fundingChainId = run?.chainId ?? targetNetwork.id;
   const fundingThreshold = fundingThresholdEth(fundingChainId);
   // What the race actually waits for. The amount below is only how much the
@@ -260,6 +261,12 @@ export function ArenaLobby({
     if (!target || mode === "none") return;
     setFunding(true);
     try {
+      try {
+        await ensureChain(fundingChainId);
+      } catch (cause) {
+        pushLog(cause instanceof Error ? cause.message : "Could not switch network", RED);
+        return;
+      }
       // Read balances before deciding what to send. The poll only refreshes every
       // 2s and the button re-enables the moment a run ends, so resuming inside
       // that window would see stale zeroes and double-send to funded agents.
@@ -333,7 +340,7 @@ export function ArenaLobby({
     } finally {
       setFunding(false);
     }
-  }, [agents, amount, fundingChainId, mode, targetNetwork, transactor, pushLog, refetchBalances]);
+  }, [agents, amount, ensureChain, fundingChainId, mode, targetNetwork, transactor, pushLog, refetchBalances]);
 
   const openLobby = useCallback(async () => {
     unlockSfx();
@@ -757,7 +764,7 @@ export function ArenaLobby({
               onAmountChange={handleAmountChange}
               onFund={fundAll}
               onConnect={openConnectModal}
-              onSwitchNetwork={() => switchChain({ chainId: targetNetwork.id })}
+              onSwitchNetwork={() => switchChain({ chainId: fundingChainId })}
               funding={funding}
               isConnected={isConnected}
               mode={mode}
