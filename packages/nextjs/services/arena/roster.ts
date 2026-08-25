@@ -5,13 +5,13 @@ import type { RosterEffort, RosterEntry } from "./arena-types";
 // opencode levels are an explicit override (openrouter caps that harness at high).
 export const ROSTER = [
   { id: "opus-5", harness: "claude", model: "claude-opus-5", effort: "high" },
-  { id: "glm-52", harness: "opencode", model: "openrouter/z-ai/glm-5.2", effort: "high" },
+  { id: "glm-53", harness: "opencode", model: "openrouter/z-ai/glm-5.3", effort: "high" },
   { id: "gpt-55", harness: "codex", model: "gpt-5.5", effort: "high" },
   { id: "sonnet-5", harness: "claude", model: "claude-sonnet-5", effort: "high" },
   { id: "kimi-k3", harness: "opencode", model: "openrouter/moonshotai/kimi-k3", effort: "high" },
   { id: "opus-48", harness: "claude", model: "claude-opus-4-8", effort: "high" },
   { id: "deepseek-v4-pro", harness: "opencode", model: "openrouter/deepseek/deepseek-v4-pro-0813", effort: "high" },
-  { id: "qwen38-27b", harness: "opencode", model: "openrouter/qwen/qwen3.8-27b", effort: "high" },
+  { id: "qwen38-24t", harness: "opencode", model: "openrouter/qwen/qwen3.8-2.4t-a95b", effort: "high" },
   { id: "gpt-55-xhigh", harness: "codex", model: "gpt-5.5", effort: "xhigh" },
   { id: "gpt-55-medium", harness: "codex", model: "gpt-5.5", effort: "medium" },
 ] as const satisfies readonly RosterEntry[];
@@ -36,13 +36,13 @@ export const ROSTER_DISPLAY: Readonly<Record<string, RosterDisplay>> = {
     harnessLabel: "Claude Code",
     modelLabel: "Opus 5",
   },
-  "glm-52": {
-    handle: "opencode-glm-52",
+  "glm-53": {
+    handle: "opencode-glm-53",
     color: "#FFE14D",
     short: "GL",
     vendor: "Zhipu",
     harnessLabel: "OpenCode",
-    modelLabel: "GLM-5.2",
+    modelLabel: "GLM-5.3",
   },
   "gpt-55": {
     handle: "codex-gpt-55",
@@ -84,6 +84,23 @@ export const ROSTER_DISPLAY: Readonly<Record<string, RosterDisplay>> = {
     harnessLabel: "OpenCode",
     modelLabel: "DeepSeek V4 Pro",
   },
+  "qwen38-24t": {
+    handle: "opencode-qwen38-24t",
+    color: "#A3E635",
+    short: "QW",
+    vendor: "Alibaba",
+    harnessLabel: "OpenCode",
+    modelLabel: "Qwen3.8 2.4T",
+  },
+  // Off the active lineup; kept so finished runs that included them still render.
+  "glm-52": {
+    handle: "opencode-glm-52",
+    color: "#FFE14D",
+    short: "GL",
+    vendor: "Zhipu",
+    harnessLabel: "OpenCode",
+    modelLabel: "GLM-5.2",
+  },
   "qwen38-27b": {
     handle: "opencode-qwen38-27b",
     color: "#A3E635",
@@ -92,7 +109,6 @@ export const ROSTER_DISPLAY: Readonly<Record<string, RosterDisplay>> = {
     harnessLabel: "OpenCode",
     modelLabel: "Qwen3.8 27B",
   },
-  // Off the active lineup; kept so finished runs that included them still render.
   "deepseek-v4": {
     handle: "opencode-deepseek-v4",
     color: "#EC4899",
