@@ -17,7 +17,8 @@ import { fundingStatus, useAgentBalances } from "./useAgentBalances";
 import { useArenaRoute } from "./useArenaRoute";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { encodeFunctionData, formatEther, parseEther } from "viem";
-import { useAccount, useSwitchChain } from "wagmi";
+import { useAccount } from "wagmi";
+import { getWalletClient } from "wagmi/actions";
 import { Address, BlockieAvatar, RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import { useTransactor } from "~~/hooks/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
@@ -28,6 +29,7 @@ import { ROSTER } from "~~/services/arena/roster";
 import { playSfx, unlockSfx } from "~~/services/arena/sfx";
 import { selectFunding, selectRun, selectRunError, useArenaStore } from "~~/services/arena/store";
 import { useEnsureChain, useOperatorSession, useSeedSigner } from "~~/services/arena/useOperatorSession";
+import { wagmiConfig } from "~~/services/web3/wagmiConfig";
 
 type Phase =
   | "idle"
@@ -195,10 +197,9 @@ export function ArenaLobby({
   // Only the networks listed in funding.ts can be funded: these wallets are
   // generated per run and their keys are thrown away, so anything sent on a
   // network where the funds matter would be unrecoverable.
-  const { chain, isConnected } = useAccount();
+  const { isConnected } = useAccount();
   const { openConnectModal } = useConnectModal();
   const { targetNetwork } = useTargetNetwork();
-  const { switchChain } = useSwitchChain();
   const ensureChain = useEnsureChain();
   const fundingChainId = run?.chainId ?? targetNetwork.id;
   const fundingThreshold = fundingThresholdEth(fundingChainId);
@@ -209,8 +210,7 @@ export function ArenaLobby({
   const [amount, setAmount] = useState(fundingThreshold);
   const amountEdited = useRef(false);
   const mode = fundingMode(fundingChainId);
-  const wrongNetwork = mode === "batch" && isConnected && chain?.id !== fundingChainId;
-  const walletReady = mode === "local" || (isConnected && !wrongNetwork);
+  const walletReady = mode === "local" || isConnected;
   const canFund = mode !== "none" && walletReady;
   const transactor = useTransactor();
 
@@ -261,11 +261,14 @@ export function ArenaLobby({
     if (!target || mode === "none") return;
     setFunding(true);
     try {
-      try {
-        await ensureChain(fundingChainId);
-      } catch (cause) {
-        pushLog(cause instanceof Error ? cause.message : "Could not switch network", RED);
-        return;
+      // Local funding goes through the test client, never the wallet.
+      if (mode === "batch") {
+        try {
+          await ensureChain(fundingChainId);
+        } catch (cause) {
+          pushLog(cause instanceof Error ? cause.message : "Could not switch network", RED);
+          return;
+        }
       }
       // Read balances before deciding what to send. The poll only refreshes every
       // 2s and the button re-enables the moment a run ends, so resuming inside
@@ -311,25 +314,31 @@ export function ArenaLobby({
           // reverts unless msg.value matches the sum exactly.
           const total = pending.reduce((sum, p) => sum + p.shortfall, 0n);
           pushLog(`funding ${pending.length} agents in one transaction…`, YELLOW);
+          // The wallet client this render captured still points at the chain
+          // the wallet was on before ensureChain switched it, and viem refuses
+          // to send from a client whose chain disagrees with the wallet's.
+          const walletClient = await getWalletClient(wagmiConfig, { chainId: fundingChainId });
           // useTransactor resolves undefined (without throwing) when it has no
           // wallet client — reporting that as funded would log a green tick for
           // zero ETH moved.
-          const hash = await transactor({
-            to: MULTICALL3_ADDRESS[fundingChainId],
-            value: total,
-            data: encodeFunctionData({
-              abi: MULTICALL3_ABI,
-              functionName: "aggregate3Value",
-              args: [
-                pending.map(p => ({
-                  target: p.address,
-                  allowFailure: false,
-                  value: p.shortfall,
-                  callData: "0x" as const,
-                })),
-              ],
+          const hash = await transactor(() =>
+            walletClient.sendTransaction({
+              to: MULTICALL3_ADDRESS[fundingChainId],
+              value: total,
+              data: encodeFunctionData({
+                abi: MULTICALL3_ABI,
+                functionName: "aggregate3Value",
+                args: [
+                  pending.map(p => ({
+                    target: p.address,
+                    allowFailure: false,
+                    value: p.shortfall,
+                    callData: "0x" as const,
+                  })),
+                ],
+              }),
             }),
-          });
+          );
           if (!hash) throw new Error("no transaction hash");
           pushLog(`${pending.length} agents funded ✓ · ${formatEther(total)} ETH`, GREEN);
         }
@@ -764,12 +773,10 @@ export function ArenaLobby({
               onAmountChange={handleAmountChange}
               onFund={fundAll}
               onConnect={openConnectModal}
-              onSwitchNetwork={() => switchChain({ chainId: fundingChainId })}
               funding={funding}
               isConnected={isConnected}
               mode={mode}
               canFund={canFund}
-              wrongNetwork={wrongNetwork}
               networkName={fundingChainId === 31337 ? "Localhost" : targetNetwork.name}
               balancesUnreachable={balancesUnreachable}
               locked={phase !== "funding"}
@@ -958,12 +965,10 @@ function FundingBoard({
   onAmountChange,
   onFund,
   onConnect,
-  onSwitchNetwork,
   funding,
   isConnected,
   mode,
   canFund,
-  wrongNetwork,
   networkName,
   balancesUnreachable,
   locked,
@@ -977,12 +982,10 @@ function FundingBoard({
   onAmountChange: (v: string) => void;
   onFund: () => void;
   onConnect?: () => void;
-  onSwitchNetwork: () => void;
   funding: boolean;
   isConnected: boolean;
   mode: FundingMode;
   canFund: boolean;
-  wrongNetwork: boolean;
   networkName: string;
   balancesUnreachable: boolean;
   locked: boolean;
@@ -1009,18 +1012,7 @@ function FundingBoard({
             />
             <span className="text-[#00FBFF]/70">ETH</span>
           </label>
-          {wrongNetwork ? (
-            // The arena covers the site header, so its network switcher is out of
-            // reach — without this the board would just sit there disabled.
-            <button
-              onClick={onSwitchNetwork}
-              disabled={locked}
-              className="px-4 py-1.5 rounded border-2 font-dotGothic text-sm tracking-widest transition disabled:opacity-30"
-              style={{ borderColor: YELLOW, color: YELLOW }}
-            >
-              ▶ SWITCH TO {networkName.toUpperCase()}
-            </button>
-          ) : !needsConnect ? (
+          {!needsConnect ? (
             <button
               onClick={onFund}
               disabled={funding || locked || !canFund || required <= 0n}
@@ -1062,8 +1054,6 @@ function FundingBoard({
           <span>
             {mode === "none"
               ? `Funding is unavailable on ${networkName}. Agent wallets are generated per run and their keys are discarded when it ends, so anything sent to them would be unrecoverable.`
-              : !canFund && isConnected
-              ? `Switch your wallet to ${networkName} to fund the agent wallets.`
               : !canFund
               ? `Connect a wallet on ${networkName} to fund the agent wallets.`
               : mode === "local"
