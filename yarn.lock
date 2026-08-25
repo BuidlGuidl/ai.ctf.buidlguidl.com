@@ -2865,6 +2865,7 @@ __metadata:
     "@trivago/prettier-plugin-sort-imports": ~4.1.1
     "@types/node": ^17.0.45
     "@types/nprogress": ^0
+    "@types/prismjs": ^1
     "@types/react": ^18.0.21
     "@types/react-copy-to-clipboard": ^5.0.4
     "@typescript-eslint/eslint-plugin": ~5.40.0
@@ -2882,11 +2883,12 @@ __metadata:
     graphql: ^16.9.0
     graphql-request: ^7.1.0
     next: ~14.2.35
-    next-mdx-remote: ^5.0.0
+    next-mdx-remote: ^6.0.0
     next-nprogress-bar: ^2.3.13
     next-themes: ~0.2.1
     postcss: ~8.4.16
     prettier: ~2.8.4
+    prismjs: ^1.30.0
     qrcode.react: ~3.1.0
     react: ~18.2.0
     react-copy-to-clipboard: ~5.1.0
@@ -3617,6 +3619,13 @@ __metadata:
   version: 2.7.3
   resolution: "@types/prettier@npm:2.7.3"
   checksum: 705384209cea6d1433ff6c187c80dcc0b95d99d5c5ce21a46a9a58060c527973506822e428789d842761e0280d25e3359300f017fbe77b9755bc772ab3dc2f83
+  languageName: node
+  linkType: hard
+
+"@types/prismjs@npm:^1":
+  version: 1.26.6
+  resolution: "@types/prismjs@npm:1.26.6"
+  checksum: b61abb7370d55b549ab67d1dfab479f1f27539cebe02f051db67f0ad90f5de34df6b9fcaf340dd2f3e0217bba15d3e31c642832560ecf1779397d6950ee69478
   languageName: node
   linkType: hard
 
@@ -12667,19 +12676,20 @@ __metadata:
   languageName: node
   linkType: hard
 
-"next-mdx-remote@npm:^5.0.0":
-  version: 5.0.0
-  resolution: "next-mdx-remote@npm:5.0.0"
+"next-mdx-remote@npm:^6.0.0":
+  version: 6.0.0
+  resolution: "next-mdx-remote@npm:6.0.0"
   dependencies:
     "@babel/code-frame": ^7.23.5
     "@mdx-js/mdx": ^3.0.1
     "@mdx-js/react": ^3.0.1
-    unist-util-remove: ^3.1.0
+    unist-util-remove: ^4.0.0
+    unist-util-visit: ^5.1.0
     vfile: ^6.0.1
     vfile-matter: ^5.0.0
   peerDependencies:
     react: ">=16"
-  checksum: 7e8dd7279459953bacca7a0c03db8612bd001f03e39530c8dd437a1acb2befab24e4a8ae959031af7036d0a69e2e8a9bbfe674ec6beb26bf365fd272dd95ec37
+  checksum: c922e73009fb0c851bd724579d1874d8cfe944154e84d4199fa2de8ff204f0590d272609425a19ebe9a6308617c048a15fe12635c78dff2557f94f093dacc8cd
   languageName: node
   linkType: hard
 
@@ -14088,6 +14098,13 @@ __metadata:
   dependencies:
     parse-ms: ^2.1.0
   checksum: d76c4920283b48be91f1d3797a2ce4bd51187d58d2a609ae993c028f73c92d16439449d857af57ccad91ae3a38b30c87307f5589749a056102ebb494c686957e
+  languageName: node
+  linkType: hard
+
+"prismjs@npm:^1.30.0":
+  version: 1.30.0
+  resolution: "prismjs@npm:1.30.0"
+  checksum: a68eddd4c5f1c506badb5434b0b28a7cc2479ed1df91bc4218e6833c7971ef40c50ec481ea49749ac964256acb78d8b66a6bd11554938e8998e46c18b5f9a580
   languageName: node
   linkType: hard
 
@@ -16967,15 +16984,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"unist-util-is@npm:^5.0.0":
-  version: 5.2.1
-  resolution: "unist-util-is@npm:5.2.1"
-  dependencies:
-    "@types/unist": ^2.0.0
-  checksum: ae76fdc3d35352cd92f1bedc3a0d407c3b9c42599a52ab9141fe89bdd786b51f0ec5a2ab68b93fb532e239457cae62f7e39eaa80229e1cb94875da2eafcbe5c4
-  languageName: node
-  linkType: hard
-
 "unist-util-is@npm:^6.0.0":
   version: 6.0.0
   resolution: "unist-util-is@npm:6.0.0"
@@ -17003,14 +17011,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"unist-util-remove@npm:^3.1.0":
-  version: 3.1.1
-  resolution: "unist-util-remove@npm:3.1.1"
+"unist-util-remove@npm:^4.0.0":
+  version: 4.0.0
+  resolution: "unist-util-remove@npm:4.0.0"
   dependencies:
-    "@types/unist": ^2.0.0
-    unist-util-is: ^5.0.0
-    unist-util-visit-parents: ^5.0.0
-  checksum: ed7c762941e6a9b6db230e9417697c8eb7d36093240b6f6d4ec265c4237d33e332a96a18307c8fb322a1842e3feb2a7564b032b5535fa0634eb1e075a6e344cb
+    "@types/unist": ^3.0.0
+    unist-util-is: ^6.0.0
+    unist-util-visit-parents: ^6.0.0
+  checksum: 684db988a486782ae3e721d03bd502f9aaa5ef9d55c688da7cdc777864210faa02552d8a40def856d7c31c281816cdd8b9562ea86d4eec9f122c6aaf5a799f26
   languageName: node
   linkType: hard
 
@@ -17020,16 +17028,6 @@ __metadata:
   dependencies:
     "@types/unist": ^3.0.0
   checksum: e2e7aee4b92ddb64d314b4ac89eef7a46e4c829cbd3ee4aee516d100772b490eb6b4974f653ba0717a0071ca6ea0770bf22b0a2ea62c65fcba1d071285e96324
-  languageName: node
-  linkType: hard
-
-"unist-util-visit-parents@npm:^5.0.0":
-  version: 5.1.3
-  resolution: "unist-util-visit-parents@npm:5.1.3"
-  dependencies:
-    "@types/unist": ^2.0.0
-    unist-util-is: ^5.0.0
-  checksum: 8ecada5978994f846b64658cf13b4092cd78dea39e1ba2f5090a5de842ba4852712c02351a8ae95250c64f864635e7b02aedf3b4a093552bb30cf1bd160efbaa
   languageName: node
   linkType: hard
 
@@ -17051,6 +17049,17 @@ __metadata:
     unist-util-is: ^6.0.0
     unist-util-visit-parents: ^6.0.0
   checksum: 9ec42e618e7e5d0202f3c191cd30791b51641285732767ee2e6bcd035931032e3c1b29093f4d7fd0c79175bbc1f26f24f26ee49770d32be76f8730a652a857e6
+  languageName: node
+  linkType: hard
+
+"unist-util-visit@npm:^5.1.0":
+  version: 5.1.0
+  resolution: "unist-util-visit@npm:5.1.0"
+  dependencies:
+    "@types/unist": ^3.0.0
+    unist-util-is: ^6.0.0
+    unist-util-visit-parents: ^6.0.0
+  checksum: c7b6cce10db3d912ca0d021f3fec1c7142878e0d3bf7df2b17c84ccb61b2b41342f8972874cb8fab50dc02121fc11858a857ccffa9c8305f0d957308c5b4e5fa
   languageName: node
   linkType: hard
 
