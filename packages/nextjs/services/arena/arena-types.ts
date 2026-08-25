@@ -1,4 +1,4 @@
-// Copied from agents-arena-backend contract/arena-types.ts, master @ 276449a.
+// Copied from agents-arena-backend contract/arena-types.ts, master @ ce07731.
 // Do not edit here — sync from the backend repo (formatting follows this repo's
 // prettier). Endpoint docs live there in contract/API.md.
 
@@ -24,10 +24,10 @@ export const ROSTER_MODELS: Readonly<Record<HarnessId, readonly string[]>> = {
   codex: ["gpt-5.5"],
   claude: ["claude-opus-5", "claude-opus-4-8", "claude-sonnet-5"],
   opencode: [
-    "openrouter/z-ai/glm-5.2",
+    "openrouter/z-ai/glm-5.3",
     "openrouter/moonshotai/kimi-k3",
     "openrouter/deepseek/deepseek-v4-pro-0813",
-    "openrouter/qwen/qwen3.8-27b",
+    "openrouter/qwen/qwen3.8-2.4t-a95b",
   ],
 };
 
