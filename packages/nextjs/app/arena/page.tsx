@@ -1549,7 +1549,14 @@ function OverviewStage({
         />
       )}
       {tab === "grid" && (
-        <GridView ranked={ranked} now={now} onPick={onPick} narrationNow={narrationNow} selectedId={selectedId} />
+        <GridView
+          ranked={ranked}
+          now={now}
+          onPick={onPick}
+          narrationNow={narrationNow}
+          selectedId={selectedId}
+          flashes={flashes}
+        />
       )}
     </div>
   );
@@ -2036,12 +2043,14 @@ function GridView({
   onPick,
   narrationNow,
   selectedId,
+  flashes,
 }: {
   ranked: Agent[];
   now: number | null;
   onPick: (id: string) => void;
   narrationNow: number;
   selectedId: string | null;
+  flashes: string[];
 }) {
   return (
     <div className="h-full p-2 grid grid-cols-5 auto-rows-fr gap-2">
@@ -2053,8 +2062,90 @@ function GridView({
           onPick={onPick}
           narrationNow={narrationNow}
           selected={selectedId === agent.id}
+          flashes={flashes}
         />
       ))}
+    </div>
+  );
+}
+
+// The preview lines are prefixed by the projection: `⟳` a call, `✓`/`✗` its
+// result, `›` a message, `·` reasoning, `⚠` an error. Only the mark is tinted —
+// the line itself stays quiet under the narration.
+const TICKER_MARK_COLOR: Record<string, string> = {
+  "⟳": "#FFBE00",
+  "✓": "#00ff9c",
+  "✗": "#FF5861",
+  "›": "#7fd8dd",
+  "·": "#3d7c80",
+  "⚠": "#FF5861",
+};
+
+function GridTicker({ line, finished }: { line: string | null; finished: boolean }) {
+  const mark = line?.slice(0, 1) ?? "";
+  const tint = TICKER_MARK_COLOR[mark];
+  const rest = (tint ? line?.slice(1).trim() : line) ?? "";
+  return (
+    <div className="flex items-center gap-1.5 h-6 shrink-0 px-2 border-t border-[#00FBFF]/10 bg-[#000405] text-xs">
+      {tint && (
+        <span className="shrink-0" style={{ color: tint }}>
+          {mark}
+        </span>
+      )}
+      <span className="min-w-0 flex-1 truncate text-[#5fa8ae]">{rest || "waiting for the first turn…"}</span>
+      {finished ? (
+        <span className="shrink-0 text-[#00ff9c]">✓</span>
+      ) : (
+        <span className="shrink-0 text-[#00ff9c] animate-pulse">▋</span>
+      )}
+    </div>
+  );
+}
+
+// The strip the log used to sit on. Non-interactive on purpose: the whole card is
+// a button that opens the agent's log, and a nested one would swallow that click.
+function GridFlagStrip({ agent, flashes }: { agent: Agent; flashes: string[] }) {
+  const target = activeTarget(agent);
+  return (
+    <div className="flex items-center gap-[2px] shrink-0 px-1.5 py-1 border-t border-[#00FBFF]/10">
+      {CHALLENGES.map(challenge => {
+        const captured = agent.solved.includes(challenge.id);
+        const cell =
+          "flex-1 h-4 rounded-[2px] border flex items-center justify-center text-[9px] font-bold tabular-nums";
+        if (captured) {
+          return (
+            <span
+              key={challenge.id}
+              title={`#${challenge.id} ${challenge.name} · captured`}
+              className={`${cell} ${flashes.includes(`${agent.id}:${challenge.id}`) ? "flag-pop" : ""}`}
+              style={{ background: agent.color, borderColor: agent.color, color: "#00181c" }}
+            >
+              {challenge.id}
+            </span>
+          );
+        }
+        if (target === challenge.id) {
+          const color = STATUS_STYLE[agent.status].color;
+          return (
+            <span
+              key={challenge.id}
+              title={`${STATUS_STYLE[agent.status].label} · target #${challenge.id} ${challenge.name}`}
+              className={`${cell} ${agent.status === "working" ? "cell-working" : "opacity-40"}`}
+              style={{ background: `${color}1f`, borderColor: color, color }}
+            >
+              {challenge.id}
+            </span>
+          );
+        }
+        return (
+          <span
+            key={challenge.id}
+            title={`#${challenge.id} ${challenge.name} · not captured yet`}
+            className={cell}
+            style={{ background: "#00fbff08", borderColor: "#00fbff1a" }}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -2065,18 +2156,19 @@ function GridCard({
   onPick,
   narrationNow,
   selected,
+  flashes,
 }: {
   agent: Agent;
   now: number | null;
   onPick: (id: string) => void;
   narrationNow: number;
   selected: boolean;
+  flashes: string[];
 }) {
   const preview = useArenaStore(selectPreviewFor(agent.id));
   const narration = useArenaStore(selectNarrationFor(agent.id));
   const latestNarration = narration.at(-1);
   const finished = agent.status === "done";
-  const target = activeTarget(agent);
   const faded = isAgentFaded(agent, now) && !selected;
   const fadeClass = `transition-opacity duration-300 group-hover:opacity-100 ${faded ? "opacity-50" : "opacity-100"}`;
   return (
@@ -2091,10 +2183,13 @@ function GridCard({
           onPick(agent.id);
         }
       }}
+      title={`open ${agent.handle}'s log`}
       className={`min-h-0 flex flex-col text-left rounded border bg-[#00090b] hover:border-[#00FBFF]/50 transition overflow-hidden group cursor-pointer ${
         agent.status === "blocked" ? "border-[#FFBE00]/60" : "border-[#00FBFF]/15"
       } ${selected ? "arena-agent-selected" : ""}`}
     >
+      {/* One identity band: the status row folded into it, because the flag strip
+          below now carries the target and the count the row used to spell out. */}
       <div
         className={`flex items-center gap-1.5 px-2 h-10 shrink-0 border-b border-[#00FBFF]/10 bg-[#001417] ${fadeClass}`}
       >
@@ -2102,61 +2197,41 @@ function GridCard({
         <span className="text-base font-bold text-white truncate flex-1">
           <ModelName name={agent.handle} effort={agent.effort} />
         </span>
-        <StatusDot status={agent.status} />
-      </div>
-      <div
-        className={`flex items-center gap-2 px-2 h-8 shrink-0 text-sm border-b border-[#00FBFF]/[0.07] bg-[#000d0f] ${fadeClass}`}
-      >
-        <span className="min-w-0 truncate" style={{ color: finished ? "#00ff9c" : STATUS_STYLE[agent.status].color }}>
-          {agent.finishedAt !== null ? `◆ CLEARED · ${fmtClock(agent.finishedAt)}` : STATUS_STYLE[agent.status].label}
-        </span>
-        {agent.finishedAt === null && target !== null && (
-          <span
-            className="shrink-0 font-bold text-[#FFBE00]"
-            title={`working on #${target} ${CHALLENGES[target - 1]?.name ?? ""}`}
-          >
-            ▸ #{target}
+        {/* No flag count and no chip for the ambient states: the strip below counts
+            the flags, and every character saved here is one the handle keeps. */}
+        {agent.finishedAt !== null ? (
+          <span className="shrink-0 text-sm font-bold tabular-nums text-[#00ff9c]">
+            ◆ {fmtFinishTime(agent.finishedAt)}
           </span>
-        )}
-        <span className="ml-auto shrink-0 text-[#00FBFF]/70 tabular-nums">
-          {agent.solved.length}/{CHALLENGES.length}
-        </span>
-      </div>
-      {/* Its own row: the status strip has no room at five cards across, and a
-          narration cut to one glyph tells the viewer nothing. */}
-      {latestNarration && (
-        <div
-          className={`flex items-start gap-2 px-2 py-1 shrink-0 text-sm leading-snug border-b border-[#00FBFF]/[0.07] bg-[#000d0f] ${fadeClass}`}
-          title={latestNarration.text}
-        >
-          <span className="min-w-0 flex-1 line-clamp-2 text-[#7fd8dd]/80">{latestNarration.text}</span>
-          <NarrationAge ts={latestNarration.ts} now={narrationNow} />
-        </div>
-      )}
-      <div
-        className={`flex-1 min-h-0 flex flex-col justify-end overflow-hidden px-2 py-1 text-sm leading-[1.45] ${fadeClass} ${
-          finished ? "agent-terminal-locked" : ""
-        }`}
-      >
-        {/* shrink-0: these lines are flex items, so without it a full buffer
-            squashes every line and truncate slices the glyphs in half. */}
-        {preview.map((line, index) => (
-          <div key={`${index}:${line}`} className="shrink-0 truncate text-[#7fd8dd]/90">
-            {line}
-          </div>
-        ))}
-        {finished ? (
-          <div className="shrink-0 border-t border-[#00ff9c]/20 pt-0.5 text-[#00ff9c] font-bold">agent finished ✓</div>
+        ) : agent.status === "blocked" ? (
+          <StatusChip status={agent.status} />
         ) : (
-          <div className="text-[#00ff9c] animate-pulse shrink-0">▋</div>
+          <StatusDot status={agent.status} />
         )}
       </div>
-      <div className={`h-1 shrink-0 bg-[#00FBFF]/10 ${fadeClass}`}>
-        <div
-          className="h-full transition-all duration-500"
-          style={{ width: `${(agent.solved.length / CHALLENGES.length) * 100}%`, background: agent.color }}
-        />
+      {/* The card's whole body: what this agent is doing, in words. The log is one
+          click away in the right rail, so nothing here competes with it. */}
+      <div
+        className={`arena-grid-narration relative flex-1 min-h-0 px-2 py-1.5 ${fadeClass}`}
+        style={{ boxShadow: `inset 2px 0 0 ${agent.color}` }}
+      >
+        {latestNarration ? (
+          <>
+            <p className="arena-grid-narration-text h-full overflow-hidden text-sm leading-[1.45] text-[#c6f4f7]">
+              {latestNarration.text}
+            </p>
+            {/* Corner stamp rather than its own row: the paragraph's bottom fade is
+                exactly where it sits, so nothing legible ends up behind it. */}
+            <span className="absolute bottom-1 right-2">
+              <NarrationAge ts={latestNarration.ts} now={narrationNow} />
+            </span>
+          </>
+        ) : (
+          <p className="text-sm leading-snug text-[#7fd8dd]/40">waiting for narration…</p>
+        )}
       </div>
+      <GridTicker line={preview.at(-1) ?? null} finished={finished} />
+      <GridFlagStrip agent={agent} flashes={flashes} />
     </div>
   );
 }
@@ -3357,6 +3432,15 @@ function ArenaStyles() {
       .agent-terminal-locked {
         animation: terminalLock 0.7s ease-out both;
         background: linear-gradient(180deg, transparent, rgba(0, 255, 156, 0.05));
+      }
+      .arena-grid-narration {
+        background: linear-gradient(180deg, rgba(0, 251, 255, 0.11), rgba(0, 251, 255, 0.05));
+      }
+      /* Fades only a narration long enough to reach the bottom of its box; a short
+         one ends above the gradient and is untouched. */
+      .arena-grid-narration-text {
+        -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 1.1rem), transparent);
+        mask-image: linear-gradient(180deg, #000 calc(100% - 1.1rem), transparent);
       }
       @keyframes agentFinishLock {
         0% {
