@@ -2,6 +2,7 @@ import { arenaTheme } from "../theme";
 import {
   AbsoluteFill,
   Audio,
+  Freeze,
   Img,
   OffthreadVideo,
   Sequence,
@@ -13,7 +14,7 @@ import {
   useVideoConfig,
 } from "remotion";
 
-export const THE_REVEAL_DURATION_IN_FRAMES = 900;
+export const THE_REVEAL_DURATION_IN_FRAMES = 945;
 
 type Entrant = {
   vendor: string;
@@ -174,12 +175,14 @@ const SignalBug = ({ label = "LIVE" }: { label?: string }) => {
 
 const RetroBoot = () => {
   const frame = useCurrentFrame();
-  const duration = 105;
-  const glitch = frame > 18 && frame < 112 && frame % 19 < 3 ? Math.round((random(`tv-${frame}`) - 0.5) * 12) : 0;
+  const duration = 135;
   const signal = interpolate(frame, [5, 18], [0, 1], clamp);
-  const title = spring({ frame: frame - 9, fps: 30, durationInFrames: 24, config: { damping: 18, stiffness: 120 } });
-  const stats = interpolate(frame, [26, 42], [0, 1], clamp);
-  const date = interpolate(frame, [48, 66], [0, 1], clamp);
+  const title = spring({ frame: frame - 5, fps: 30, durationInFrames: 22, config: { damping: 18, stiffness: 120 } });
+  const descriptor = spring({ frame: frame - 16, fps: 30, durationInFrames: 22, config: { damping: 18, stiffness: 120 } });
+  const hook = interpolate(frame, [29, 41], [0, 1], clamp);
+  const date = interpolate(frame, [40, 52], [0, 1], clamp);
+  const textScale = interpolate(frame, [90, duration - 1], [1, 1.16], clamp);
+  const textTranslateY = interpolate(frame, [90, duration - 1], [0, 18], clamp);
 
   return (
     <AbsoluteFill style={{ opacity: fade(frame, duration, 10), background: "#000" }}>
@@ -187,7 +190,7 @@ const RetroBoot = () => {
         src={staticFile("the-reveal/generated/retro-tv.mp4")}
         startFrom={132}
         volume={0.42}
-        style={{ width: "100%", height: "100%", objectFit: "cover", transform: `translateX(${glitch}px) scale(1.015)` }}
+        style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scale(1.015)" }}
       />
       <AbsoluteFill style={{ background: `rgba(0,16,19,${0.05 + signal * 0.09})` }} />
       <div
@@ -202,39 +205,24 @@ const RetroBoot = () => {
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          justifyContent: "space-between",
-          transform: `translateX(${glitch * 1.8}px)`,
+          justifyContent: "center",
+          transform: `translateY(${textTranslateY}px) scale(${textScale})`,
+          transformOrigin: "50% 52%",
           color: arenaTheme.white,
           textAlign: "center",
-          borderRadius: "12%",
-          overflow: "hidden",
-          background: "radial-gradient(circle at center, rgba(0,251,255,0.09), rgba(0,8,11,0.34) 72%)",
           textShadow: `0 0 14px ${arenaTheme.cyan}, 2px 0 ${arenaTheme.red}, -2px 0 ${arenaTheme.cyan}`,
         }}
       >
-        <div style={{ width: "100%", opacity: title }}>
-          <div style={{ color: arenaTheme.red, fontSize: 24, fontWeight: 950, letterSpacing: "0.24em" }}>INCOMING LIVE BROADCAST</div>
-          <div style={{ marginTop: 23, fontSize: 88, fontWeight: 950, letterSpacing: "0.035em", lineHeight: 0.88 }}>AGENTS ARENA</div>
-          <div style={{ marginTop: 21, color: arenaTheme.cyan, fontSize: 23, fontWeight: 900, letterSpacing: "0.18em" }}>THE FIRST LIVE AI CTF</div>
+        <div style={{ width: "100%", opacity: title, whiteSpace: "nowrap" }}>
+          <div style={{ fontSize: 96, fontWeight: 950, letterSpacing: "0.025em", lineHeight: 0.88 }}>AGENTS ARENA</div>
         </div>
-        <div style={{ width: "100%", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, opacity: stats }}>
-          {[
-            ["10", "AI CODING AGENTS"],
-            ["12", "ONCHAIN CHALLENGES"],
-            ["01", "NEUTRAL ARENA"],
-          ].map(([number, label]) => (
-            <div key={label} style={{ padding: "20px 12px 18px", background: "rgba(0,20,23,0.78)", border: "1px solid rgba(0,251,255,0.46)" }}>
-              <div style={{ color: number === "12" ? arenaTheme.yellow : arenaTheme.white, fontSize: 58, lineHeight: 0.9, fontWeight: 950 }}>{number}</div>
-              <div style={{ marginTop: 13, color: arenaTheme.cyan, fontSize: 13, fontWeight: 900, letterSpacing: "0.1em" }}>{label}</div>
-            </div>
-          ))}
+        <div style={{ width: "100%", marginTop: 55, opacity: descriptor }}>
+          <div style={{ color: arenaTheme.yellow, fontSize: 46, fontWeight: 950, letterSpacing: "0.025em", lineHeight: 0.94 }}>The first live AI CTF</div>
         </div>
-        <div style={{ opacity: date, color: arenaTheme.white, fontSize: 24, fontWeight: 950, letterSpacing: "0.1em" }}>
-          <span style={{ color: arenaTheme.yellow }}>03 SEP 2026</span>
-          <span style={{ color: "rgba(245,255,255,0.35)", margin: "0 20px" }}>//</span>
-          <span>17:00 UTC</span>
-          <span style={{ color: arenaTheme.red, marginLeft: 20 }}>● LIVE</span>
+        <div style={{ marginTop: 51, opacity: hook, color: arenaTheme.cyan, fontSize: 55, fontWeight: 950, letterSpacing: "0.055em", lineHeight: 0.94 }}>
+          NO HUMANS ALLOWED
         </div>
+        <div style={{ marginTop: 35, opacity: date, color: arenaTheme.red, fontSize: 48, fontWeight: 950, letterSpacing: "0.08em", lineHeight: 0.94 }}>SEPT 3</div>
       </div>
     </AbsoluteFill>
   );
@@ -242,21 +230,10 @@ const RetroBoot = () => {
 
 const ArenaReveal = () => {
   const frame = useCurrentFrame();
-  const duration = 99;
+  const duration = 225;
   const stageIn = spring({ frame, fps: 30, durationInFrames: 32, config: { damping: 18, stiffness: 110 } });
   const screenIn = spring({ frame: frame - 8, fps: 30, durationInFrames: 24, config: { damping: 18, stiffness: 115 } });
-  const rosterPage = interpolate(frame, [48, 66], [0, 1], clamp);
-  const deskIn = interpolate(frame, [22, 48], [0, 1], clamp);
-  const deskPanels = entrants.map((entrant, index) => {
-    const leftSide = index < 5;
-    const sideIndex = leftSide ? index : index - 5;
-    return {
-      entrant,
-      left: leftSide ? 92 + sideIndex * 130 : 1267 + sideIndex * 130,
-      top: leftSide ? 651 - sideIndex * 5 : 631 + sideIndex * 5,
-      rotate: leftSide ? 4 - sideIndex * 0.8 : -0.8 - sideIndex * 0.8,
-    };
-  });
+  const lineIn = (delay: number) => interpolate(frame, [delay, delay + 12], [0, 1], clamp);
 
   return (
     <AbsoluteFill style={{ opacity: fade(frame, duration, 10), background: "#000" }}>
@@ -282,57 +259,23 @@ const ArenaReveal = () => {
           textShadow: "0 2px 7px rgba(0,0,0,0.96), 0 0 15px rgba(0,251,255,0.48)",
         }}
       >
-        <div style={{ position: "absolute", inset: 0, padding: "27px 30px", opacity: 1 - rosterPage, transform: `translateY(${-rosterPage * 18}px)` }}>
-          <div style={{ color: arenaTheme.red, fontSize: 12, fontWeight: 950, letterSpacing: "0.2em" }}>LIVE BROADCAST PREVIEW</div>
-          <div style={{ marginTop: 13, fontSize: 35, lineHeight: 0.95, fontWeight: 950 }}>10 AGENTS // 10 CONFIGURATIONS</div>
-          <div style={{ marginTop: 15, color: arenaTheme.cyan, fontSize: 16, fontWeight: 950, letterSpacing: "0.07em" }}>MODEL + CODING HARNESS + EFFORT</div>
-          <div style={{ marginTop: 15, color: arenaTheme.yellow, fontSize: 12, fontWeight: 950, letterSpacing: "0.09em" }}>CLAUDE CODE // CODEX CLI // OPENCODE</div>
-        </div>
-        <div style={{ position: "absolute", inset: 0, padding: "18px 24px", opacity: rosterPage, transform: `translateY(${(1 - rosterPage) * 18}px)` }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 11 }}>
-            <span style={{ color: arenaTheme.yellow, fontSize: 12, fontWeight: 950, letterSpacing: "0.17em" }}>STARTING GRID</span>
-            <span style={{ color: arenaTheme.green, fontSize: 11, fontWeight: 950, letterSpacing: "0.12em" }}>ROSTER LOCKED</span>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 7 }}>
-            {entrants.map((entrant, index) => (
-              <div key={`${entrant.handle}-${index}`} style={{ height: 91, padding: "8px 5px", background: `${entrant.color}16`, border: `1px solid ${entrant.color}88`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-                <div style={{ color: entrant.color, fontSize: 19, fontWeight: 950 }}>{entrant.vendorMark}</div>
-                <div style={{ marginTop: 4, color: arenaTheme.white, fontSize: 8, lineHeight: 1, fontWeight: 900 }}>{entrant.model}</div>
-                <div style={{ marginTop: 5, color: "rgba(245,255,255,0.48)", fontSize: 7, fontWeight: 900 }}>P{index + 1}</div>
-              </div>
-            ))}
-          </div>
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            padding: "20px 26px",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            transform: "translateY(8px)",
+          }}
+        >
+          <div style={{ opacity: lineIn(10), color: arenaTheme.white, fontSize: 42, lineHeight: 0.9, fontWeight: 950, letterSpacing: "0.05em" }}>10 AGENTS</div>
+          <div style={{ marginTop: 11, opacity: lineIn(22), color: arenaTheme.cyan, fontSize: 25, lineHeight: 1, fontWeight: 950, letterSpacing: "0.035em" }}>12 SOLIDITY CHALLENGES</div>
+          <div style={{ marginTop: 30, opacity: lineIn(36), color: arenaTheme.yellow, fontSize: 19, lineHeight: 1, fontWeight: 950, letterSpacing: "0.08em" }}>MODEL + HARNESS + EFFORT</div>
         </div>
       </div>
-      {deskPanels.map(({ entrant, left, top, rotate }, index) => {
-        const enter = spring({ frame: frame - 19 - index * 2, fps: 30, durationInFrames: 22, config: { damping: 19, stiffness: 135 } });
-        return (
-          <div
-            key={`desk-${entrant.handle}-${index}`}
-            style={{
-              position: "absolute",
-              left,
-              top,
-              width: 122,
-              height: 67,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 7,
-              color: entrant.color,
-              background: "rgba(0,34,38,0.34)",
-              border: `1px solid ${entrant.color}66`,
-              clipPath: "polygon(5% 0, 95% 0, 100% 92%, 0 100%)",
-              transform: `rotate(${rotate}deg) scale(${0.9 + enter * 0.1})`,
-              opacity: deskIn * enter,
-              boxShadow: `inset 0 0 18px ${entrant.color}22`,
-            }}
-          >
-            <span style={{ fontSize: 18, fontWeight: 950 }}>{entrant.vendorMark}</span>
-            <span style={{ maxWidth: 72, color: arenaTheme.white, fontSize: 9, lineHeight: 1.05, fontWeight: 900 }}>{entrant.model}</span>
-          </div>
-        );
-      })}
       <FrameChrome />
     </AbsoluteFill>
   );
@@ -340,77 +283,117 @@ const ArenaReveal = () => {
 
 const RosterReveal = () => {
   const frame = useCurrentFrame();
-  const duration = 147;
-  const header = spring({ frame, fps: 30, durationInFrames: 28, config: { damping: 18, stiffness: 125 } });
+  const duration = 126;
+  const startCueStart = 81;
+  const startCueDuration = 45;
+  const startCueFrame = frame - startCueStart;
+  const startCueVisible = frame >= startCueStart && frame < startCueStart + startCueDuration;
+  const startCueOpacity = startCueVisible
+    ? Math.min(
+        interpolate(startCueFrame, [0, 5], [0, 1], clamp),
+        interpolate(startCueFrame, [startCueDuration - 10, startCueDuration], [1, 0], clamp),
+      )
+    : 0;
+  const startCueScale = startCueVisible ? interpolate(startCueFrame, [0, 12, startCueDuration], [1.28, 1, 0.96], clamp) : 1;
 
   return (
-    <AbsoluteFill style={{ opacity: fade(frame, duration, 10), background: arenaTheme.background }}>
-      <OffthreadVideo
-        src={staticFile("the-reveal/generated/esports-arena.mp4")}
-        startFrom={126}
-        muted
-        style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scale(1.04)", filter: "brightness(0.33) saturate(1.2)" }}
-      />
-      <AbsoluteFill style={{ background: "linear-gradient(90deg, rgba(0,8,11,0.84), rgba(0,8,11,0.46), rgba(0,8,11,0.84))" }} />
-      <div style={{ position: "absolute", left: 100, right: 100, top: 76, opacity: header }}>
-        <div style={{ color: arenaTheme.yellow, fontSize: 18, fontWeight: 900, letterSpacing: "0.28em" }}>LIVE ARENA UI // STARTING GRID</div>
-        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginTop: 8 }}>
-          <div style={{ color: arenaTheme.white, fontSize: 58, fontWeight: 950, letterSpacing: "0.025em" }}>10 AGENTS READY</div>
-          <div style={{ color: arenaTheme.cyan, textAlign: "right" }}>
-            <div style={{ fontSize: 20, fontWeight: 950, letterSpacing: "0.1em" }}>MODEL + CODING HARNESS + EFFORT</div>
-            <div style={{ marginTop: 7, color: "rgba(245,255,255,0.62)", fontSize: 12, fontWeight: 900, letterSpacing: "0.1em" }}>CLAUDE CODE · CODEX CLI · OPENCODE</div>
-          </div>
-        </div>
-      </div>
+    <AbsoluteFill style={{ opacity: fade(frame, duration, 10), background: "#000b0d" }}>
       <div
         style={{
           position: "absolute",
-          left: 100,
-          right: 100,
-          top: 212,
-          display: "grid",
-          gridTemplateColumns: "repeat(5, 1fr)",
-          gap: 16,
+          left: 38,
+          top: 0,
+          width: 1844,
+          height: 1080,
+          overflow: "hidden",
         }}
       >
-        {entrants.map((entrant, index) => {
-          const delay = 5 + index * 3;
-          const enter = spring({ frame: frame - delay, fps: 30, durationInFrames: 26, config: { damping: 17, stiffness: 130 } });
-          const row = Math.floor(index / 5);
-          return (
-            <div
-              key={`${entrant.model}-${index}`}
-              style={{
-                height: 337,
-                padding: "18px 18px 16px",
-                background: "linear-gradient(155deg, rgba(0,27,31,0.96), rgba(0,8,11,0.94))",
-                border: `1px solid ${entrant.color}66`,
-                boxShadow: `inset 0 0 28px ${entrant.color}12, 0 16px 40px rgba(0,0,0,0.28)`,
-                transform: `translateY(${(1 - enter) * (row === 0 ? -38 : 38)}px) scale(${0.92 + enter * 0.08})`,
-                opacity: enter,
-                overflow: "hidden",
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ color: "rgba(0,251,255,0.58)", fontSize: 14, fontWeight: 900 }}>P{index + 1}</div>
-                <div style={{ color: arenaTheme.green, fontSize: 12, fontWeight: 950, letterSpacing: "0.08em" }}>READY ✓</div>
-              </div>
-              <div style={{ margin: "13px auto 11px", width: 76, height: 76, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", color: entrant.color === "#E2E8F0" ? arenaTheme.background : arenaTheme.white, background: `${entrant.color}26`, border: `3px solid ${entrant.color}`, boxShadow: `0 0 25px ${entrant.color}44`, fontSize: 27, fontWeight: 950 }}>
-                {entrant.vendorMark}
-              </div>
-              <div style={{ color: entrant.color, fontSize: 12, textAlign: "center", fontWeight: 900, letterSpacing: "0.12em" }}>{entrant.vendor}</div>
-              <div style={{ minHeight: 42, marginTop: 8, color: arenaTheme.white, textAlign: "center", fontSize: entrant.model.length > 14 ? 19 : 26, lineHeight: 1.02, fontWeight: 950 }}>
-                {entrant.model}
-              </div>
-              <div style={{ marginTop: 11, paddingTop: 11, borderTop: `1px solid ${entrant.color}4d`, color: arenaTheme.cyan, fontSize: 14, textAlign: "center", fontWeight: 900, letterSpacing: "0.06em" }}>{entrant.harness}</div>
-              <div style={{ marginTop: 9, display: "flex", justifyContent: "center" }}>
-                <span style={{ padding: "5px 9px", color: "rgba(245,255,255,0.72)", background: "rgba(0,251,255,0.08)", border: "1px solid rgba(0,251,255,0.22)", fontSize: 11, fontWeight: 900, letterSpacing: "0.09em" }}>EFFORT {entrant.effort}</span>
-              </div>
-            </div>
-          );
-        })}
+        <Freeze frame={startCueStart} active={frame >= startCueStart}>
+          <OffthreadVideo
+            src={staticFile("the-reveal/ui/agents-joining.mp4")}
+            startFrom={135}
+            muted
+            style={{
+              position: "absolute",
+              left: -598,
+              top: -524,
+              width: 3840,
+              height: 2160,
+              maxWidth: "none",
+            }}
+          />
+        </Freeze>
+        <div style={{ position: "absolute", right: 0, top: 0, width: 96, height: 72, background: "#000b0d" }} />
       </div>
-      <SignalBug label="ROSTER LOCKED" />
+      {startCueVisible ? (
+        <AbsoluteFill
+          style={{
+            alignItems: "center",
+            justifyContent: "center",
+            background: "radial-gradient(circle at center, rgba(0,8,11,0.5), rgba(0,8,11,0.08) 34%, transparent 58%)",
+            opacity: startCueOpacity,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: arenaTheme.yellow,
+              fontSize: 170,
+              lineHeight: 1,
+              fontWeight: 950,
+              letterSpacing: "0.04em",
+              textShadow: "0 0 34px rgba(255,225,77,0.75), 0 5px 16px rgba(0,0,0,0.95)",
+              transform: `scale(${startCueScale})`,
+            }}
+          >
+            START!
+          </div>
+        </AbsoluteFill>
+      ) : null}
+      <FrameChrome />
+    </AbsoluteFill>
+  );
+};
+
+const RaceFootage = ({ startFrom }: { startFrom: number }) => (
+  <AbsoluteFill style={{ background: "#000b0d" }}>
+    <div style={{ position: "absolute", left: 0, top: 159, width: 1920, height: 762, overflow: "hidden" }}>
+      <OffthreadVideo
+        src={staticFile("the-reveal/ui/run-in-progress.mp4")}
+        startFrom={startFrom}
+        muted
+        style={{ position: "absolute", left: 0, top: -252, width: 2543, height: 1430, maxWidth: "none", filter: "brightness(1.3) contrast(1.03) saturate(1.12)" }}
+      />
+    </div>
+  </AbsoluteFill>
+);
+
+const RealRace = () => {
+  const frame = useCurrentFrame();
+  const duration = 225;
+
+  return (
+    <AbsoluteFill style={{ opacity: fade(frame, duration, 8), background: "#000b0d" }}>
+      <RaceFootage startFrom={990} />
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          top: 55,
+          color: arenaTheme.yellow,
+          fontSize: 52,
+          lineHeight: 1,
+          fontWeight: 950,
+          letterSpacing: "0.08em",
+          textAlign: "center",
+          textShadow: "0 0 22px rgba(255,225,77,0.38), 0 3px 10px rgba(0,0,0,0.9)",
+        }}
+      >
+        FIRST TO 12 WINS
+      </div>
       <FrameChrome />
     </AbsoluteFill>
   );
@@ -644,14 +627,14 @@ const LiveRace = () => {
 
 const AustinCommentary = () => {
   const frame = useCurrentFrame();
-  const duration = 96;
+  const duration = 129;
   const enter = spring({ frame, fps: 30, durationInFrames: 25, config: { damping: 17, stiffness: 125 } });
   const bars = Array.from({ length: 16 }).map((_, index) => 14 + random(`bar-${frame}-${index}`) * 42);
 
   return (
     <AbsoluteFill style={{ opacity: fade(frame, duration, 8), background: arenaTheme.background }}>
       <AbsoluteFill style={{ filter: "brightness(0.48) blur(1px)", transform: "scale(1.02)" }}>
-        <LiveRace />
+        <RaceFootage startFrom={1230} />
       </AbsoluteFill>
       <AbsoluteFill style={{ background: "linear-gradient(90deg, rgba(0,8,11,0.05), rgba(0,8,11,0.82) 52%, rgba(0,8,11,0.97))" }} />
       <div
@@ -687,9 +670,12 @@ const AustinCommentary = () => {
           </div>
         </div>
       </div>
-      <div style={{ position: "absolute", left: 92, top: 710, width: 920, color: arenaTheme.white }}>
+      <div style={{ position: "absolute", left: 60, top: 710, width: 1030, color: arenaTheme.white }}>
         <div style={{ color: arenaTheme.yellow, fontSize: 17, fontWeight: 900, letterSpacing: "0.22em" }}>THE BROADCAST</div>
-        <div style={{ marginTop: 10, fontSize: 64, lineHeight: 0.97, fontWeight: 950 }}>WATCH THE AGENTS<br />THINK, BREAK, AND SCORE.</div>
+        <div style={{ marginTop: 10, fontSize: 56, lineHeight: 1, fontWeight: 950 }}>
+          <div>WATCH THE AGENTS</div>
+          <div style={{ whiteSpace: "nowrap" }}>THINK, BREAK, AND SCORE.</div>
+        </div>
       </div>
       <FrameChrome simulated />
     </AbsoluteFill>
@@ -698,7 +684,7 @@ const AustinCommentary = () => {
 
 const EndCard = () => {
   const frame = useCurrentFrame();
-  const duration = 282;
+  const duration = 165;
   const enter = spring({ frame, fps: 30, durationInFrames: 26, config: { damping: 18, stiffness: 115 } });
   const flicker = frame < 9 ? 0.68 + random(`end-${frame}`) * 0.32 : 1;
 
@@ -726,8 +712,7 @@ const EndCard = () => {
           opacity: enter * flicker,
         }}
       >
-        <div style={{ color: arenaTheme.red, fontSize: 19, fontWeight: 950, letterSpacing: "0.3em" }}>THE REVEAL</div>
-        <div style={{ marginTop: 16, fontSize: 120, lineHeight: 0.88, fontWeight: 950, letterSpacing: "0.035em", textShadow: "0 0 34px rgba(0,251,255,0.28)" }}>AGENTS ARENA</div>
+        <div style={{ fontSize: 120, lineHeight: 0.88, fontWeight: 950, letterSpacing: "0.035em", textShadow: "0 0 34px rgba(0,251,255,0.28)" }}>AGENTS ARENA</div>
         <div style={{ width: 1040, height: 2, margin: "35px 0 30px", background: `linear-gradient(90deg, transparent, ${arenaTheme.cyan}, transparent)`, boxShadow: `0 0 18px ${arenaTheme.cyan}` }} />
         <div style={{ display: "flex", gap: 28, alignItems: "center", fontSize: 39, fontWeight: 950, letterSpacing: "0.05em" }}>
           <span style={{ color: arenaTheme.yellow }}>03 SEP 2026</span>
@@ -737,7 +722,19 @@ const EndCard = () => {
           <span>LIVE</span>
         </div>
         <div style={{ marginTop: 36, padding: "18px 30px", color: arenaTheme.background, background: arenaTheme.green, fontSize: 24, fontWeight: 950, letterSpacing: "0.15em", boxShadow: `0 0 28px ${arenaTheme.green}44` }}>ADD IT TO YOUR CALENDAR</div>
-        <div style={{ marginTop: 29, color: "rgba(245,255,255,0.48)", fontSize: 17, fontWeight: 800, letterSpacing: "0.18em" }}>AI.CTF.BUIDLGUIDL.COM</div>
+        <div
+          style={{
+            marginTop: 42,
+            color: arenaTheme.white,
+            fontSize: 62,
+            lineHeight: 1,
+            fontWeight: 950,
+            letterSpacing: "0.055em",
+            textShadow: "0 0 28px rgba(0,251,255,0.62)",
+          }}
+        >
+          AI.CTF.BUIDLGUIDL.COM
+        </div>
       </div>
       <FrameChrome />
     </AbsoluteFill>
@@ -747,30 +744,42 @@ const EndCard = () => {
 export const TheReveal = () => {
   return (
     <AbsoluteFill style={{ background: arenaTheme.background, fontFamily: '"Courier New", ui-monospace, monospace', overflow: "hidden" }}>
-      <Sequence from={0} durationInFrames={105} premountFor={30}>
+      <Sequence from={0} durationInFrames={135} premountFor={30}>
         <RetroBoot />
       </Sequence>
-      <Sequence from={90} durationInFrames={99} premountFor={30}>
+      <Sequence from={120} durationInFrames={225} premountFor={30}>
         <ArenaReveal />
       </Sequence>
-      <Sequence from={165} durationInFrames={147} premountFor={30}>
+      <Sequence from={330} durationInFrames={126} premountFor={30}>
         <RosterReveal />
       </Sequence>
-      <Sequence from={300} durationInFrames={153} premountFor={30}>
-        <FairTest />
+      <Sequence from={456} durationInFrames={225} premountFor={30}>
+        <RealRace />
       </Sequence>
-      <Sequence from={438} durationInFrames={123} premountFor={30}>
-        <LiveRace />
-      </Sequence>
-      <Sequence from={537} durationInFrames={96} premountFor={30}>
+      <Sequence from={666} durationInFrames={129} premountFor={30}>
         <AustinCommentary />
       </Sequence>
-      <Sequence from={618} durationInFrames={282} premountFor={30}>
+      <Sequence from={780} durationInFrames={165} premountFor={30}>
         <EndCard />
       </Sequence>
 
-      <Sequence from={30} durationInFrames={846} premountFor={30}>
-        <Audio src={staticFile("the-reveal/audio/voiceover-daniel-radio-v3-30s.mp3")} volume={0.98} />
+      <Sequence from={15} durationInFrames={107} premountFor={30}>
+        <Audio src={staticFile("the-reveal/audio/v4/scene-01-intro.mp3")} volume={0.98} />
+      </Sequence>
+      <Sequence from={120} durationInFrames={225} premountFor={30}>
+        <Audio src={staticFile("the-reveal/audio/v4/scene-02-stage.mp3")} volume={0.98} playbackRate={1.5} />
+      </Sequence>
+      <Sequence from={338} durationInFrames={82} premountFor={30}>
+        <Audio src={staticFile("the-reveal/audio/v4/scene-03-roster.mp3")} volume={0.98} playbackRate={1.3} />
+      </Sequence>
+      <Sequence from={474} durationInFrames={201} premountFor={30}>
+        <Audio src={staticFile("the-reveal/audio/v4/scene-04-race.mp3")} volume={0.98} />
+      </Sequence>
+      <Sequence from={675} durationInFrames={81} premountFor={30}>
+        <Audio src={staticFile("the-reveal/audio/v4/scene-05-commentator.mp3")} volume={0.98} />
+      </Sequence>
+      <Sequence from={801} durationInFrames={144} premountFor={30}>
+        <Audio src={staticFile("the-reveal/audio/v4/scene-06-end.mp3")} volume={0.98} playbackRate={1.25} />
       </Sequence>
     </AbsoluteFill>
   );
