@@ -2,12 +2,13 @@
 
 import { ReactNode, useCallback, useRef, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { hardhat } from "viem/chains";
 import { Bars3Icon } from "@heroicons/react/24/outline";
 import { FaucetButton, RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import { useOutsideClick } from "~~/hooks/scaffold-eth";
 import scaffoldConfig from "~~/scaffold.config";
+import { MARKETING_LANDING } from "~~/utils/landing";
 
 /**
  */
@@ -16,6 +17,8 @@ export const HeaderClient = ({ menuLinks }: { menuLinks: ReactNode }) => {
 
   const searchParams = useSearchParams();
   const isBigScreen = searchParams.has("bigscreen");
+  const pathname = usePathname();
+  const isMarketingLanding = MARKETING_LANDING && pathname === "/";
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const burgerMenuRef = useRef<HTMLDivElement>(null);
@@ -24,7 +27,7 @@ export const HeaderClient = ({ menuLinks }: { menuLinks: ReactNode }) => {
     useCallback(() => setIsDrawerOpen(false), []),
   );
 
-  if (isBigScreen) {
+  if (isBigScreen || isMarketingLanding) {
     return null;
   }
 
