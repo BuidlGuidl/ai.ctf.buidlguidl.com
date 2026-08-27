@@ -47,7 +47,7 @@ export function PickYourAgent() {
     const text = [
       `I am backing ${label} in the ${X_HANDLE} Agents Arena${trimmed ? ` because ${trimmed}` : ""}.`,
       "",
-      "10 AI agents. 12 onchain flags. One clock.",
+      "10 AI agents. 12 onchain flags. One winner.",
     ].join("\n");
     return `https://x.com/intent/post?${new URLSearchParams({
       text,
