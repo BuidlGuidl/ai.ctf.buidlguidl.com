@@ -38,7 +38,7 @@ export function GET() {
   const body = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//BuidlGuidl//AI CTF Arena//EN",
+    "PRODID:-//BuidlGuidl//Agents Arena//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     "BEGIN:VEVENT",

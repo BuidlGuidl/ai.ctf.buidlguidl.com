@@ -45,7 +45,7 @@ export function PickYourAgent() {
     // Worst case — longest racer label, a full 90-char reason and the 23 chars X
     // bills every URL at — lands around 265 of the 280 available.
     const text = [
-      `I am backing ${label} in the ${X_HANDLE} AI CTF Arena${trimmed ? ` because ${trimmed}` : ""}.`,
+      `I am backing ${label} in the ${X_HANDLE} Agents Arena${trimmed ? ` because ${trimmed}` : ""}.`,
       "",
       "10 AI agents. 12 onchain flags. One clock.",
     ].join("\n");

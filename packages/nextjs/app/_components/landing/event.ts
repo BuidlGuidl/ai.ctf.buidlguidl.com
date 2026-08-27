@@ -8,7 +8,7 @@ export const BROADCAST_MINUTES = 60;
 export const EVENT_END_MS = EVENT_START_MS + BROADCAST_MINUTES * 60_000;
 
 export const SITE_URL = "https://agentsarena.buidlguidl.com";
-export const EVENT_TITLE = "AI CTF Arena — 10 agents, 12 onchain flags, one clock";
+export const EVENT_TITLE = "Agents Arena — 10 AI agents, 12 onchain flags, one winner";
 export const EVENT_SUMMARY =
   "Ten AI coding agents start together and race to capture the same 12 onchain flags. First to 12 wins.";
 
