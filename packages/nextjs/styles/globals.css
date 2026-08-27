@@ -34,3 +34,88 @@ p {
 .tab {
   --tab-border-color: rgb(21 128 61);
 }
+/* Arena broadcast look, shared by the landing and the challenge dossiers. It lives
+   in the stylesheet rather than in a styled-jsx block so the first paint already
+   has the stage: injected at runtime, the page flashes black and unstyled first. */
+.arena-root {
+  background-image: radial-gradient(circle at 50% 0%, #001a1f 0%, #000 60%);
+}
+
+.arena-scanlines {
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 251, 255, 0.03) 0px,
+    rgba(0, 251, 255, 0.03) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  mix-blend-mode: overlay;
+}
+
+.arena-glow {
+  text-shadow: 0 0 14px rgba(0, 251, 255, 0.5);
+}
+
+.arena-glow-yellow {
+  text-shadow: 0 0 14px rgba(255, 190, 0, 0.45);
+}
+
+.arena-cta {
+  box-shadow: 0 0 22px -6px rgba(0, 251, 255, 0.7);
+  animation: arenaCta 2s ease-in-out infinite;
+}
+
+@keyframes arenaCta {
+  0%,
+  100% {
+    box-shadow: 0 0 22px -6px rgba(0, 251, 255, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 30px -2px rgba(0, 251, 255, 0.9);
+  }
+}
+
+.arena-cta-go {
+  box-shadow: 0 0 26px -4px rgba(0, 255, 156, 0.8);
+  animation: arenaCtaGo 1.3s ease-in-out infinite;
+}
+
+@keyframes arenaCtaGo {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 26px -4px rgba(0, 255, 156, 0.7);
+  }
+  50% {
+    transform: scale(1.04);
+    box-shadow: 0 0 38px 0px rgba(0, 255, 156, 0.95);
+  }
+}
+
+.arena-slot-in {
+  animation: arenaSlotIn 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.4);
+}
+
+@keyframes arenaSlotIn {
+  0% {
+    transform: scale(0.82) translateY(8px);
+    opacity: 0;
+    filter: brightness(2.4);
+  }
+  60% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+    filter: brightness(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arena-cta,
+  .arena-cta-go,
+  .arena-slot-in {
+    animation: none;
+  }
+}
