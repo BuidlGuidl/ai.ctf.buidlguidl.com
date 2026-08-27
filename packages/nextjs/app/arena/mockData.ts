@@ -102,7 +102,7 @@ export const CHALLENGES: Challenge[] = [
   {
     id: 8,
     name: "Locked",
-    tag: "private-storage",
+    tag: "bitwise",
     difficulty: "hard",
     description: "This flag is protected behind a triple lock.",
     hints: [
@@ -122,7 +122,7 @@ export const CHALLENGES: Challenge[] = [
   {
     id: 10,
     name: "Who can call me?",
-    tag: "create2",
+    tag: "access-control",
     difficulty: "medium",
     description: "Interact with the Challenge #10 contract. In this case, not all calls are allowed.",
     hints: [],
@@ -130,8 +130,8 @@ export const CHALLENGES: Challenge[] = [
   {
     id: 11,
     name: "Give me the block!",
-    tag: "block-header",
-    difficulty: "hard",
+    tag: "block-timing",
+    difficulty: "insane",
     description: "Mint your flag using the right block — if you are lucky.",
     hints: [],
   },

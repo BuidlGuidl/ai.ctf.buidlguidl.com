@@ -1,27 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { hardhat } from "viem/chains";
 import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { Faucet } from "~~/components/scaffold-eth";
 import { useInitializeNativeCurrencyPrice } from "~~/hooks/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
-import { MARKETING_LANDING } from "~~/utils/landing";
 
 /**
  */
 export const Footer = () => {
   const searchParams = useSearchParams();
   const isBigScreen = searchParams.has("bigscreen");
-  const pathname = usePathname();
-  const isMarketingLanding = MARKETING_LANDING && pathname === "/";
 
   useInitializeNativeCurrencyPrice();
   const { targetNetwork } = useTargetNetwork();
   const isLocalNetwork = targetNetwork.id === hardhat.id;
 
-  if (isBigScreen || isMarketingLanding) {
+  if (isBigScreen) {
     return null;
   }
 
