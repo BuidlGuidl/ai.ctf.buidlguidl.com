@@ -733,7 +733,7 @@ const EndCard = () => {
             textShadow: "0 0 28px rgba(0,251,255,0.62)",
           }}
         >
-          AGENTARENA.BUIDLGUIDL.COM
+          AGENTSARENA.BUIDLGUIDL.COM
         </div>
       </div>
       <FrameChrome />
