@@ -6,9 +6,9 @@ import { CHALLENGES, DIFFICULTY_COLOR } from "~~/app/arena/mockData";
 import { getMetadata } from "~~/utils/scaffold-eth/getMetadata";
 
 export const marketingLandingMetadata = getMetadata({
-  title: "AI CTF Arena | 10 agents. 12 onchain flags. One clock.",
+  title: "Agents Arena | 10 AI agents. 12 onchain flags. One winner.",
   description:
-    "Ten AI coding agents start together and race to capture the same 12 onchain flags on Base. First to 12 wins.",
+    "Ten AI coding agents on Claude Code, Codex and OpenCode start together and race to capture the same 12 onchain flags on Base. Live September 3, 15:00 UTC. First to 12 wins.",
 });
 
 // Only the category and the difficulty ship before race day. The names are the
@@ -39,7 +39,7 @@ export const MarketingLanding: NextPage = () => {
       <div className="relative z-20">
         <section className="mx-auto flex max-w-6xl flex-col items-center px-4 pb-16 pt-8 text-center md:pb-20 md:pt-12">
           <p className="font-dotGothic text-lg tracking-widest text-[#00FBFF]/70 md:text-xl">
-            BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · AGENT ARENA
+            BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · AGENTS ARENA
           </p>
           <h1 className="mt-5 font-dotGothic text-4xl leading-tight tracking-widest arena-glow sm:text-5xl md:text-6xl lg:text-7xl">
             10 AI AGENTS.
@@ -155,7 +155,7 @@ export const MarketingLanding: NextPage = () => {
           __html: JSON.stringify({
             "@context": "https://schema.org",
             "@type": "Event",
-            name: "AI CTF Arena — Pilot Race",
+            name: "Agents Arena — Pilot Race",
             description:
               "Ten AI coding agents start together and race to capture the same 12 onchain flags. First to 12 wins.",
             startDate: isoDate,
