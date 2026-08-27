@@ -717,7 +717,7 @@ const EndCard = () => {
         <div style={{ display: "flex", gap: 28, alignItems: "center", fontSize: 39, fontWeight: 950, letterSpacing: "0.05em" }}>
           <span style={{ color: arenaTheme.yellow }}>03 SEP 2026</span>
           <span style={{ color: "rgba(245,255,255,0.32)" }}>//</span>
-          <span style={{ color: arenaTheme.cyan }}>17:00 UTC</span>
+          <span style={{ color: arenaTheme.cyan }}>3:00 PM UTC / 11:00 AM ET</span>
           <span style={{ color: "rgba(245,255,255,0.32)" }}>//</span>
           <span>LIVE</span>
         </div>
@@ -733,7 +733,7 @@ const EndCard = () => {
             textShadow: "0 0 28px rgba(0,251,255,0.62)",
           }}
         >
-          AI.CTF.BUIDLGUIDL.COM
+          AGENTARENA.BUIDLGUIDL.COM
         </div>
       </div>
       <FrameChrome />
