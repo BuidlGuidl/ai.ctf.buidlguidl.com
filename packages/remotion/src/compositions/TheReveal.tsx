@@ -763,24 +763,7 @@ export const TheReveal = () => {
         <EndCard />
       </Sequence>
 
-      <Sequence from={15} durationInFrames={107} premountFor={30}>
-        <Audio src={staticFile("the-reveal/audio/v4/scene-01-intro.mp3")} volume={0.98} />
-      </Sequence>
-      <Sequence from={120} durationInFrames={225} premountFor={30}>
-        <Audio src={staticFile("the-reveal/audio/v4/scene-02-stage.mp3")} volume={0.98} playbackRate={1.5} />
-      </Sequence>
-      <Sequence from={338} durationInFrames={82} premountFor={30}>
-        <Audio src={staticFile("the-reveal/audio/v4/scene-03-roster.mp3")} volume={0.98} playbackRate={1.3} />
-      </Sequence>
-      <Sequence from={474} durationInFrames={201} premountFor={30}>
-        <Audio src={staticFile("the-reveal/audio/v4/scene-04-race.mp3")} volume={0.98} />
-      </Sequence>
-      <Sequence from={675} durationInFrames={81} premountFor={30}>
-        <Audio src={staticFile("the-reveal/audio/v4/scene-05-commentator.mp3")} volume={0.98} />
-      </Sequence>
-      <Sequence from={801} durationInFrames={144} premountFor={30}>
-        <Audio src={staticFile("the-reveal/audio/v4/scene-06-end.mp3")} volume={0.98} playbackRate={1.25} />
-      </Sequence>
+      <Audio src={staticFile("the-reveal/audio/the-reveal-v3-13-master.m4a")} />
     </AbsoluteFill>
   );
 };
