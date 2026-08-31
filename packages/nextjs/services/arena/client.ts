@@ -12,6 +12,8 @@ import type {
   SessionResponse,
   SteerRequest,
   SteerResponse,
+  SweepRequest,
+  SweepResponse,
   VerifyRequest,
   VerifyResponse,
 } from "./arena-types";
@@ -75,6 +77,8 @@ export const arenaClient = {
   startRun: (runId: string) => runFetch(`/runs/${encodeURIComponent(runId)}/start`, { method: "POST" }),
   seedRun: (runId: string, body: { signature: string }) =>
     runFetch(`/runs/${encodeURIComponent(runId)}/seed`, { method: "POST", body }),
+  sweepRun: (runId: string, body: SweepRequest) =>
+    arenaFetch<SweepResponse>(`/runs/${encodeURIComponent(runId)}/sweep`, { method: "POST", body }),
   stopRun: (runId: string) => runFetch(`/runs/${encodeURIComponent(runId)}/stop`, { method: "POST" }),
   steerEntrant: (runId: string, entrantId: string, body: SteerRequest) =>
     arenaFetch<SteerResponse>(`/runs/${encodeURIComponent(runId)}/entrants/${encodeURIComponent(entrantId)}/steer`, {

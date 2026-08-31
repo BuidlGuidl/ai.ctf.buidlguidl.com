@@ -53,6 +53,12 @@ export default function ArenaRunsPage() {
         >
           ◂ BACK TO LOBBY
         </Link>
+        <Link
+          href="/arena/sweep"
+          className="rounded border border-[#FFBE00]/40 px-3 py-1 font-dotGothic text-sm tracking-widest text-[#FFBE00]/80 transition hover:border-[#FFBE00] hover:bg-[#FFBE00] hover:text-black"
+        >
+          SWEEP FUNDS ▸
+        </Link>
       </header>
 
       <main className="flex-1 overflow-y-auto px-4 py-8 sm:px-6">

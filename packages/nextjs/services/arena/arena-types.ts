@@ -1,4 +1,4 @@
-// Copied from agents-arena-backend contract/arena-types.ts, master @ ce07731.
+// Copied from agents-arena-backend contract/arena-types.ts, sweep-funds branch (pre-merge, base 04923a0).
 // Do not edit here — sync from the backend repo (formatting follows this repo's
 // prettier). Endpoint docs live there in contract/API.md.
 
@@ -202,11 +202,38 @@ export interface RunListItem {
   state: RunState;
   createdAt: string;
   startedAt: string | null;
+  // The seed signer can sweep the run's derived wallets. Null before seeding.
+  seededBy: string | null;
   agentCount: number;
 }
 
 export interface RunListResponse {
   runs: RunListItem[];
+}
+
+export interface SweepRequest {
+  // A fresh signature of the run's original seed typed data.
+  signature: string;
+}
+
+export type SweepResultStatus = "swept" | "skipped_low_balance" | "failed";
+
+export interface SweepResult {
+  entrantId: string;
+  address: string;
+  // Absent when the balance lookup failed or the run changed before this entrant.
+  balanceWei?: string;
+  status: SweepResultStatus;
+  txHash?: string;
+  error?: string;
+}
+
+export interface SweepResponse {
+  runId: string;
+  // The verified seed signer. Every successful transfer targets this address.
+  to: string;
+  chainId: number;
+  results: SweepResult[];
 }
 
 export interface SteerRequest {
