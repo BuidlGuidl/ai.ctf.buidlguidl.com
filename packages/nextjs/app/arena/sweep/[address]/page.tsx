@@ -451,6 +451,9 @@ function SweepRunCard({
   onSweep: (run: { id: string; chainId: number }) => Promise<SweepOutcome>;
 }) {
   const { targetNetwork } = useTargetNetwork();
+  // A terminal run with an empty wallet set cannot change anymore — stop polling it.
+  const settled =
+    total !== undefined && total < DUST_WEI && (runItem.state === "finished" || runItem.state === "failed");
   const {
     data: run,
     error,
@@ -458,7 +461,7 @@ function SweepRunCard({
     refetch,
   } = useQuery({
     queryKey: ["arenaSweepRun", runItem.id],
-    refetchInterval: 10_000,
+    refetchInterval: settled ? false : 10_000,
     placeholderData: keepPreviousData,
     queryFn: ({ signal }) => arenaClient.getRun(runItem.id, signal),
   });
@@ -471,7 +474,7 @@ function SweepRunCard({
     balances,
     isError: balancesError,
     refetch: refetchBalances,
-  } = useAgentBalances(addresses, Boolean(run), run?.chainId);
+  } = useAgentBalances(addresses, Boolean(run) && !settled, run?.chainId, 30_000);
   const balancesLoaded = addresses.length === 0 || addresses.every(address => balances[address] !== undefined);
   const currentTotal = useMemo(
     () => addresses.reduce((sum, address) => sum + (balances[address] ?? 0n), 0n),
