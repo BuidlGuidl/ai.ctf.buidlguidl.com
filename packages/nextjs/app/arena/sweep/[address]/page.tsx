@@ -474,7 +474,7 @@ function SweepRunCard({
     balances,
     isError: balancesError,
     refetch: refetchBalances,
-  } = useAgentBalances(addresses, Boolean(run) && !settled, run?.chainId, 30_000);
+  } = useAgentBalances(addresses, Boolean(run) && !settled, run?.chainId, 10_000);
   const balancesLoaded = addresses.length === 0 || addresses.every(address => balances[address] !== undefined);
   const currentTotal = useMemo(
     () => addresses.reduce((sum, address) => sum + (balances[address] ?? 0n), 0n),
