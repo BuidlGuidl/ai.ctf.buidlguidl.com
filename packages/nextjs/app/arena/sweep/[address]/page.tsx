@@ -5,7 +5,6 @@ import Link from "next/link";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { Address as EvmAddress } from "viem";
 import { formatEther, getAddress, isAddress } from "viem";
-import { useAccount } from "wagmi";
 import { useAgentBalances } from "~~/app/arena/useAgentBalances";
 import { Address, RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
@@ -37,6 +36,8 @@ const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "
 const SWEEP_ARM_MS = 6000;
 const SWEEP_CONFIRM_DWELL_MS = 400;
 const DUST_WEI = 500_000_000_000_000n; // 0.0005 ETH — below this the page shows 0.000 and treats the run as swept
+// The backend accepts these states for POST /runs/:id/sweep (contract/API.md).
+const SWEEPABLE_STATES: RunState[] = ["awaiting_funding", "ready", "finished", "failed"];
 const AmountContext = createContext<AmountContextValue | null>(null);
 const STATE_TONE: Partial<Record<RunState, string>> = {
   running: "border-[#00FBFF]/60 text-[#00FBFF] animate-pulse",
@@ -134,7 +135,6 @@ export default function ArenaSweepPage({ params }: ArenaSweepPageProps) {
 }
 
 function ArenaSweepPageContent({ urlAddress }: { urlAddress: EvmAddress }) {
-  const { address: connectedAddress } = useAccount();
   const operator = useOperatorSession();
   const signSeed = useSeedSigner();
   const [amountUnit, setAmountUnit] = useState<AmountUnit>("eth");
@@ -161,7 +161,7 @@ function ArenaSweepPageContent({ urlAddress }: { urlAddress: EvmAddress }) {
     [amountUnit, toggleAmountUnit],
   );
   const canSweep = Boolean(
-    connectedAddress && urlAddress && connectedAddress.toLowerCase() === urlAddress.toLowerCase(),
+    operator.address && urlAddress && operator.address.toLowerCase() === urlAddress.toLowerCase(),
   );
 
   const {
@@ -209,7 +209,7 @@ function ArenaSweepPageContent({ urlAddress }: { urlAddress: EvmAddress }) {
         const meta = runMeta[run.id];
         const state = meta?.state ?? run.state;
         const hasBalance = (meta?.total ?? 0n) >= DUST_WEI;
-        if (!meta || !hasBalance || (state !== "finished" && state !== "failed")) return [];
+        if (!meta || !hasBalance || !SWEEPABLE_STATES.includes(state)) return [];
         return [{ id: run.id, chainId: meta.chainId }];
       }),
     [runMeta, sortedOwnedRuns],
@@ -492,8 +492,10 @@ function SweepRunCard({
 
   const state = run?.state ?? runItem.state;
   const busy = sweep?.phase === "signing" || sweep?.phase === "sweeping";
-  const inactive = state !== "finished" && state !== "failed";
+  const inactive = !SWEEPABLE_STATES.includes(state);
   const empty = total !== undefined && total < DUST_WEI;
+  // A fresh sweep drains the run under DUST_WEI within seconds; keep the receipts visible.
+  const collapsed = empty && sweep?.phase !== "done";
 
   return (
     <section
@@ -516,11 +518,7 @@ function SweepRunCard({
         <EthAmount wei={total} className="shrink-0 text-sm tracking-wide text-[#FFBE00]" />
       </div>
 
-      {empty ? (
-        sweep?.phase === "done" ? (
-          <SweepSummary response={sweep.response} />
-        ) : null
-      ) : !run && !error ? (
+      {collapsed ? null : !run && !error ? (
         <div className="animate-pulse px-4 py-4 text-sm tracking-wide text-[#00FBFF]/40">loading wallet balances…</div>
       ) : error && !run ? (
         <div className="flex items-center justify-between gap-3 px-4 py-3 text-sm text-[#FF5861]">
@@ -612,18 +610,20 @@ function SweepRunCard({
             <div className="border-t border-[#FF5861]/20 px-3 py-2 text-sm text-[#FF5861] sm:px-4">{sweep.message}</div>
           )}
 
-          <div className="flex flex-wrap items-center justify-end gap-3 border-t border-[#00FBFF]/15 px-3 py-3 sm:px-4">
-            {inactive && <span className="text-xs tracking-wide text-[#00FBFF]/40">run still active</span>}
-            <button
-              type="button"
-              onClick={() => void onSweep({ id: run.id, chainId: run.chainId })}
-              disabled={!canSweep || busy || sweepingAll || inactive || total === undefined}
-              title={!canSweep ? "Not the operator of this run" : undefined}
-              className="rounded border border-[#FFBE00]/60 px-4 py-1.5 font-dotGothic text-sm tracking-widest text-[#FFBE00] transition hover:bg-[#FFBE00] hover:text-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FFBE00] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {sweep?.phase === "signing" ? "SIGNING…" : sweep?.phase === "sweeping" ? "SWEEPING…" : "SWEEP RUN"}
-            </button>
-          </div>
+          {!empty && (
+            <div className="flex flex-wrap items-center justify-end gap-3 border-t border-[#00FBFF]/15 px-3 py-3 sm:px-4">
+              {inactive && <span className="text-xs tracking-wide text-[#00FBFF]/40">run still active</span>}
+              <button
+                type="button"
+                onClick={() => void onSweep({ id: run.id, chainId: run.chainId })}
+                disabled={!canSweep || busy || sweepingAll || inactive || total === undefined}
+                title={!canSweep ? "Not the operator of this run" : undefined}
+                className="rounded border border-[#FFBE00]/60 px-4 py-1.5 font-dotGothic text-sm tracking-widest text-[#FFBE00] transition hover:bg-[#FFBE00] hover:text-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FFBE00] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {sweep?.phase === "signing" ? "SIGNING…" : sweep?.phase === "sweeping" ? "SWEEPING…" : "SWEEP RUN"}
+              </button>
+            </div>
+          )}
 
           {sweep?.phase === "done" && <SweepSummary response={sweep.response} />}
         </>

@@ -6,13 +6,16 @@ import { useRouter } from "next/navigation";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { useAccount } from "wagmi";
 import { RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
+import { useOperatorSession } from "~~/services/arena/useOperatorSession";
 
 export const dynamic = "force-dynamic";
 
 export default function ArenaSweepRedirectPage() {
   const router = useRouter();
-  const { address, status } = useAccount();
+  const { status } = useAccount();
   const { openConnectModal } = useConnectModal();
+  // operator.address falls back to the dev signer, matching the rest of /arena.
+  const { address } = useOperatorSession();
 
   useEffect(() => {
     if (address) router.replace(`/arena/sweep/${address}`);
