@@ -10,7 +10,7 @@ import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 
 export type FundingStatus = "waiting" | "partial" | "funded";
 
-export function useAgentBalances(addresses: Address[], enabled = true, chainId?: number) {
+export function useAgentBalances(addresses: Address[], enabled = true, chainId?: number, refetchIntervalMs = 2000) {
   const { targetNetwork } = useTargetNetwork();
   const publicClient = usePublicClient({ chainId: targetNetwork.id });
   const activeChainId = chainId ?? targetNetwork.id;
@@ -22,7 +22,7 @@ export function useAgentBalances(addresses: Address[], enabled = true, chainId?:
   const { data, isError, refetch } = useQuery({
     queryKey: ["arenaAgentBalances", activeChainId, addresses],
     enabled: enabled && addresses.length > 0 && !!balanceClient,
-    refetchInterval: 2000,
+    refetchInterval: refetchIntervalMs,
     placeholderData: prev => prev,
     queryFn: async () => {
       if (!balanceClient) throw new Error("no public client for the arena network");
