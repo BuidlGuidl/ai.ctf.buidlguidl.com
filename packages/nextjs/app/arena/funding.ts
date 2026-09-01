@@ -11,7 +11,7 @@ export type FundingMode = "local" | "batch" | "none";
 // Mirrors the backend's chains.json fundingThresholdEth; keep in sync.
 const FUNDING_THRESHOLD_ETH: Record<number, string> = {
   [hardhat.id]: "0.05",
-  [base.id]: "0.005",
+  [base.id]: "0.001",
   [baseSepolia.id]: "0.005",
 };
 
@@ -25,10 +25,10 @@ export const MULTICALL3_ADDRESS: Record<number, Address> = {
   [baseSepolia.id]: "0xcA11bde05977b3631167028862bE2a173976CA11",
 };
 
-// Base mainnet is deliberately absent: agent keys are generated per run and
-// discarded when it ends, so anything sent there would be unrecoverable. Adding
-// base.id here is all it takes to turn it on.
-const BATCH_FUNDING_CHAINS: number[] = [baseSepolia.id];
+// Base mainnet used to be deliberately absent because per-run agent keys were
+// discarded, making funds unrecoverable. The operator sweep
+// (agents-arena-backend#75 + the /arena/sweep page) recovers leftovers now.
+const BATCH_FUNDING_CHAINS: number[] = [base.id, baseSepolia.id];
 
 export function fundingMode(chainId?: number): FundingMode {
   if (chainId === undefined) return "none";
