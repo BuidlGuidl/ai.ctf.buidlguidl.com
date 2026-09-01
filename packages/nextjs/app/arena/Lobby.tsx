@@ -794,20 +794,12 @@ export function ArenaLobby({
               arena is only ever a new race: a finished run walks out of reach the
               moment its URL goes. */}
           {phase === "idle" && (
-            <div className="mt-6 flex items-center gap-5">
-              <Link
-                href="/arena/runs"
-                className="text-xs font-bold tracking-widest text-[#00FBFF]/50 transition hover:text-[#00FBFF]"
-              >
-                PREVIOUS RUNS ▸
-              </Link>
-              <Link
-                href="/arena/sweep"
-                className="text-xs font-bold tracking-widest text-[#00FBFF]/50 transition hover:text-[#00FBFF]"
-              >
-                SWEEP FUNDS ▸
-              </Link>
-            </div>
+            <Link
+              href="/arena/runs"
+              className="mt-6 text-xs font-bold tracking-widest text-[#00FBFF]/50 transition hover:text-[#00FBFF]"
+            >
+              PREVIOUS RUNS ▸
+            </Link>
           )}
 
           {/* primary action */}
