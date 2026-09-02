@@ -2,7 +2,19 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AUSTIN_X_HANDLE, EVENT_START_MS, GOOGLE_CALENDAR_URL, LINKS, type Phase, X_HANDLE, phaseAt } from "./event";
+import { LivePlayer } from "./LivePlayer";
+import {
+  AUSTIN_X_HANDLE,
+  EVENT_START_MS,
+  GOOGLE_CALENDAR_URL,
+  LINKS,
+  PHASE_OVERRIDE,
+  type Phase,
+  X_HANDLE,
+  YOUTUBE_EMBED_URL,
+  YOUTUBE_WATCH_URL,
+  phaseAt,
+} from "./event";
 
 const UNITS = [
   { label: "DAYS", ms: 86_400_000 },
@@ -25,7 +37,9 @@ function split(remaining: number) {
 // never runs the script still gets a real time instead of a blank slot.
 const UTC_TIME = new Date(EVENT_START_MS).toUTCString().replace("GMT", "UTC");
 
-export function HeroClock() {
+// The player only belongs in the hero: the closing section reuses the clock and
+// would otherwise load the stream a second time on the same page.
+export function HeroClock({ withPlayer = false }: { withPlayer?: boolean }) {
   const [now, setNow] = useState<number | null>(null);
 
   useEffect(() => {
@@ -34,7 +48,9 @@ export function HeroClock() {
     return () => clearInterval(timer);
   }, []);
 
-  const phase: Phase = now === null ? "pre" : phaseAt(now);
+  const phase: Phase = now === null ? PHASE_OVERRIDE ?? "pre" : phaseAt(now);
+  const hasStream = YOUTUBE_EMBED_URL !== null;
+  const showPlayer = withPlayer && phase !== "pre" && hasStream;
   const parts = split(now === null ? EVENT_START_MS - Date.now() : EVENT_START_MS - now);
   const localTime =
     now === null
@@ -52,7 +68,20 @@ export function HeroClock() {
     <div className="flex flex-col items-center gap-6">
       <div className="text-center">
         <div className="text-sm md:text-base tracking-[0.3em] text-[#00FBFF]/55">
-          {phase === "pre" ? "RACE STARTS IN" : phase === "live" ? "THE ARENA IS OPEN" : "THE RACE IS IN THE BOOKS"}
+          {phase === "pre" ? (
+            "RACE STARTS IN"
+          ) : phase === "live" ? (
+            <>
+              THE ARENA IS <span className="text-[#00ff9c]">● LIVE NOW</span>
+            </>
+          ) : (
+            <>
+              <span className="text-[#FFBE00]">RACE OVER</span> ·{" "}
+              <span className="tracking-normal text-[#00FBFF]/75" suppressHydrationWarning>
+                Ran {localTime}
+              </span>
+            </>
+          )}
         </div>
         {phase === "pre" ? (
           <div className="mt-3 flex items-start justify-center gap-2 md:gap-4">
@@ -68,18 +97,15 @@ export function HeroClock() {
               </div>
             ))}
           </div>
-        ) : (
-          <div
-            className="mt-3 font-dotGothic text-4xl md:text-6xl tracking-widest arena-glow"
-            style={{ color: phase === "live" ? "#00ff9c" : "#FFBE00" }}
-          >
-            {phase === "live" ? "● LIVE NOW" : "FINAL STANDINGS"}
+        ) : null}
+        {phase !== "post" && (
+          <div className="mt-3 text-base md:text-lg text-[#00FBFF]/75" suppressHydrationWarning>
+            {phase === "pre" ? localTime : `Started ${localTime}`}
           </div>
         )}
-        <div className="mt-4 text-base md:text-lg text-[#00FBFF]/75" suppressHydrationWarning>
-          {localTime}
-        </div>
       </div>
+
+      {showPlayer && <LivePlayer live={phase === "live"} />}
 
       <div className="flex flex-col items-center gap-3">
         {phase === "pre" ? (
@@ -128,46 +154,69 @@ export function HeroClock() {
             </p>
           </>
         ) : phase === "live" ? (
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            <a
-              href={LINKS.austin}
-              target="_blank"
-              rel="noreferrer"
-              className="arena-cta-go rounded-md border-2 border-[#00ff9c] px-8 py-3 font-dotGothic text-lg tracking-widest text-[#00ff9c] transition hover:bg-[#00ff9c] hover:text-black"
-            >
-              ▶ WATCH LIVE ON X
-            </a>
-            <a
-              href={LINKS.youtube}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-md border-2 border-[#00FBFF]/40 px-8 py-3 font-dotGothic text-lg tracking-widest text-[#00FBFF]/75 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
-            >
-              WATCH ON YOUTUBE
-            </a>
-            <Link
-              href="/arena"
-              className="rounded-md border-2 border-[#00FBFF]/40 px-8 py-3 font-dotGothic text-lg tracking-widest text-[#00FBFF]/75 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
-            >
-              OPEN THE BOARD
-            </Link>
-          </div>
+          <>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <a
+                href={LINKS.austin}
+                target="_blank"
+                rel="noreferrer"
+                className={
+                  hasStream
+                    ? "rounded-md border-2 border-[#00FBFF]/40 px-8 py-3 font-dotGothic text-lg tracking-widest text-[#00FBFF]/75 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
+                    : "arena-cta-go rounded-md border-2 border-[#00ff9c] px-8 py-3 font-dotGothic text-lg tracking-widest text-[#00ff9c] transition hover:bg-[#00ff9c] hover:text-black"
+                }
+              >
+                {hasStream ? "WATCH ON X" : "▶ WATCH LIVE ON X"}
+              </a>
+              {!showPlayer && (
+                <a
+                  href={YOUTUBE_WATCH_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-md border-2 border-[#00FBFF]/40 px-8 py-3 font-dotGothic text-lg tracking-widest text-[#00FBFF]/75 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
+                >
+                  WATCH ON YOUTUBE
+                </a>
+              )}
+              <Link
+                href="/arena"
+                className="rounded-md border-2 border-[#00FBFF]/40 px-8 py-3 font-dotGothic text-lg tracking-widest text-[#00FBFF]/75 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
+              >
+                OPEN THE BOARD
+              </Link>
+            </div>
+            {showPlayer && (
+              <p className="text-sm text-[#00FBFF]/50">
+                Player not loading?{" "}
+                <a
+                  href={YOUTUBE_WATCH_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline underline-offset-4 hover:text-[#00FBFF]"
+                >
+                  Open the stream on YouTube
+                </a>
+              </p>
+            )}
+          </>
         ) : (
           <div className="flex flex-wrap items-center justify-center gap-3">
             <Link
               href="/arena"
-              className="arena-cta rounded-md border-2 border-[#00FBFF] px-8 py-3 font-dotGothic text-lg tracking-widest text-[#00FBFF] transition hover:bg-[#00FBFF] hover:text-black"
-            >
-              ▶ OPEN THE RESULTS
-            </Link>
-            <a
-              href={LINKS.youtube}
-              target="_blank"
-              rel="noreferrer"
               className="rounded-md border-2 border-[#00FBFF]/40 px-8 py-3 font-dotGothic text-lg tracking-widest text-[#00FBFF]/75 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
             >
-              WATCH THE REPLAY
-            </a>
+              OPEN THE RESULTS
+            </Link>
+            {!showPlayer && (
+              <a
+                href={YOUTUBE_WATCH_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-md border-2 border-[#00FBFF]/40 px-8 py-3 font-dotGothic text-lg tracking-widest text-[#00FBFF]/75 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
+              >
+                WATCH THE REPLAY
+              </a>
+            )}
           </div>
         )}
       </div>

@@ -55,8 +55,22 @@ export const GOOGLE_CALENDAR_URL =
 
 export type Phase = "pre" | "live" | "post";
 
+// Race day is steered from here with a deploy, not a code change. The YouTube id
+// arrives once Austin schedules the stream; the override flips the page to "post"
+// when the race is over, and can force "live" early if the pre-show starts first.
+// Nobody knows how long the race runs, so the clock never ends it on its own.
+export const YOUTUBE_LIVE_VIDEO_ID: string | null = null;
+export const PHASE_OVERRIDE: Phase | null = null;
+
+export const YOUTUBE_EMBED_URL = YOUTUBE_LIVE_VIDEO_ID
+  ? `https://www.youtube.com/embed/${YOUTUBE_LIVE_VIDEO_ID}`
+  : null;
+// The same id serves the replay once the stream ends, so the post-race link needs no change.
+export const YOUTUBE_WATCH_URL = YOUTUBE_LIVE_VIDEO_ID
+  ? `https://www.youtube.com/watch?v=${YOUTUBE_LIVE_VIDEO_ID}`
+  : LINKS.youtube;
+
 export function phaseAt(now: number): Phase {
-  if (now < EVENT_START_MS) return "pre";
-  if (now < EVENT_END_MS) return "live";
-  return "post";
+  if (PHASE_OVERRIDE) return PHASE_OVERRIDE;
+  return now < EVENT_START_MS ? "pre" : "live";
 }
