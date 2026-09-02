@@ -55,8 +55,27 @@ export const GOOGLE_CALENDAR_URL =
 
 export type Phase = "pre" | "live" | "post";
 
-export function phaseAt(now: number): Phase {
-  if (now < EVENT_START_MS) return "pre";
-  if (now < EVENT_END_MS) return "live";
-  return "post";
-}
+// Race day is steered by hand: NEXT_PUBLIC_MARKETING_PHASE moves the landing from
+// "pre" to "live" to "post" with a deploy, the same way NEXT_PUBLIC_MARKETING_LANDING
+// picks the landing itself. The clock never changes the phase on its own, because
+// nobody knows how long the race runs. Anything unset or unknown reads as "pre".
+const envPhase = process.env.NEXT_PUBLIC_MARKETING_PHASE;
+export const PHASE: Phase = envPhase === "live" || envPhase === "post" ? envPhase : "pre";
+// The arena run whose standings the landing shows once the race is over. Unset,
+// the post-race page keeps the roster instead of a results table.
+export const MARKETING_RUN_ID = process.env.NEXT_PUBLIC_MARKETING_RUN_ID || null;
+
+// The video id arrives once Austin schedules the stream. Unset, the landing links
+// to the channel and shows no player.
+export const YOUTUBE_LIVE_VIDEO_ID = process.env.NEXT_PUBLIC_MARKETING_YOUTUBE_ID || null;
+// The X broadcast (or the post carrying it). Until it exists, the watch links go
+// to Austin's profile, where the stream will show up.
+export const X_LIVE_URL = process.env.NEXT_PUBLIC_MARKETING_X_LINK || LINKS.austin;
+
+export const YOUTUBE_EMBED_URL = YOUTUBE_LIVE_VIDEO_ID
+  ? `https://www.youtube.com/embed/${YOUTUBE_LIVE_VIDEO_ID}`
+  : null;
+// The same id serves the replay once the stream ends, so the post-race link needs no change.
+export const YOUTUBE_WATCH_URL = YOUTUBE_LIVE_VIDEO_ID
+  ? `https://www.youtube.com/watch?v=${YOUTUBE_LIVE_VIDEO_ID}`
+  : LINKS.youtube;
