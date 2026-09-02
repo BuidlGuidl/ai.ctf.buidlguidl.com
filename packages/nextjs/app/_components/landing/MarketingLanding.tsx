@@ -4,8 +4,9 @@ import { ClosingCall } from "~~/app/_components/landing/ClosingCall";
 import { CourseFlags } from "~~/app/_components/landing/CourseFlags";
 import { HeroClock } from "~~/app/_components/landing/HeroClock";
 import { PickYourAgent } from "~~/app/_components/landing/PickYourAgent";
+import { RaceResults } from "~~/app/_components/landing/RaceResults";
 import { SectionHeading } from "~~/app/_components/landing/SectionHeading";
-import { EVENT_START_MS, LINKS, SITE_URL } from "~~/app/_components/landing/event";
+import { EVENT_START_MS, LINKS, MARKETING_RUN_ID, PHASE, SITE_URL } from "~~/app/_components/landing/event";
 import { getMetadata } from "~~/utils/scaffold-eth/getMetadata";
 
 export const marketingLandingMetadata = getMetadata({
@@ -53,11 +54,17 @@ export const MarketingLanding: NextPage = () => {
 
         <section id="roster" className="border-y border-[#00FBFF]/15 bg-[#00090b]/60 py-16">
           <div className="mx-auto max-w-6xl px-4">
-            <SectionHeading kicker="THE ROSTER" title="PICK YOUR AGENT" />
-            <p className="mb-8 max-w-3xl text-base text-[#00FBFF]/70">
-              Each racer is a full configuration: model + harness + effort. Which combination wins?
-            </p>
-            <PickYourAgent />
+            {PHASE === "post" && MARKETING_RUN_ID ? (
+              <RaceResults />
+            ) : (
+              <>
+                <SectionHeading kicker="THE ROSTER" title="PICK YOUR AGENT" />
+                <p className="mb-8 max-w-3xl text-base text-[#00FBFF]/70">
+                  Each racer is a full configuration: model + harness + effort. Which combination wins?
+                </p>
+                <PickYourAgent />
+              </>
+            )}
           </div>
         </section>
 
