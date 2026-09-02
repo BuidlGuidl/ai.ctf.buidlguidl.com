@@ -68,6 +68,9 @@ export const MARKETING_RUN_ID = process.env.NEXT_PUBLIC_MARKETING_RUN_ID || null
 // The video id arrives once Austin schedules the stream. Unset, the landing links
 // to the channel and shows no player.
 export const YOUTUBE_LIVE_VIDEO_ID = process.env.NEXT_PUBLIC_MARKETING_YOUTUBE_ID || null;
+// The X broadcast (or the post carrying it). Until it exists, the watch links go
+// to Austin's profile, where the stream will show up.
+export const X_LIVE_URL = process.env.NEXT_PUBLIC_MARKETING_X_LINK || LINKS.austin;
 
 export const YOUTUBE_EMBED_URL = YOUTUBE_LIVE_VIDEO_ID
   ? `https://www.youtube.com/embed/${YOUTUBE_LIVE_VIDEO_ID}`

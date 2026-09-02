@@ -9,6 +9,7 @@ import {
   LINKS,
   PHASE,
   X_HANDLE,
+  X_LIVE_URL,
   YOUTUBE_EMBED_URL,
   YOUTUBE_WATCH_URL,
 } from "./event";
@@ -154,7 +155,7 @@ export function HeroClock({ withPlayer = false }: { withPlayer?: boolean }) {
           <>
             <div className="flex flex-wrap items-center justify-center gap-3">
               <a
-                href={LINKS.austin}
+                href={X_LIVE_URL}
                 target="_blank"
                 rel="noreferrer"
                 className={

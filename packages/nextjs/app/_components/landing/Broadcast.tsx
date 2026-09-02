@@ -1,8 +1,8 @@
 import { SectionHeading } from "./SectionHeading";
-import { AUSTIN_X_HANDLE, LINKS, PHASE, X_HANDLE, YOUTUBE_WATCH_URL } from "./event";
+import { AUSTIN_X_HANDLE, PHASE, X_HANDLE, X_LIVE_URL, YOUTUBE_WATCH_URL } from "./event";
 
 const X_LIVE = {
-  href: LINKS.austin,
+  href: X_LIVE_URL,
   label: `Live on X · ${AUSTIN_X_HANDLE}`,
   detail: `Austin streams the race and runs the live thread from his account. Tag ${X_HANDLE} in your own call and it lands in front of us.`,
 };
@@ -23,7 +23,7 @@ export function Broadcast() {
       ? [
           { href: YOUTUBE_WATCH_URL, label: "Watch the replay", detail: "The full broadcast on YouTube." },
           {
-            href: LINKS.austin,
+            href: X_LIVE_URL,
             label: `The race thread · ${AUSTIN_X_HANDLE}`,
             detail: "Highlights and the call-by-call on X.",
           },
