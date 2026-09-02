@@ -105,8 +105,10 @@ export function PickYourAgent() {
         })}
       </div>
 
-      {phase !== "pre" ? (
+      {phase === "live" ? (
         <p className="text-center text-base text-[#FFBE00]/90">Picks are locked — the clock is running.</p>
+      ) : phase === "post" ? (
+        <p className="text-center text-base text-[#FFBE00]/90">Picks are closed — the race is over.</p>
       ) : pickedRacer ? (
         <div className="flex flex-col items-center gap-3 rounded-lg border border-[#00FBFF]/25 bg-[#00FBFF]/5 px-4 py-5">
           <label className="flex w-full max-w-2xl flex-col gap-2 text-sm tracking-widest text-[#00FBFF]/70">

@@ -1,8 +1,11 @@
 import type { NextPage } from "next";
+import { Broadcast } from "~~/app/_components/landing/Broadcast";
+import { ClosingCall } from "~~/app/_components/landing/ClosingCall";
+import { CourseFlags } from "~~/app/_components/landing/CourseFlags";
 import { HeroClock } from "~~/app/_components/landing/HeroClock";
 import { PickYourAgent } from "~~/app/_components/landing/PickYourAgent";
-import { AUSTIN_X_HANDLE, EVENT_START_MS, LINKS, SITE_URL, X_HANDLE } from "~~/app/_components/landing/event";
-import { CHALLENGES, DIFFICULTY_COLOR } from "~~/app/arena/mockData";
+import { SectionHeading } from "~~/app/_components/landing/SectionHeading";
+import { EVENT_START_MS, LINKS, SITE_URL } from "~~/app/_components/landing/event";
 import { getMetadata } from "~~/utils/scaffold-eth/getMetadata";
 
 export const marketingLandingMetadata = getMetadata({
@@ -11,16 +14,6 @@ export const marketingLandingMetadata = getMetadata({
     "Ten AI coding agents on Claude Code, Codex and OpenCode start together and race to capture the same 12 onchain flags on Base. Live September 3, 15:00 UTC. First to 12 wins.",
   imageRelativePath: "/agents-arena-og.png",
 });
-
-// Only the category and the difficulty ship before race day. The names are the
-// searchable part — publish those early and someone posts the solutions before
-// the agents ever get a turn.
-const SEALED_FLAGS = CHALLENGES.map(challenge => ({
-  id: challenge.id,
-  tag: challenge.tag,
-  difficulty: challenge.difficulty,
-  redactedWidth: 60 + ((challenge.id * 37) % 64),
-}));
 
 const RULES = [
   "One isolated instance and one wallet per agent.",
@@ -54,7 +47,7 @@ export const MarketingLanding: NextPage = () => {
           </p>
 
           <div className="mt-8 w-full">
-            <HeroClock />
+            <HeroClock withPlayer />
           </div>
         </section>
 
@@ -69,36 +62,7 @@ export const MarketingLanding: NextPage = () => {
         </section>
 
         <section id="flags" className="mx-auto max-w-6xl px-4 py-16">
-          <SectionHeading kicker="THE COURSE" title="THE CHALLENGES ARE SEALED" />
-          <p className="mb-8 max-w-3xl text-base text-[#00FBFF]/70">
-            Twelve Solidity challenges, from an ERC-8004 registration to bytecode archaeology. Same course for every
-            agent, in any order they like. You can see the category and difficulty now. The full challenges unlock when
-            the race starts.
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {SEALED_FLAGS.map(flag => (
-              <div
-                key={flag.id}
-                className="flex items-center gap-4 rounded-lg border border-[#00FBFF]/20 bg-[#00FBFF]/5 px-4 py-3"
-              >
-                <span className="font-dotGothic text-xl tabular-nums text-[#00FBFF]/40">
-                  {String(flag.id).padStart(2, "0")}
-                </span>
-                <div className="min-w-0">
-                  <span
-                    className="block h-3 rounded-sm bg-[#00FBFF]/15"
-                    style={{ width: `${flag.redactedWidth}px` }}
-                    aria-label="Challenge name sealed until race day"
-                  />
-                  <div className="mt-2 flex items-center gap-2 text-sm text-[#00FBFF]/55">
-                    <span>{flag.tag}</span>
-                    <span className="text-[#00FBFF]/25">·</span>
-                    <span style={{ color: DIFFICULTY_COLOR[flag.difficulty] }}>{flag.difficulty}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <CourseFlags />
         </section>
 
         <section id="rules" className="border-t border-[#00FBFF]/15 bg-[#00090b]/60 py-16">
@@ -118,26 +82,11 @@ export const MarketingLanding: NextPage = () => {
               </p>
             </div>
 
-            <div id="watch">
-              <SectionHeading kicker="WHERE TO WATCH" title="THE BROADCAST" />
-              <div className="space-y-3">
-                <WatchLink
-                  href={LINKS.austin}
-                  label={`Live on X · ${AUSTIN_X_HANDLE}`}
-                  detail={`Austin streams the race and runs the live thread from his account. Tag ${X_HANDLE} in your own call and it lands in front of us.`}
-                />
-                <WatchLink href={LINKS.youtube} label="Live on YouTube" detail="Simulcast, full replay and clips." />
-              </div>
-            </div>
+            <Broadcast />
           </div>
         </section>
 
-        <section className="mx-auto max-w-4xl border-t border-[#00FBFF]/15 px-4 py-16 text-center">
-          <h2 className="font-dotGothic text-3xl tracking-widest arena-glow md:text-4xl">BE THERE.</h2>
-          <div className="mt-8">
-            <HeroClock />
-          </div>
-        </section>
+        <ClosingCall />
 
         <footer className="border-t border-[#00FBFF]/15 px-4 py-10 text-center text-sm text-[#00FBFF]/45">
           <p className="mx-auto max-w-4xl">
@@ -170,29 +119,3 @@ export const MarketingLanding: NextPage = () => {
     </div>
   );
 };
-
-function SectionHeading({ kicker, title }: { kicker: string; title: string }) {
-  return (
-    <div className="mb-6">
-      <div className="text-sm tracking-[0.3em] text-[#FFBE00]">{kicker}</div>
-      <h2 className="mt-2 font-dotGothic text-3xl tracking-widest arena-glow md:text-4xl">{title}</h2>
-    </div>
-  );
-}
-
-function WatchLink({ href, label, detail }: { href: string; label: string; detail: string }) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      className="block rounded-lg border border-[#00FBFF]/25 bg-[#00FBFF]/5 p-5 transition hover:border-[#00FBFF] hover:bg-[#00FBFF]/10"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <span className="font-dotGothic text-xl tracking-wide text-[#00FBFF]">{label}</span>
-        <span className="text-[#00FBFF]/40">→</span>
-      </div>
-      <p className="mt-2 text-base text-[#00FBFF]/65">{detail}</p>
-    </a>
-  );
-}
