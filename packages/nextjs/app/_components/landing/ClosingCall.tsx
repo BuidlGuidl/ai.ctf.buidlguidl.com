@@ -1,12 +1,10 @@
-"use client";
-
 import { HeroClock } from "./HeroClock";
-import { usePhase } from "./usePhase";
+import { PHASE } from "./event";
 
 // The closing block exists to sell the date. Once the race is on, the hero
 // carries the player and the broadcast block carries every link.
 export function ClosingCall() {
-  const phase = usePhase();
+  const phase = PHASE;
   if (phase !== "pre") return null;
 
   return (

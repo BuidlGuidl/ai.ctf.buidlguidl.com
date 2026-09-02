@@ -1,19 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { LivePlayer } from "./LivePlayer";
 import {
   AUSTIN_X_HANDLE,
   EVENT_START_MS,
   GOOGLE_CALENDAR_URL,
   LINKS,
-  PHASE_OVERRIDE,
-  type Phase,
+  PHASE,
   X_HANDLE,
   YOUTUBE_EMBED_URL,
   YOUTUBE_WATCH_URL,
-  phaseAt,
 } from "./event";
 
 const UNITS = [
@@ -48,7 +45,7 @@ export function HeroClock({ withPlayer = false }: { withPlayer?: boolean }) {
     return () => clearInterval(timer);
   }, []);
 
-  const phase: Phase = now === null ? PHASE_OVERRIDE ?? "pre" : phaseAt(now);
+  const phase = PHASE;
   const hasStream = YOUTUBE_EMBED_URL !== null;
   const showPlayer = withPlayer && phase !== "pre" && hasStream;
   const parts = split(now === null ? EVENT_START_MS - Date.now() : EVENT_START_MS - now);
@@ -178,12 +175,6 @@ export function HeroClock({ withPlayer = false }: { withPlayer?: boolean }) {
                   WATCH ON YOUTUBE
                 </a>
               )}
-              <Link
-                href="/arena"
-                className="rounded-md border-2 border-[#00FBFF]/40 px-8 py-3 font-dotGothic text-lg tracking-widest text-[#00FBFF]/75 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
-              >
-                OPEN THE BOARD
-              </Link>
             </div>
             {showPlayer && (
               <p className="text-sm text-[#00FBFF]/50">
@@ -199,25 +190,27 @@ export function HeroClock({ withPlayer = false }: { withPlayer?: boolean }) {
               </p>
             )}
           </>
-        ) : (
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            <Link
-              href="/arena"
-              className="rounded-md border-2 border-[#00FBFF]/40 px-8 py-3 font-dotGothic text-lg tracking-widest text-[#00FBFF]/75 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
+        ) : showPlayer ? (
+          <p className="text-sm text-[#00FBFF]/50">
+            Player not loading?{" "}
+            <a
+              href={YOUTUBE_WATCH_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="underline underline-offset-4 hover:text-[#00FBFF]"
             >
-              OPEN THE RESULTS
-            </Link>
-            {!showPlayer && (
-              <a
-                href={YOUTUBE_WATCH_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-md border-2 border-[#00FBFF]/40 px-8 py-3 font-dotGothic text-lg tracking-widest text-[#00FBFF]/75 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
-              >
-                WATCH THE REPLAY
-              </a>
-            )}
-          </div>
+              Open the replay on YouTube
+            </a>
+          </p>
+        ) : (
+          <a
+            href={YOUTUBE_WATCH_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-md border-2 border-[#00FBFF]/40 px-8 py-3 font-dotGothic text-lg tracking-widest text-[#00FBFF]/75 transition hover:border-[#00FBFF] hover:text-[#00FBFF]"
+          >
+            WATCH THE REPLAY
+          </a>
         )}
       </div>
     </div>

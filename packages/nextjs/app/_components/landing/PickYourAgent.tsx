@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { LINKS, type Phase, SITE_URL, X_HANDLE, phaseAt } from "./event";
+import { LINKS, PHASE, SITE_URL, X_HANDLE } from "./event";
 import { ModelName } from "~~/app/arena/ModelName";
 import { ROSTER, displayForEntrant } from "~~/services/arena/roster";
 
@@ -17,16 +17,14 @@ const RACERS = ROSTER.map((entry, index) => ({
 export function PickYourAgent() {
   const [picked, setPicked] = useState<string | null>(null);
   const [reason, setReason] = useState("");
-  const [phase, setPhase] = useState<Phase>("pre");
+  const phase = PHASE;
 
   useEffect(() => {
-    setPhase(phaseAt(Date.now()));
     const stored = window.localStorage.getItem(STORAGE_KEY);
     if (stored && RACERS.some(racer => racer.id === stored)) setPicked(stored);
   }, []);
 
   const choose = (id: string) => {
-    // Picks lock the moment the clock starts, so a stale tab can't keep taking them.
     if (phase !== "pre") return;
     const next = picked === id ? null : id;
     setPicked(next);

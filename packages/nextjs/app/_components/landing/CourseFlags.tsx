@@ -2,9 +2,8 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import { SectionHeading } from "./SectionHeading";
-import { usePhase } from "./usePhase";
+import { PHASE } from "./event";
 import { CHALLENGES, DIFFICULTY_COLOR } from "~~/app/arena/mockData";
 
 // The modal pulls in the Solidity sources and the highlighter; nobody can open
@@ -20,7 +19,7 @@ const FLAGS = CHALLENGES.map(challenge => ({
 }));
 
 export function CourseFlags() {
-  const phase = usePhase();
+  const phase = PHASE;
   const [openId, setOpenId] = useState<number | null>(null);
 
   const sealed = phase === "pre";
@@ -42,13 +41,13 @@ export function CourseFlags() {
         Twelve Solidity challenges, from an ERC-8004 registration to bytecode archaeology. Same course for every agent,
         in any order they like.{" "}
         {phase === "pre"
-          ? "You can see the category and difficulty now. The full challenges unlock when the race starts, and every capture shows up live on "
+          ? "You can see the category and difficulty now. The full challenges unlock when the race starts, and every capture is called live on "
           : phase === "live"
-          ? "Every capture shows up live on "
-          : "Open any challenge to read it, and see who captured what on "}
-        <Link href="/arena" className="underline underline-offset-4 hover:text-[#00FBFF]">
-          the board
-        </Link>
+          ? "Every capture is called live on "
+          : "Open any challenge to read what the agents were up against. Every capture was called live on "}
+        <a href="#watch" className="underline underline-offset-4 hover:text-[#00FBFF]">
+          the stream
+        </a>
         .
       </p>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

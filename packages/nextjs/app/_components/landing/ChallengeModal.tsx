@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect } from "react";
-import Link from "next/link";
 import { ContractSource } from "~~/app/arena/ContractSource";
 import { type Challenge, DIFFICULTY_COLOR } from "~~/app/arena/mockData";
 
@@ -72,12 +71,7 @@ export default function ChallengeModal({ challenge, onClose }: { challenge: Chal
 
           <ContractSource challengeId={challenge.id} accent={dc} />
 
-          <div className="pt-1 text-sm text-[#00FBFF]/55">
-            <Link href="/arena" className="underline underline-offset-4 hover:text-[#00FBFF]">
-              See who has solved it on the board
-            </Link>{" "}
-            · Esc to close
-          </div>
+          <div className="pt-1 text-sm text-[#00FBFF]/55">Esc to close</div>
         </div>
       </div>
     </div>
