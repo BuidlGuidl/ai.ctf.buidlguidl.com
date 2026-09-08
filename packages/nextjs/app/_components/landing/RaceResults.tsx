@@ -10,7 +10,7 @@ import { BlockieAvatar } from "~~/components/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 import type { RosterEffort, RunSnapshot } from "~~/services/arena/arena-types";
 import { arenaClient } from "~~/services/arena/client";
-import { displayForEntrant } from "~~/services/arena/roster";
+import { displayMapForEntrants } from "~~/services/arena/roster";
 import { getBlockExplorerAddressLink } from "~~/utils/scaffold-eth";
 
 const ChallengeModal = dynamic(() => import("./ChallengeModal"), { ssr: false });
@@ -53,10 +53,11 @@ const fmtFinish = (seconds: number) => {
 // Same order as the board: flags first, then the clock for anyone who cleared
 // the course, then whoever reached that flag count first.
 function rowsFromRun(run: RunSnapshot): Row[] {
+  const displays = displayMapForEntrants(run.entrants);
   const startMs = run.startedAt ? Date.parse(run.startedAt) : NaN;
   return run.entrants
     .map(entrant => {
-      const display = displayForEntrant(entrant.id, entrant.harness, entrant.model, entrant.effort);
+      const display = displays[entrant.id];
       const lastSolveAt = entrant.solves.at(-1)?.ts ?? null;
       const clearedMs = entrant.solves.length >= TOTAL && lastSolveAt ? Date.parse(lastSolveAt) : NaN;
       return {

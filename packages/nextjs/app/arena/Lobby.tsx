@@ -22,12 +22,29 @@ import { getWalletClient } from "wagmi/actions";
 import { Address, BlockieAvatar, RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import { useTransactor } from "~~/hooks/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
-import type { RunState } from "~~/services/arena/arena-types";
+import type {
+  AgentOption,
+  AgentsResponse,
+  HarnessId,
+  RosterEffort,
+  RosterEntry,
+  RunState,
+} from "~~/services/arena/arena-types";
 import { ArenaApiError, arenaClient } from "~~/services/arena/client";
 import type { FundingProjection } from "~~/services/arena/projection";
-import { ROSTER } from "~~/services/arena/roster";
+import {
+  type AgentKey,
+  MAX_ROSTER,
+  type RosterPick,
+  type RosterProblem,
+  agentKey,
+  agentsByKey,
+  issuesToProblems,
+  validateRoster,
+} from "~~/services/arena/rosterBuilder";
 import { playSfx, unlockSfx } from "~~/services/arena/sfx";
 import { selectFunding, selectRun, selectRunError, useArenaStore } from "~~/services/arena/store";
+import { useAgentSearch, useDebouncedValue } from "~~/services/arena/useAgents";
 import { useEnsureChain, useOperatorSession, useSeedSigner } from "~~/services/arena/useOperatorSession";
 import { wagmiConfig } from "~~/services/web3/wagmiConfig";
 
@@ -92,11 +109,35 @@ export function ArenaLobby({
   agents,
   onLaunch,
   onStartOver,
+  agentsQuery,
+  known,
+  picks,
+  onPicksChange,
+  onAgentSeen,
+  roster,
+  onResetRoster,
 }: {
   agents: Agent[];
+  agentsQuery: { data?: AgentsResponse; isPending: boolean; isError: boolean; refetch: () => unknown };
+  known: Record<AgentKey, AgentOption>;
+  picks: RosterPick[];
+  onPicksChange: (picks: RosterPick[]) => void;
+  onAgentSeen: (agent: AgentOption) => void;
+  roster: readonly RosterEntry[];
+  onResetRoster: () => void;
   onLaunch: () => void;
   onStartOver: () => void;
 }) {
+  const [editing, setEditing] = useState<number | null>(null);
+  const [serverProblems, setServerProblems] = useState<RosterProblem[]>([]);
+  const localProblems = useMemo(
+    () =>
+      agentsQuery.data
+        ? validateRoster(picks, agentsQuery.data.harnesses, agentsByKey(agentsQuery.data.agents), known)
+        : [],
+    [picks, known, agentsQuery.data],
+  );
+  const problems = [...localProblems, ...serverProblems];
   const [log, setLog] = useState<{ id: number; text: string; color: string }[]>([]);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [funding, setFunding] = useState(false);
@@ -108,6 +149,7 @@ export function ArenaLobby({
   const [stopArmed, setStopArmed] = useState(false);
   const [stopConfirmDisabled, setStopConfirmDisabled] = useState(false);
   const [durationMinutes, setDurationMinutes] = useState("60");
+  useEffect(() => setServerProblems([]), [picks, durationMinutes]);
   const [error, setError] = useState<string | null>(null);
   const [blockingRun, setBlockingRun] = useState<ActiveRunConflict | null>(null);
 
@@ -352,6 +394,9 @@ export function ArenaLobby({
   }, [agents, amount, ensureChain, fundingChainId, mode, targetNetwork, transactor, pushLog, refetchBalances]);
 
   const openLobby = useCallback(async () => {
+    setServerProblems([]);
+    setEditing(null);
+    if (agentsQuery.isPending || agentsQuery.isError || localProblems.length || !roster.length) return;
     unlockSfx();
     setStarting(true);
     setError(null);
@@ -365,7 +410,7 @@ export function ArenaLobby({
       }
       const created = await arenaClient.createRun({
         preset: "docker-arena",
-        roster: [...ROSTER],
+        roster: [...roster],
         durationMs: Math.round(minutes * 60_000),
       });
       createdRunId = created.id;
@@ -389,13 +434,17 @@ export function ArenaLobby({
         pushLog(`start blocked by run ${conflict.id}`, RED);
         return;
       }
+      if (!createdRunId && cause instanceof ArenaApiError && cause.issues.length) {
+        setServerProblems(issuesToProblems(cause.issues));
+        return;
+      }
       const message = cause instanceof Error ? cause.message : "Could not start the arena";
       setError(message);
       pushLog(message, RED);
     } finally {
       setStarting(false);
     }
-  }, [durationMinutes, operator, pushLog, route]);
+  }, [durationMinutes, operator, pushLog, route, agentsQuery.isPending, agentsQuery.isError, localProblems, roster]);
 
   // A start that never landed — a lost race for the single active run, a dropped
   // connection — leaves the run sitting in `created`. Retrying it is the whole
@@ -622,7 +671,7 @@ export function ArenaLobby({
 
       {/* stage */}
       <div className="lobby-stage flex-1 min-h-0 flex">
-        <div className="lobby-main flex-1 min-h-0 flex flex-col items-center justify-center px-6 py-8 relative">
+        <div className="lobby-main flex-1 min-h-0 flex flex-col items-center justify-start overflow-y-auto px-6 py-8 relative">
           <div className="lobby-hero text-center mb-6">
             <div className="lobby-hero-title font-dotGothic text-3xl md:text-4xl tracking-widest lobby-title-glow">
               {phase === "idle"
@@ -705,11 +754,28 @@ export function ArenaLobby({
               ) : (
                 <button
                   onClick={() => void openLobby()}
-                  disabled={!agents.length || !operator.sessionLoaded || !operator.configured || starting}
+                  disabled={
+                    !roster.length ||
+                    agentsQuery.isPending ||
+                    agentsQuery.isError ||
+                    localProblems.length > 0 ||
+                    !operator.sessionLoaded ||
+                    !operator.configured ||
+                    starting
+                  }
                   className="lobby-cta group px-10 py-3 rounded-md font-dotGothic text-lg tracking-widest border-2 border-[#00FBFF] text-[#00FBFF] hover:bg-[#00FBFF] hover:text-black transition disabled:opacity-40"
                 >
                   {starting ? "CREATING RUN…" : operator.authenticated ? "▶ CREATE RUN" : "▶ SIGN IN & CREATE RUN"}
                 </button>
+              )}
+              {agentsQuery.isPending && <span role="status">Loading agents…</span>}
+              {agentsQuery.isError && (
+                <div role="alert">
+                  Could not load agents{" "}
+                  <button className={PICKER_BUTTON} onClick={() => agentsQuery.refetch()}>
+                    RETRY
+                  </button>
+                </div>
               )}
               {!operator.sessionLoaded ? (
                 <span className="text-base text-[#FFBE00]/90">Connecting…</span>
@@ -750,6 +816,33 @@ export function ArenaLobby({
             </div>
           )}
 
+          {phase === "idle" && problems.length > 0 && (
+            <div
+              role="alert"
+              className="mb-4 w-full max-w-4xl rounded border border-[#FF5861]/40 bg-[#FF5861]/10 px-3 py-2 text-base text-[#FF5861]"
+            >
+              {problems.map((problem, index) => (
+                <div key={index}>
+                  {problem.index === null ? "" : `Slot ${problem.index + 1}: `}
+                  {problem.message}
+                </div>
+              ))}
+            </div>
+          )}
+          {phase === "idle" && (
+            <div className="mb-3 w-full max-w-4xl flex justify-end">
+              <button
+                className={PICKER_BUTTON}
+                onClick={() => {
+                  setEditing(null);
+                  onResetRoster();
+                }}
+              >
+                RESET TO DEFAULT
+              </button>
+            </div>
+          )}
+
           {/* progress bar — connections while agents join, funding once they have */}
           <div className="lobby-progress w-full max-w-3xl h-1.5 rounded-full bg-[#00FBFF]/10 overflow-hidden mb-8">
             <div
@@ -785,12 +878,73 @@ export function ArenaLobby({
             <div className="lobby-slot-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 w-full max-w-4xl">
               {agents.map((a, i) => {
                 const st: SlotState = run?.entrants.some(entrant => entrant.id === a.id) ? "ready" : "waiting";
-                return <Slot key={a.id} agent={a} state={st} idle={phase === "idle"} index={i} />;
+                return phase === "idle" ? (
+                  <div
+                    key={a.id}
+                    className={`min-w-0 rounded-lg ${
+                      problems.some(problem => problem.index === i) ? "outline outline-2 outline-[#FF5861]" : ""
+                    }`}
+                  >
+                    <Slot agent={a} state={st} idle index={i} />
+                    <div className="flex flex-wrap justify-center gap-2 pt-2">
+                      <button
+                        className={PICKER_BUTTON}
+                        disabled={!agentsQuery.data}
+                        aria-label={`Change agent in slot ${i + 1}`}
+                        onClick={() => setEditing(i)}
+                      >
+                        CHANGE
+                      </button>
+                      {picks.length > 1 && (
+                        <button
+                          className={PICKER_BUTTON}
+                          aria-label={`Remove agent in slot ${i + 1}`}
+                          onClick={() => {
+                            setEditing(null);
+                            onPicksChange(picks.filter((_, index) => index !== i));
+                          }}
+                        >
+                          REMOVE
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <Slot key={a.id} agent={a} state={st} idle={false} index={i} />
+                );
               })}
+              {phase === "idle" && picks.length < MAX_ROSTER && (
+                <button
+                  className="min-h-[160px] rounded-lg border border-dashed border-[#00FBFF]/40 font-dotGothic hover:border-[#00FBFF] disabled:opacity-40"
+                  disabled={!agentsQuery.data}
+                  onClick={() => setEditing(picks.length)}
+                >
+                  ADD AGENT
+                </button>
+              )}
             </div>
           )}
+          {phase === "idle" && editing !== null && agentsQuery.data && (
+            <AgentEditor
+              key={editing}
+              index={editing}
+              pick={picks[editing]}
+              data={agentsQuery.data}
+              known={known}
+              onCancel={() => setEditing(null)}
+              onConfirm={(pick, option) => {
+                onAgentSeen(option);
+                onPicksChange(
+                  editing === picks.length
+                    ? [...picks, pick]
+                    : picks.map((previous, index) => (index === editing ? pick : previous)),
+                );
+                setEditing(null);
+              }}
+            />
+          )}
 
-          {/* The runs left behind, right under the roster card. Without this the
+          {/* The runs left behind, right under the agent slots. Without this the
               arena is only ever a new race: a finished run walks out of reach the
               moment its URL goes. */}
           {phase === "idle" && (
@@ -1148,7 +1302,7 @@ function FundingRow({
 function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; idle: boolean; index: number }) {
   const ready = state === "ready";
   const joining = state === "joining";
-  const active = ready || joining;
+  const active = idle || ready || joining;
 
   return (
     <div
@@ -1495,5 +1649,215 @@ function LobbyStyles() {
         }
       }
     `}</style>
+  );
+}
+
+const PICKER_BUTTON =
+  "rounded border border-[#00FBFF]/30 px-3 py-1 font-dotGothic text-sm tracking-widest hover:border-[#00FBFF] hover:bg-[#00FBFF] hover:text-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#00FBFF] disabled:opacity-40";
+const PICKER_INPUT =
+  "w-full rounded border border-[#00FBFF]/30 bg-black/60 px-2 py-1 text-[#00FBFF] focus:border-[#00FBFF] focus:outline-none";
+
+function AgentEditor({
+  index,
+  pick,
+  data,
+  known,
+  onCancel,
+  onConfirm,
+}: {
+  index: number;
+  pick?: RosterPick;
+  data: AgentsResponse;
+  known: Record<AgentKey, AgentOption>;
+  onCancel: () => void;
+  onConfirm: (pick: RosterPick, agent: AgentOption) => void;
+}) {
+  const [harness, setHarness] = useState<HarnessId>(pick?.harness ?? data.harnesses[0]?.id ?? "codex");
+  const [selected, setSelected] = useState<AgentOption | undefined>(() =>
+    pick ? known[agentKey(pick.harness, pick.model)] : undefined,
+  );
+  const [effort, setEffort] = useState<RosterEffort | "">(pick?.effort ?? "");
+  const [query, setQuery] = useState(selected?.label ?? "");
+  const debouncedQuery = useDebouncedValue(query.trim(), 250);
+  const search = useAgentSearch(harness, debouncedQuery);
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const input = useRef<HTMLInputElement>(null);
+  const customModels = data.harnesses.find(item => item.id === harness)?.customModels;
+  const curated = data.agents.filter(agent => agent.harness === harness);
+  const searching = query.trim().length >= 2;
+  const waiting = searching && (debouncedQuery !== query.trim() || search.isFetching || search.isPlaceholderData);
+  const unavailable = searching && search.isError;
+  const options = (searching && !unavailable ? (waiting ? [] : search.data ?? []) : curated).filter(
+    agent =>
+      agent.harness === harness &&
+      (customModels || curated.some(item => item.model === agent.model)) &&
+      (!unavailable ||
+        [agent.label, agent.vendor, agent.model].some(value =>
+          value.toLowerCase().includes(query.trim().toLowerCase()),
+        )),
+  );
+  const choose = (option: AgentOption) => {
+    setSelected(option);
+    setEffort(option.efforts.includes("high") ? "high" : option.efforts[option.efforts.length - 1]);
+    setQuery(option.label);
+    setOpen(false);
+    input.current?.focus();
+  };
+  useEffect(() => {
+    input.current?.focus();
+  }, []);
+  useEffect(() => {
+    setActive(0);
+  }, [query, harness, search.data]);
+  useEffect(() => {
+    if (open) document.getElementById(`agent-model-option-${active}`)?.scrollIntoView({ block: "nearest" });
+  }, [active, open]);
+  return (
+    <section
+      aria-label={`Edit slot ${index + 1}`}
+      className="mt-5 w-full max-w-4xl shrink-0 rounded border border-[#00FBFF]/40 bg-[#001014] p-4"
+    >
+      <h2 className="mb-3 font-dotGothic text-lg">EDIT SLOT {index + 1}</h2>
+      <div className="grid gap-4 sm:grid-cols-[1fr_2fr_1fr]">
+        <label className="min-w-0">
+          Harness
+          <select
+            className={PICKER_INPUT}
+            value={harness}
+            onChange={event => {
+              setHarness(event.target.value as HarnessId);
+              setSelected(undefined);
+              setEffort("");
+              setQuery("");
+              setOpen(false);
+            }}
+          >
+            {data.harnesses.map(item => (
+              <option key={item.id} value={item.id}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="min-w-0">
+          <label htmlFor="agent-model-input">Model</label>
+          <input
+            ref={input}
+            id="agent-model-input"
+            className={PICKER_INPUT}
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={open}
+            aria-controls="agent-model-options"
+            aria-activedescendant={open && options[active] ? `agent-model-option-${active}` : undefined}
+            value={query}
+            placeholder="Choose a model"
+            onFocus={event => {
+              setOpen(true);
+              if (selected) event.currentTarget.select();
+            }}
+            onClick={() => setOpen(true)}
+            onBlur={() => setOpen(false)}
+            onChange={event => {
+              setQuery(event.target.value);
+              if (event.target.value !== selected?.label) {
+                setSelected(undefined);
+                setEffort("");
+              }
+              setOpen(true);
+            }}
+            onKeyDown={event => {
+              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                event.preventDefault();
+                setOpen(true);
+                setActive(previous =>
+                  options.length
+                    ? (previous + (event.key === "ArrowDown" ? 1 : -1) + options.length) % options.length
+                    : 0,
+                );
+              }
+              if (event.key === "Enter" && open) {
+                event.preventDefault();
+                if (options[active]) choose(options[active]);
+              }
+              if (event.key === "Escape") {
+                event.preventDefault();
+                setOpen(false);
+              }
+            }}
+          />
+          {customModels && <p className="my-1 text-xs text-[#00FBFF]/70">type to search OpenRouter models</p>}
+          {open && (
+            <div className="mt-1 border border-[#00FBFF]/30 bg-black">
+              {waiting && (
+                <div role="status" className="p-2 text-sm">
+                  Searching agents…
+                </div>
+              )}
+              {unavailable && (
+                <div role="alert" className="p-2 text-sm text-[#FFBE00]">
+                  {customModels
+                    ? "OpenRouter search is unavailable, pick a listed model"
+                    : "Search is unavailable, showing listed models"}
+                </div>
+              )}
+              {!waiting && !options.length && <div className="p-2 text-sm">No matching agents</div>}
+              <ul id="agent-model-options" role="listbox" aria-label="Models" className="max-h-56 overflow-y-auto">
+                {options.map((option, optionIndex) => (
+                  <li
+                    key={agentKey(option.harness, option.model)}
+                    id={`agent-model-option-${optionIndex}`}
+                    role="option"
+                    aria-selected={active === optionIndex}
+                    onMouseDown={event => event.preventDefault()}
+                    onMouseEnter={() => setActive(optionIndex)}
+                    onClick={() => choose(option)}
+                    className={`cursor-pointer break-words px-3 py-2 ${
+                      active === optionIndex ? "bg-[#00FBFF]/15" : ""
+                    }`}
+                  >
+                    <span>{option.label}</span> <span className="text-sm text-[#00FBFF]/70">{option.vendor}</span>
+                    <span className="block text-xs text-[#00FBFF]/70">{option.model}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+        <label className="min-w-0">
+          Effort
+          <select
+            className={PICKER_INPUT}
+            value={effort}
+            disabled={!selected}
+            onChange={event => setEffort(event.target.value as RosterEffort)}
+          >
+            <option value="" disabled>
+              Choose effort
+            </option>
+            {selected?.efforts.map(item => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="mt-4 flex gap-2">
+        <button
+          className={PICKER_BUTTON}
+          disabled={!selected || !effort || !selected.efforts.includes(effort)}
+          onClick={() => {
+            if (selected && effort) onConfirm({ harness, model: selected.model, effort }, selected);
+          }}
+        >
+          CONFIRM
+        </button>
+        <button className={PICKER_BUTTON} onClick={onCancel}>
+          CANCEL
+        </button>
+      </div>
+    </section>
   );
 }

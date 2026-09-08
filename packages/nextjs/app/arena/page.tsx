@@ -23,11 +23,26 @@ import { type ArenaView, useArenaRoute } from "./useArenaRoute";
 import type { Address } from "viem";
 import { BlockieAvatar, RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
-import type { EntrantSummary, RunState } from "~~/services/arena/arena-types";
+import {
+  type AgentOption,
+  type EntrantSummary,
+  HARNESS_IDS,
+  ROSTER_EFFORTS,
+  type RosterEntry,
+  type RunState,
+} from "~~/services/arena/arena-types";
 import { ArenaApiError, arenaClient } from "~~/services/arena/client";
 import { connectRun } from "~~/services/arena/connect";
 import type { ChatItem, ConsoleEntry, FeedItem, NarrationEntry } from "~~/services/arena/projection";
-import { ROSTER, displayForEntrant } from "~~/services/arena/roster";
+import { DEFAULT_ROSTER, type DisplayContext, displayForEntrant } from "~~/services/arena/roster";
+import {
+  ENTRANT_ID_MAX,
+  type RosterPick,
+  agentKey,
+  agentsByKey,
+  buildRoster,
+  picksFromRoster,
+} from "~~/services/arena/rosterBuilder";
 import { playSfx, useArenaSfx } from "~~/services/arena/sfx";
 import {
   type ConnectionStatus,
@@ -56,6 +71,7 @@ import {
   selectStatusSeededAt,
   useArenaStore,
 } from "~~/services/arena/store";
+import { useAgents } from "~~/services/arena/useAgents";
 import { useOperatorSession } from "~~/services/arena/useOperatorSession";
 import { getBlockExplorerAddressLink } from "~~/utils/scaffold-eth";
 
@@ -233,11 +249,13 @@ function agentsFromRun(
   statusChangedAt: Record<string, string> | null,
   startedAt: string | null,
   runState: RunState | null,
+  idleRoster: readonly RosterEntry[],
+  context: DisplayContext,
 ): Agent[] {
   const usagePending = runState !== "finished" && runState !== "failed";
   if (!entrants) {
-    return ROSTER.map(entrant => {
-      const display = displayForEntrant(entrant.id, entrant.harness, entrant.model);
+    return idleRoster.map((entrant, index) => {
+      const display = displayForEntrant(entrant, { ...context, laneIndex: index });
       return {
         id: entrant.id,
         handle: display.handle,
@@ -261,8 +279,8 @@ function agentsFromRun(
     });
   }
 
-  return entrants.map(entrant => {
-    const display = displayForEntrant(entrant.id, entrant.harness, entrant.model, entrant.effort);
+  return entrants.map((entrant, index) => {
+    const display = displayForEntrant(entrant, { ...context, laneIndex: index });
     const lastSolve = entrant.solves.at(-1)?.ts ?? null;
     const clearedAt = entrant.solves.length >= CHALLENGES.length ? lastSolve : null;
     return {
@@ -311,7 +329,108 @@ export default function ArenaPage() {
   );
 }
 
+const PICKS_STORAGE_KEY = "ai-ctf-arena:roster-picks";
+
+function savedPick(value: unknown): value is RosterPick {
+  if (!value || typeof value !== "object") return false;
+  const pick = value as RosterPick;
+  return (
+    HARNESS_IDS.includes(pick.harness) &&
+    typeof pick.model === "string" &&
+    !!pick.model.trim() &&
+    ROSTER_EFFORTS.includes(pick.effort)
+  );
+}
+
+function savedAgent(value: unknown): value is AgentOption {
+  if (!value || typeof value !== "object") return false;
+  const agent = value as AgentOption;
+  return (
+    HARNESS_IDS.includes(agent.harness) &&
+    typeof agent.model === "string" &&
+    !!agent.model.trim() &&
+    typeof agent.label === "string" &&
+    typeof agent.vendor === "string" &&
+    Array.isArray(agent.efforts) &&
+    agent.efforts.length > 0 &&
+    agent.efforts.every(effort => ROSTER_EFFORTS.includes(effort))
+  );
+}
+
 function ArenaScreen() {
+  const agentsQuery = useAgents();
+  const [picks, setPicks] = useState<RosterPick[]>(() => picksFromRoster(DEFAULT_ROSTER));
+  const [extras, setExtras] = useState<AgentOption[]>([]);
+  const [picksLoaded, setPicksLoaded] = useState(false);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(PICKS_STORAGE_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (
+          saved &&
+          Array.isArray(saved.picks) &&
+          saved.picks.length <= 10 &&
+          saved.picks.every(savedPick) &&
+          Array.isArray(saved.extras) &&
+          saved.extras.every(savedAgent)
+        ) {
+          const ids = new Set<string>();
+          setPicks(
+            saved.picks.map(({ id, ...pick }: RosterPick) => {
+              if (
+                typeof id !== "string" ||
+                !/^[a-z][a-z0-9-]*$/.test(id) ||
+                id.length > ENTRANT_ID_MAX ||
+                id === "run" ||
+                ids.has(id)
+              ) {
+                return pick;
+              }
+              ids.add(id);
+              return { ...pick, id };
+            }),
+          );
+          setExtras(saved.extras);
+        }
+      }
+    } catch {
+      // Storage can be unavailable; the default race remains usable.
+    }
+    setPicksLoaded(true);
+  }, []);
+  useEffect(() => {
+    if (!picksLoaded) return;
+    try {
+      localStorage.setItem(PICKS_STORAGE_KEY, JSON.stringify({ picks, extras }));
+    } catch {
+      // A full or blocked store must not prevent editing.
+    }
+  }, [picks, extras, picksLoaded]);
+  const known = useMemo(
+    () => agentsByKey([...extras, ...(agentsQuery.data?.agents ?? [])]),
+    [extras, agentsQuery.data],
+  );
+  const displayContext = useMemo(
+    () => ({
+      known,
+      harnessLabels: Object.fromEntries(
+        (agentsQuery.data?.harnesses ?? []).map(harness => [harness.id, harness.label]),
+      ),
+    }),
+    [known, agentsQuery.data],
+  );
+  const idleRoster = useMemo(() => buildRoster(picks), [picks]);
+  const onAgentSeen = useCallback(
+    (option: AgentOption) =>
+      setExtras(previous => [
+        ...previous.filter(agent => agentKey(agent.harness, agent.model) !== agentKey(option.harness, option.model)),
+        option,
+      ]),
+    [],
+  );
+  const onResetRoster = useCallback(() => setPicks(picksFromRoster(DEFAULT_ROSTER)), []);
+
   const [flashes, setFlashes] = useState<string[]>([]);
   const flashTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const [openChallenge, setOpenChallenge] = useState<number | null>(null);
@@ -383,8 +502,8 @@ function ArenaScreen() {
   }, [currentRunId]);
 
   const agents = useMemo(
-    () => agentsFromRun(runEntrants, statusChangedAt, runStartedAt, runState),
-    [runEntrants, runStartedAt, runState, statusChangedAt],
+    () => agentsFromRun(runEntrants, statusChangedAt, runStartedAt, runState, idleRoster, displayContext),
+    [runEntrants, runStartedAt, runState, statusChangedAt, idleRoster, displayContext],
   );
   const startMatch = useCallback(() => setLiveStarted(true), []);
 
@@ -612,10 +731,23 @@ function ArenaScreen() {
     );
   }
 
-  if (!agents.length || (route.runId && !runId)) return <ArenaBoot />;
+  if (route.runId && !runId) return <ArenaBoot />;
 
   if (!liveStarted) {
-    return <ArenaLobby agents={agents} onLaunch={startMatch} onStartOver={backToLobby} />;
+    return (
+      <ArenaLobby
+        agents={agents}
+        onLaunch={startMatch}
+        onStartOver={backToLobby}
+        agentsQuery={agentsQuery}
+        known={known}
+        picks={picks}
+        onPicksChange={setPicks}
+        onAgentSeen={onAgentSeen}
+        roster={idleRoster}
+        onResetRoster={onResetRoster}
+      />
+    );
   }
 
   if (view === "results" && allFinished) {

@@ -3,13 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { LINKS, PHASE, SITE_URL, X_HANDLE } from "./event";
 import { ModelName } from "~~/app/arena/ModelName";
-import { ROSTER, displayForEntrant } from "~~/services/arena/roster";
+import { DEFAULT_ROSTER, displayForEntrant } from "~~/services/arena/roster";
 
 const STORAGE_KEY = "ai-ctf-arena:pick";
 const MAX_REASON = 90;
 
-const RACERS = ROSTER.map((entry, index) => ({
-  ...displayForEntrant(entry.id, entry.harness, entry.model, entry.effort),
+const RACERS = DEFAULT_ROSTER.map((entry, index) => ({
+  ...displayForEntrant(entry, { laneIndex: index }),
   id: entry.id,
   slot: index + 1,
 }));

@@ -159,7 +159,7 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         ...updateEntrant(next, id, entrant => ({ ...entrant, status: event.payload.status })),
         statusChangedAt: { ...state.statusChangedAt, [id]: changedAt },
       };
-      const item = statusFeedItem(event, previous);
+      const item = statusFeedItem(state, event, previous);
       return item ? appendFeed(next, item) : next;
     }
     case "agent.message":
@@ -170,7 +170,7 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         text: event.payload.text,
       });
       next = appendPreview(next, event.payload.entrantId, `› ${singleLine(event.payload.text)}`);
-      return appendChat(next, entrantChat(event));
+      return appendChat(next, entrantChat(state, event));
     case "agent.reasoning":
       next = appendConsole(next, event.payload.entrantId, {
         id: event.id,
@@ -222,7 +222,7 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
       return appendChat(next, {
         id: event.id,
         fromId: "director",
-        fromHandle: displayFor(event.payload.entrantId).handle,
+        fromHandle: displayFor(state, event.payload.entrantId).handle,
         color: "#FFBE00",
         text: event.payload.text,
         director: true,
@@ -246,7 +246,7 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         kind: "steer",
         text: "restarted this session — the agent starts over from its opening prompt",
       });
-      const display = displayFor(event.payload.entrantId);
+      const display = displayFor(state, event.payload.entrantId);
       return appendFeed(next, {
         id: event.id,
         type: "restarted",
@@ -306,7 +306,7 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         kind: "flag",
         text: `Captured Challenge ${event.payload.challengeId}`,
       });
-      const display = displayFor(event.payload.entrantId);
+      const display = displayFor(state, event.payload.entrantId);
       next = appendFeed(next, {
         id: event.id,
         type: "flag",
@@ -464,10 +464,11 @@ function appendChat(state: ProjectionState, item: ChatItem): ProjectionState {
 }
 
 function statusFeedItem(
+  state: ProjectionState,
   event: Extract<ArenaEvent, { type: "entrant.status" }>,
   previous: EntrantStatus | undefined,
 ): FeedItem | null {
-  const display = displayFor(event.payload.entrantId);
+  const display = displayFor(state, event.payload.entrantId);
   if (event.payload.status === "blocked") {
     return {
       id: event.id,
@@ -498,8 +499,8 @@ function statusFeedItem(
   return null;
 }
 
-function entrantChat(event: Extract<ArenaEvent, { type: "agent.message" }>): ChatItem {
-  const display = displayFor(event.payload.entrantId);
+function entrantChat(state: ProjectionState, event: Extract<ArenaEvent, { type: "agent.message" }>): ChatItem {
+  const display = displayFor(state, event.payload.entrantId);
   return {
     id: event.id,
     fromId: event.payload.entrantId,
@@ -509,8 +510,12 @@ function entrantChat(event: Extract<ArenaEvent, { type: "agent.message" }>): Cha
   };
 }
 
-function displayFor(entrantId: string) {
-  return displayForEntrant(entrantId, "agent", entrantId);
+function displayFor(state: ProjectionState, entrantId: string) {
+  const laneIndex = state.run?.entrants.findIndex(entrant => entrant.id === entrantId) ?? -1;
+  const entrant = state.run?.entrants[laneIndex];
+  return entrant
+    ? displayForEntrant(entrant, { laneIndex })
+    : displayForEntrant({ id: entrantId, harness: "agent", model: entrantId });
 }
 
 function singleLine(text: string): string {
