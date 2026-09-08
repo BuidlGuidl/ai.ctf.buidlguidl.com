@@ -10,7 +10,8 @@ import { BlockieAvatar } from "~~/components/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 import type { RosterEffort, RunSnapshot } from "~~/services/arena/arena-types";
 import { arenaClient } from "~~/services/arena/client";
-import { displayMapForEntrants } from "~~/services/arena/roster";
+import { type DisplayContext, displayContextFrom, displayMapForEntrants } from "~~/services/arena/roster";
+import { useAgents } from "~~/services/arena/useAgents";
 import { getBlockExplorerAddressLink } from "~~/utils/scaffold-eth";
 
 const ChallengeModal = dynamic(() => import("./ChallengeModal"), { ssr: false });
@@ -52,8 +53,8 @@ const fmtFinish = (seconds: number) => {
 
 // Same order as the board: flags first, then the clock for anyone who cleared
 // the course, then whoever reached that flag count first.
-function rowsFromRun(run: RunSnapshot): Row[] {
-  const displays = displayMapForEntrants(run.entrants);
+function rowsFromRun(run: RunSnapshot, context: DisplayContext): Row[] {
+  const displays = displayMapForEntrants(run.entrants, context);
   const startMs = run.startedAt ? Date.parse(run.startedAt) : NaN;
   return run.entrants
     .map(entrant => {
@@ -85,6 +86,7 @@ function rowsFromRun(run: RunSnapshot): Row[] {
 }
 
 export function RaceResults() {
+  const agentsQuery = useAgents();
   const [run, setRun] = useState<RunSnapshot | null>(null);
   const [failed, setFailed] = useState(false);
   const [mode, setMode] = useState<ColumnMode>("challenges");
@@ -103,7 +105,10 @@ export function RaceResults() {
     return () => controller.abort();
   }, []);
 
-  const rows = useMemo(() => (run ? rowsFromRun(run) : []), [run]);
+  const rows = useMemo(
+    () => (run ? rowsFromRun(run, displayContextFrom(agentsQuery.data)) : []),
+    [run, agentsQuery.data],
+  );
   const explorer = run && run.chainId === targetNetwork.id ? targetNetwork : null;
   const open = CHALLENGES.find(challenge => challenge.id === openId);
   const challengeName = (id: number) => CHALLENGES.find(challenge => challenge.id === id)?.name ?? "";

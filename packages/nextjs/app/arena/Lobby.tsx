@@ -19,6 +19,7 @@ import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { encodeFunctionData, formatEther, parseEther } from "viem";
 import { useAccount } from "wagmi";
 import { getWalletClient } from "wagmi/actions";
+import { ChevronDownIcon, PencilSquareIcon, PlusIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { Address, BlockieAvatar, RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import { useTransactor } from "~~/hooks/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
@@ -32,6 +33,7 @@ import type {
 } from "~~/services/arena/arena-types";
 import { ArenaApiError, arenaClient } from "~~/services/arena/client";
 import type { FundingProjection } from "~~/services/arena/projection";
+import { type DisplayContext, displayContextFrom, displayForEntrant } from "~~/services/arena/roster";
 import {
   type AgentKey,
   MAX_ROSTER,
@@ -39,13 +41,15 @@ import {
   type RosterProblem,
   agentKey,
   agentsByKey,
+  buildRoster,
   issuesToProblems,
   validateRoster,
 } from "~~/services/arena/rosterBuilder";
 import { playSfx, unlockSfx } from "~~/services/arena/sfx";
 import { selectFunding, selectRun, selectRunError, useArenaStore } from "~~/services/arena/store";
-import { useAgentSearch, useDebouncedValue } from "~~/services/arena/useAgents";
+import { useAgentSearch, useAgents, useDebouncedValue } from "~~/services/arena/useAgents";
 import { useEnsureChain, useOperatorSession, useSeedSigner } from "~~/services/arena/useOperatorSession";
+import { useRosterPicks } from "~~/services/arena/useRosterPicks";
 import { wagmiConfig } from "~~/services/web3/wagmiConfig";
 
 type Phase =
@@ -105,37 +109,58 @@ function activeRunConflict(cause: unknown): ActiveRunConflict | null {
     : null;
 }
 
+function idleAgents(roster: readonly RosterEntry[], context: DisplayContext): Agent[] {
+  return roster.map((entrant, index) => {
+    const display = displayForEntrant(entrant, { ...context, laneIndex: index });
+    return {
+      id: entrant.id,
+      handle: display.handle,
+      harness: display.harnessLabel,
+      model: display.modelLabel,
+      effort: display.effort,
+      vendor: display.vendor,
+      color: display.color,
+      short: display.short,
+      address: null,
+      solved: [],
+      status: "idle",
+      statusChangedAt: null,
+      tokens: 0,
+      cost: null,
+      usagePending: true,
+      lastSolveAt: null,
+      finishedAt: null,
+      currentChallengeId: null,
+    };
+  });
+}
+
 export function ArenaLobby({
   agents,
   onLaunch,
   onStartOver,
-  agentsQuery,
-  known,
-  picks,
-  onPicksChange,
-  onAgentSeen,
-  roster,
-  onResetRoster,
 }: {
   agents: Agent[];
-  agentsQuery: { data?: AgentsResponse; isPending: boolean; isError: boolean; refetch: () => unknown };
-  known: Record<AgentKey, AgentOption>;
-  picks: RosterPick[];
-  onPicksChange: (picks: RosterPick[]) => void;
-  onAgentSeen: (agent: AgentOption) => void;
-  roster: readonly RosterEntry[];
-  onResetRoster: () => void;
   onLaunch: () => void;
   onStartOver: () => void;
 }) {
+  const agentsQuery = useAgents();
+  const { picks, setPicks, extras, noteAgent, reset } = useRosterPicks();
+  const roster = useMemo(() => buildRoster(picks), [picks]);
+  const displayContext = useMemo(() => displayContextFrom(agentsQuery.data, extras), [agentsQuery.data, extras]);
   const [editing, setEditing] = useState<number | null>(null);
   const [serverProblems, setServerProblems] = useState<RosterProblem[]>([]);
   const localProblems = useMemo(
     () =>
       agentsQuery.data
-        ? validateRoster(picks, agentsQuery.data.harnesses, agentsByKey(agentsQuery.data.agents), known)
+        ? validateRoster(
+            picks,
+            agentsQuery.data.harnesses,
+            agentsByKey(agentsQuery.data.agents),
+            displayContext.known ?? {},
+          )
         : [],
-    [picks, known, agentsQuery.data],
+    [picks, displayContext, agentsQuery.data],
   );
   const problems = [...localProblems, ...serverProblems];
   const [log, setLog] = useState<{ id: number; text: string; color: string }[]>([]);
@@ -216,6 +241,8 @@ export function ArenaLobby({
     ? "launching"
     : "failed";
 
+  const cards = phase === "idle" ? idleAgents(roster, displayContext) : agents;
+
   const pushLog = useCallback((text: string, color: string) => {
     setLog(prev => [{ id: ++logId.current, text, color }, ...prev].slice(0, 60));
   }, []);
@@ -287,7 +314,7 @@ export function ArenaLobby({
   // Counted off the chain as well as the backend: the operator sends one
   // transaction and then watches this number, so it has to move when the money
   // lands, not when the backend gets around to saying so.
-  const fundedCount = agents.filter(
+  const fundedCount = cards.filter(
     agent =>
       rowStatus(
         agent.address ? balances[agent.address] : undefined,
@@ -296,7 +323,7 @@ export function ArenaLobby({
       ) === "ready",
   ).length;
   const progressCount = fundingActive ? fundedCount : readyCount;
-  const progressDone = agents.length > 0 && progressCount === agents.length;
+  const progressDone = cards.length > 0 && progressCount === cards.length;
 
   const fundAll = useCallback(async () => {
     const target = requiredRef.current;
@@ -662,7 +689,7 @@ export function ArenaLobby({
           BUIDLGUIDL <span className="text-[#FFBE00]">AI CTF</span> · AGENT ARENA
         </Link>
         <div className="lobby-header-badges hidden lg:flex items-center gap-1 text-sm text-[#00FBFF]/70">
-          <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{agents.length} AGENTS</span>
+          <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{cards.length} AGENTS</span>
           <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{CHALLENGES.length} CHALLENGES</span>
         </div>
         <SfxToggle className="lobby-sfx ml-auto" />
@@ -716,13 +743,13 @@ export function ArenaLobby({
               ) : fundingActive ? (
                 <span>
                   <span className="text-[#00FBFF] font-bold tabular-nums">{fundedCount}</span>
-                  <span className="text-[#00FBFF]/40"> / {agents.length}</span> agents funded
+                  <span className="text-[#00FBFF]/40"> / {cards.length}</span> agents funded
                   {phase === "funding" && <span className="lobby-blink"> · waiting…</span>}
                 </span>
               ) : (
                 <span>
                   <span className="text-[#00FBFF] font-bold tabular-nums">{readyCount}</span>
-                  <span className="text-[#00FBFF]/40"> / {agents.length}</span> agents connected
+                  <span className="text-[#00FBFF]/40"> / {cards.length}</span> agents connected
                   {phase === "connecting" && <span className="lobby-blink"> · waiting…</span>}
                 </span>
               )}
@@ -835,7 +862,7 @@ export function ArenaLobby({
                 className={PICKER_BUTTON}
                 onClick={() => {
                   setEditing(null);
-                  onResetRoster();
+                  reset();
                 }}
               >
                 RESET TO DEFAULT
@@ -848,7 +875,7 @@ export function ArenaLobby({
             <div
               className="h-full rounded-full transition-all duration-500"
               style={{
-                width: `${agents.length ? (progressCount / agents.length) * 100 : 0}%`,
+                width: `${cards.length ? (progressCount / cards.length) * 100 : 0}%`,
                 background: progressDone ? GREEN : CY,
                 boxShadow: `0 0 12px ${progressDone ? GREEN : CY}`,
               }}
@@ -857,7 +884,7 @@ export function ArenaLobby({
 
           {phase === "preparing" || phase === "funding" || phase === "ready" ? (
             <FundingBoard
-              agents={agents}
+              agents={cards}
               balances={balances}
               fundingProjection={fundingProjection}
               required={required}
@@ -875,39 +902,30 @@ export function ArenaLobby({
               locked={phase !== "funding"}
             />
           ) : (
-            <div className="lobby-slot-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 w-full max-w-4xl">
-              {agents.map((a, i) => {
+            <div className="lobby-slot-grid grid auto-rows-fr grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 w-full max-w-4xl">
+              {cards.map((a, i) => {
                 const st: SlotState = run?.entrants.some(entrant => entrant.id === a.id) ? "ready" : "waiting";
                 return phase === "idle" ? (
                   <div
                     key={a.id}
-                    className={`min-w-0 rounded-lg ${
+                    className={`relative h-full min-w-0 rounded-lg ${
                       problems.some(problem => problem.index === i) ? "outline outline-2 outline-[#FF5861]" : ""
                     }`}
                   >
                     <Slot agent={a} state={st} idle index={i} />
-                    <div className="flex flex-wrap justify-center gap-2 pt-2">
-                      <button
-                        className={PICKER_BUTTON}
-                        disabled={!agentsQuery.data}
-                        aria-label={`Change agent in slot ${i + 1}`}
-                        onClick={() => setEditing(i)}
-                      >
-                        CHANGE
-                      </button>
-                      {picks.length > 1 && (
-                        <button
-                          className={PICKER_BUTTON}
-                          aria-label={`Remove agent in slot ${i + 1}`}
-                          onClick={() => {
-                            setEditing(null);
-                            onPicksChange(picks.filter((_, index) => index !== i));
-                          }}
-                        >
-                          REMOVE
-                        </button>
-                      )}
-                    </div>
+                    <button
+                      type="button"
+                      className="absolute top-1.5 right-2 flex h-7 w-7 items-center justify-center rounded-full border border-[#00FBFF]/40 bg-black/70 text-[#00FBFF] transition hover:border-[#00FBFF] hover:bg-[#00FBFF]/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00FBFF] focus-visible:ring-offset-2 focus-visible:ring-offset-black disabled:opacity-40"
+                      disabled={!agentsQuery.data}
+                      aria-label={`Edit agent in slot ${i + 1}`}
+                      title="Edit agent"
+                      onClick={event => {
+                        event.currentTarget.focus();
+                        setEditing(i);
+                      }}
+                    >
+                      <PencilSquareIcon className="h-4 w-4" aria-hidden="true" />
+                    </button>
                   </div>
                 ) : (
                   <Slot key={a.id} agent={a} state={st} idle={false} index={i} />
@@ -915,10 +933,15 @@ export function ArenaLobby({
               })}
               {phase === "idle" && picks.length < MAX_ROSTER && (
                 <button
-                  className="min-h-[160px] rounded-lg border border-dashed border-[#00FBFF]/40 font-dotGothic hover:border-[#00FBFF] disabled:opacity-40"
+                  className="flex h-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-[#00FBFF]/40 font-dotGothic tracking-widest text-[#00FBFF] hover:border-[#00FBFF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00FBFF] disabled:opacity-40"
+                  aria-label="Add agent"
                   disabled={!agentsQuery.data}
-                  onClick={() => setEditing(picks.length)}
+                  onClick={event => {
+                    event.currentTarget.focus();
+                    setEditing(picks.length);
+                  }}
                 >
+                  <PlusIcon className="h-6 w-6" aria-hidden="true" />
                   ADD AGENT
                 </button>
               )}
@@ -930,11 +953,19 @@ export function ArenaLobby({
               index={editing}
               pick={picks[editing]}
               data={agentsQuery.data}
-              known={known}
+              known={displayContext.known ?? {}}
               onCancel={() => setEditing(null)}
+              onRemove={
+                editing < picks.length && picks.length > 1
+                  ? () => {
+                      setPicks(picks.filter((_, index) => index !== editing));
+                      setEditing(null);
+                    }
+                  : undefined
+              }
               onConfirm={(pick, option) => {
-                onAgentSeen(option);
-                onPicksChange(
+                noteAgent(option);
+                setPicks(
                   editing === picks.length
                     ? [...picks, pick]
                     : picks.map((previous, index) => (index === editing ? pick : previous)),
@@ -1306,7 +1337,7 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
 
   return (
     <div
-      className={`lobby-slot relative flex flex-col items-center gap-2 px-3 py-4 rounded-lg border transition-all duration-300 ${
+      className={`lobby-slot relative flex h-full flex-col items-center justify-between gap-2 px-3 py-4 rounded-lg border transition-all duration-300 ${
         ready ? "lobby-slot-in" : ""
       }`}
       style={{
@@ -1341,12 +1372,15 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
         )}
       </div>
 
-      {/* identity — the block reaches into the card's padding so the longest model
-          name plus its effort tail still holds one line on a 140px slot. */}
-      <div className="lobby-slot-identity text-center min-h-[48px] flex flex-col justify-center -mx-1.5">
+      {/* Reserve space for two model lines and the harness in every phase. */}
+      <div className="lobby-slot-identity text-center h-[64px] shrink-0 flex flex-col justify-center -mx-1.5">
         {active ? (
           <>
-            <div className="lobby-slot-name text-base font-bold leading-tight" style={{ color: agent.color }}>
+            <div
+              className="lobby-slot-name text-base font-bold leading-tight"
+              style={{ color: agent.color }}
+              title={[agent.model, agent.effort].filter(Boolean).join(" ")}
+            >
               <ModelName name={agent.model} effort={agent.effort} />
             </div>
             <div className="lobby-slot-harness text-base text-[#00FBFF]/75 leading-tight">{agent.harness}</div>
@@ -1387,6 +1421,12 @@ function LobbyStyles() {
           transparent 3px
         );
         mix-blend-mode: overlay;
+      }
+      .lobby-slot-name {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
       }
       .lobby-title-glow {
         text-shadow: 0 0 14px rgba(0, 251, 255, 0.5);
@@ -1470,9 +1510,6 @@ function LobbyStyles() {
         .lobby-slot-avatar > img {
           width: 100%;
           height: 100%;
-        }
-        .lobby-slot-identity {
-          min-height: 2.25rem;
         }
         .lobby-slot-name,
         .lobby-slot-harness {
@@ -1663,6 +1700,7 @@ function AgentEditor({
   data,
   known,
   onCancel,
+  onRemove,
   onConfirm,
 }: {
   index: number;
@@ -1670,6 +1708,7 @@ function AgentEditor({
   data: AgentsResponse;
   known: Record<AgentKey, AgentOption>;
   onCancel: () => void;
+  onRemove?: () => void;
   onConfirm: (pick: RosterPick, agent: AgentOption) => void;
 }) {
   const [harness, setHarness] = useState<HarnessId>(pick?.harness ?? data.harnesses[0]?.id ?? "codex");
@@ -1678,17 +1717,18 @@ function AgentEditor({
   );
   const [effort, setEffort] = useState<RosterEffort | "">(pick?.effort ?? "");
   const [query, setQuery] = useState(selected?.label ?? "");
-  const debouncedQuery = useDebouncedValue(query.trim(), 250);
-  const search = useAgentSearch(harness, debouncedQuery);
+  const filtering = query.trim().length >= 2 && query.trim() !== selected?.label.trim();
+  const debouncedQuery = useDebouncedValue(filtering ? query.trim() : "", 250);
+  const search = useAgentSearch(harness, filtering ? debouncedQuery : "");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const input = useRef<HTMLInputElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
   const customModels = data.harnesses.find(item => item.id === harness)?.customModels;
   const curated = data.agents.filter(agent => agent.harness === harness);
-  const searching = query.trim().length >= 2;
-  const waiting = searching && (debouncedQuery !== query.trim() || search.isFetching || search.isPlaceholderData);
-  const unavailable = searching && search.isError;
-  const options = (searching && !unavailable ? (waiting ? [] : search.data ?? []) : curated).filter(
+  const waiting = filtering && (debouncedQuery !== query.trim() || search.isFetching || search.isPlaceholderData);
+  const unavailable = filtering && search.isError;
+  const options = (filtering && !unavailable ? (waiting ? [] : search.data ?? []) : curated).filter(
     agent =>
       agent.harness === harness &&
       (customModels || curated.some(item => item.model === agent.model)) &&
@@ -1697,167 +1737,250 @@ function AgentEditor({
           value.toLowerCase().includes(query.trim().toLowerCase()),
         )),
   );
+  const selectedIndex = options.findIndex(option => option.model === selected?.model);
   const choose = (option: AgentOption) => {
     setSelected(option);
     setEffort(option.efforts.includes("high") ? "high" : option.efforts[option.efforts.length - 1]);
     setQuery(option.label);
     setOpen(false);
-    input.current?.focus();
   };
   useEffect(() => {
-    input.current?.focus();
-  }, []);
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const openerLabel = opener?.getAttribute("aria-label");
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    // Focus the panel itself, not the model field: focusing the field would select
+    // its text and the modal would open with a highlighted model name.
+    panel.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      // Roster changes can replace the card that opened the dialog.
+      const target = opener?.isConnected
+        ? opener
+        : document.querySelector<HTMLElement>(`button[aria-label="${openerLabel}"]`) ??
+          document.querySelector<HTMLElement>(`button[aria-label="Edit agent in slot ${index + 1}"]`) ??
+          document.querySelector<HTMLElement>('button[aria-label="Add agent"]');
+      target?.focus();
+    };
+  }, [index]);
   useEffect(() => {
-    setActive(0);
-  }, [query, harness, search.data]);
+    setActive(open && !filtering ? Math.max(0, selectedIndex) : 0);
+  }, [query, harness, search.data, open, filtering, selectedIndex]);
   useEffect(() => {
     if (open) document.getElementById(`agent-model-option-${active}`)?.scrollIntoView({ block: "nearest" });
   }, [active, open]);
   return (
-    <section
-      aria-label={`Edit slot ${index + 1}`}
-      className="mt-5 w-full max-w-4xl shrink-0 rounded border border-[#00FBFF]/40 bg-[#001014] p-4"
+    <div
+      className="fixed inset-0 z-[100] flex overflow-y-auto bg-black/70 p-4 text-[#00FBFF] backdrop-blur-sm"
+      onClick={event => {
+        if (event.target === event.currentTarget) onCancel();
+      }}
+      onKeyDown={event => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          onCancel();
+        }
+        if (event.key === "Tab") {
+          const focusable = panel.current?.querySelectorAll<HTMLElement>(
+            'button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex="0"]',
+          );
+          if (!focusable?.length) return;
+          const first = focusable[0];
+          const last = focusable[focusable.length - 1];
+          if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+          }
+        }
+      }}
     >
-      <h2 className="mb-3 font-dotGothic text-lg">EDIT SLOT {index + 1}</h2>
-      <div className="grid gap-4 sm:grid-cols-[1fr_2fr_1fr]">
-        <label className="min-w-0">
-          Harness
-          <select
-            className={PICKER_INPUT}
-            value={harness}
-            onChange={event => {
-              setHarness(event.target.value as HarnessId);
-              setSelected(undefined);
-              setEffort("");
-              setQuery("");
-              setOpen(false);
-            }}
-          >
-            {data.harnesses.map(item => (
-              <option key={item.id} value={item.id}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="min-w-0">
-          <label htmlFor="agent-model-input">Model</label>
-          <input
-            ref={input}
-            id="agent-model-input"
-            className={PICKER_INPUT}
-            role="combobox"
-            aria-autocomplete="list"
-            aria-expanded={open}
-            aria-controls="agent-model-options"
-            aria-activedescendant={open && options[active] ? `agent-model-option-${active}` : undefined}
-            value={query}
-            placeholder="Choose a model"
-            onFocus={event => {
-              setOpen(true);
-              if (selected) event.currentTarget.select();
-            }}
-            onClick={() => setOpen(true)}
-            onBlur={() => setOpen(false)}
-            onChange={event => {
-              setQuery(event.target.value);
-              if (event.target.value !== selected?.label) {
+      <div
+        ref={panel}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="agent-editor-heading"
+        className="relative m-auto w-full max-w-[40rem] shrink-0 overflow-visible rounded-lg border border-[#00FBFF]/40 bg-[#001014] p-5 outline-none sm:p-6"
+      >
+        <button
+          type="button"
+          className={`${PICKER_BUTTON} absolute top-3 right-3 flex h-8 w-8 items-center justify-center rounded-full p-0`}
+          aria-label="Close"
+          title="Close"
+          onClick={onCancel}
+        >
+          <XMarkIcon className="h-4 w-4 shrink-0" />
+        </button>
+        <h2 id="agent-editor-heading" className="pr-10 font-dotGothic text-lg tracking-widest">
+          {pick ? `EDIT SLOT ${index + 1}` : "ADD AGENT"}
+        </h2>
+        <p className="mt-2 mb-5 pr-10 text-sm text-[#00FBFF]/60">
+          Pick a harness, then a model, then the effort it runs at.
+        </p>
+        <div className="grid gap-4">
+          <label className="min-w-0">
+            Harness
+            <select
+              className={PICKER_INPUT}
+              value={harness}
+              onChange={event => {
+                setHarness(event.target.value as HarnessId);
                 setSelected(undefined);
                 setEffort("");
-              }
-              setOpen(true);
-            }}
-            onKeyDown={event => {
-              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                event.preventDefault();
-                setOpen(true);
-                setActive(previous =>
-                  options.length
-                    ? (previous + (event.key === "ArrowDown" ? 1 : -1) + options.length) % options.length
-                    : 0,
-                );
-              }
-              if (event.key === "Enter" && open) {
-                event.preventDefault();
-                if (options[active]) choose(options[active]);
-              }
-              if (event.key === "Escape") {
-                event.preventDefault();
+                setQuery("");
                 setOpen(false);
-              }
-            }}
-          />
-          {customModels && <p className="my-1 text-xs text-[#00FBFF]/70">type to search OpenRouter models</p>}
-          {open && (
-            <div className="mt-1 border border-[#00FBFF]/30 bg-black">
-              {waiting && (
-                <div role="status" className="p-2 text-sm">
-                  Searching agents…
+              }}
+            >
+              {data.harnesses.map(item => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="min-w-0">
+            <label htmlFor="agent-model-input">Model</label>
+            <div className="relative">
+              <input
+                ref={input}
+                id="agent-model-input"
+                className={`${PICKER_INPUT} pr-9`}
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={open}
+                aria-controls="agent-model-options"
+                aria-activedescendant={open && options[active] ? `agent-model-option-${active}` : undefined}
+                value={query}
+                placeholder="Choose a model"
+                onFocus={event => {
+                  if (selected) event.currentTarget.select();
+                }}
+                onClick={() => setOpen(true)}
+                onBlur={() => setOpen(false)}
+                onChange={event => {
+                  setQuery(event.target.value);
+                  if (event.target.value !== selected?.label) {
+                    setSelected(undefined);
+                    setEffort("");
+                  }
+                  setOpen(true);
+                }}
+                onKeyDown={event => {
+                  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                    event.preventDefault();
+                    setOpen(true);
+                    setActive(previous =>
+                      options.length
+                        ? (previous + (event.key === "ArrowDown" ? 1 : -1) + options.length) % options.length
+                        : 0,
+                    );
+                  }
+                  if (event.key === "Enter" && open) {
+                    event.preventDefault();
+                    if (options[active]) choose(options[active]);
+                  }
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    setOpen(false);
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className={`${PICKER_BUTTON} absolute top-1/2 right-1 flex h-6 w-6 -translate-y-1/2 items-center justify-center border-0 p-0`}
+                aria-label="Show models"
+                tabIndex={-1}
+                onMouseDown={event => event.preventDefault()}
+                onClick={() => {
+                  setOpen(previous => !previous);
+                  input.current?.focus();
+                }}
+              >
+                <ChevronDownIcon className="h-4 w-4 shrink-0" />
+              </button>
+              {/* The list floats so closing it on blur cannot move the clicked control. */}
+              {open && (
+                <div className="absolute left-0 right-0 top-full z-10 mt-1 border border-[#00FBFF]/30 bg-black">
+                  {waiting && (
+                    <div role="status" className="p-2 text-sm">
+                      Searching agents…
+                    </div>
+                  )}
+                  {unavailable && (
+                    <div role="alert" className="p-2 text-sm text-[#FFBE00]">
+                      {customModels
+                        ? "OpenRouter search is unavailable, pick a listed model"
+                        : "Search is unavailable, showing listed models"}
+                    </div>
+                  )}
+                  {!waiting && !options.length && <div className="p-2 text-sm">No matching agents</div>}
+                  <ul id="agent-model-options" role="listbox" aria-label="Models" className="max-h-64 overflow-y-auto">
+                    {options.map((option, optionIndex) => (
+                      <li
+                        key={agentKey(option.harness, option.model)}
+                        id={`agent-model-option-${optionIndex}`}
+                        role="option"
+                        aria-selected={active === optionIndex}
+                        onMouseDown={event => event.preventDefault()}
+                        onMouseEnter={() => setActive(optionIndex)}
+                        onClick={() => choose(option)}
+                        className={`cursor-pointer break-words px-3 py-2 ${
+                          active === optionIndex ? "bg-[#00FBFF]/15" : ""
+                        }`}
+                      >
+                        <span>{option.label}</span> <span className="text-sm text-[#00FBFF]/70">{option.vendor}</span>
+                        <span className="block text-xs text-[#00FBFF]/70">{option.model}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
-              {unavailable && (
-                <div role="alert" className="p-2 text-sm text-[#FFBE00]">
-                  {customModels
-                    ? "OpenRouter search is unavailable, pick a listed model"
-                    : "Search is unavailable, showing listed models"}
-                </div>
-              )}
-              {!waiting && !options.length && <div className="p-2 text-sm">No matching agents</div>}
-              <ul id="agent-model-options" role="listbox" aria-label="Models" className="max-h-56 overflow-y-auto">
-                {options.map((option, optionIndex) => (
-                  <li
-                    key={agentKey(option.harness, option.model)}
-                    id={`agent-model-option-${optionIndex}`}
-                    role="option"
-                    aria-selected={active === optionIndex}
-                    onMouseDown={event => event.preventDefault()}
-                    onMouseEnter={() => setActive(optionIndex)}
-                    onClick={() => choose(option)}
-                    className={`cursor-pointer break-words px-3 py-2 ${
-                      active === optionIndex ? "bg-[#00FBFF]/15" : ""
-                    }`}
-                  >
-                    <span>{option.label}</span> <span className="text-sm text-[#00FBFF]/70">{option.vendor}</span>
-                    <span className="block text-xs text-[#00FBFF]/70">{option.model}</span>
-                  </li>
-                ))}
-              </ul>
             </div>
-          )}
-        </div>
-        <label className="min-w-0">
-          Effort
-          <select
-            className={PICKER_INPUT}
-            value={effort}
-            disabled={!selected}
-            onChange={event => setEffort(event.target.value as RosterEffort)}
-          >
-            <option value="" disabled>
-              Choose effort
-            </option>
-            {selected?.efforts.map(item => (
-              <option key={item} value={item}>
-                {item}
+            {customModels && <p className="my-1 text-xs text-[#00FBFF]/70">type to search OpenRouter models</p>}
+          </div>
+          <label className="min-w-0">
+            Effort
+            <select
+              className={PICKER_INPUT}
+              value={effort}
+              disabled={!selected}
+              onChange={event => setEffort(event.target.value as RosterEffort)}
+            >
+              <option value="" disabled>
+                Choose effort
               </option>
-            ))}
-          </select>
-        </label>
+              {selected?.efforts.map(item => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="mt-6 flex flex-wrap items-center justify-end gap-2">
+          {onRemove && (
+            <button className={`${PICKER_BUTTON} mr-auto`} onClick={onRemove}>
+              REMOVE FROM ROSTER
+            </button>
+          )}
+          <button className={PICKER_BUTTON} onClick={onCancel}>
+            CANCEL
+          </button>
+          <button
+            className={PICKER_BUTTON}
+            disabled={!selected || !effort || !selected.efforts.includes(effort)}
+            onClick={() => {
+              if (selected && effort) onConfirm({ harness, model: selected.model, effort }, selected);
+            }}
+          >
+            {pick ? "CONFIRM" : "ADD TO ROSTER"}
+          </button>
+        </div>
       </div>
-      <div className="mt-4 flex gap-2">
-        <button
-          className={PICKER_BUTTON}
-          disabled={!selected || !effort || !selected.efforts.includes(effort)}
-          onClick={() => {
-            if (selected && effort) onConfirm({ harness, model: selected.model, effort }, selected);
-          }}
-        >
-          CONFIRM
-        </button>
-        <button className={PICKER_BUTTON} onClick={onCancel}>
-          CANCEL
-        </button>
-      </div>
-    </section>
+    </div>
   );
 }
