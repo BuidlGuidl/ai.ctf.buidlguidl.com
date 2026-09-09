@@ -17,6 +17,9 @@ export function useAgentSearch(harness: HarnessId, q: string) {
     enabled: q.trim().length >= 2,
     staleTime: 60_000,
     placeholderData: keepPreviousData,
+    // The backend already backs off from OpenRouter for 30 seconds after a failure,
+    // so retrying here only delays the "search is unavailable" message.
+    retry: false,
     queryFn: ({ signal }) => arenaClient.searchAgents(harness, q, signal),
   });
 }
