@@ -1,4 +1,4 @@
-// Copied from agents-arena-backend contract/arena-types.ts at commit 4fbf02e (plugin-your-own-agent-mcp-route branch).
+// Copied from agents-arena-backend contract/arena-types.ts at commit 3fbee11 (plugin-your-own-agent-mcp-route branch).
 // Do not edit here — sync from the backend repo (formatting follows this repo's
 // prettier). Endpoint docs live there in contract/API.md.
 
@@ -76,7 +76,7 @@ export interface HostedEntrantSummary extends EntrantSummaryBase {
 
 // What the outsider declared at join time. Free text, unverified, display only:
 // the arena cannot see what is really running, so a client labels these fields
-// "self-declared". `usage` events from an external lane are self-declared too.
+// "self-declared".
 export interface ExternalEntrantSummary extends EntrantSummaryBase {
   kind: "external";
   name: string;
@@ -377,24 +377,10 @@ export interface AgentTaskResponse {
   task: string | null;
 }
 
-// One reported event. `seq` is a client-chosen integer, unique per token; the
-// server drops a seq it has already accepted, so a retried batch is safe. Any
-// unique increasing number works — a millisecond timestamp is fine. The server
-// sets `entrantId`, `ts`, and the journal position; the agent cannot write into
-// another lane. Shapes mirror the ArenaEvent payloads of the same name.
+// A message or explicit status for an external lane. The server dedupes the
+// client-chosen `seq` per token and supplies the entrant and journal fields.
 export type AgentEventInput =
   | { seq: number; type: "agent.message"; text: string }
-  | { seq: number; type: "agent.reasoning"; text: string }
-  | { seq: number; type: "tool.call"; tool: string; toolCallId: string; detail: string }
-  | { seq: number; type: "tool.result"; tool: string; toolCallId: string; ok: boolean; detail: string }
-  | {
-      seq: number;
-      type: "usage";
-      inputTokens: number;
-      outputTokens: number;
-      cachedInputTokens?: number;
-      costUsd?: number | null;
-    }
   | { seq: number; type: "entrant.status"; status: EntrantStatus };
 
 export interface AgentEventsRequest {
@@ -444,3 +430,6 @@ export interface VerifyResponse {
 export type SessionResponse =
   | { authenticated: false; configured: boolean }
   | { authenticated: true; address: string; expiresAt: string };
+
+// Public arena tools, in the order returned by the MCP server.
+export const AGENT_MCP_TOOLS = ["join_run", "get_task", "report_progress", "post_note", "read_inbox"] as const;
