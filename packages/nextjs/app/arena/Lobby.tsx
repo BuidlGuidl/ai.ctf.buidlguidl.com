@@ -1694,7 +1694,7 @@ const PICKER_INPUT =
 // A short note beside a field label, kept smaller and dimmer than the label so
 // it reads as an aside rather than as part of the name.
 function FieldHint({ children }: { children: ReactNode }) {
-  return <span className="ml-2 text-xs text-[#00FBFF]/55">· {children}</span>;
+  return <span className="ml-1.5 align-middle text-xs text-[#00FBFF]/55">· {children}</span>;
 }
 
 function SelectField(props: SelectHTMLAttributes<HTMLSelectElement>) {
