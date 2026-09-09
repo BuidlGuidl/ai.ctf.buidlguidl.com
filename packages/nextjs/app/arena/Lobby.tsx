@@ -1906,7 +1906,11 @@ function AgentEditor({
                 onMouseDown={event => event.preventDefault()}
                 onClick={() => {
                   setOpen(previous => !previous);
-                  input.current?.focus();
+                  // Focus the field for keyboard use, but put the caret at the end instead
+                  // of selecting the name: the chevron opens the list, it does not start a search.
+                  const field = input.current;
+                  field?.focus();
+                  field?.setSelectionRange(field.value.length, field.value.length);
                 }}
               >
                 <ChevronDownIcon className="h-4 w-4 shrink-0" />
