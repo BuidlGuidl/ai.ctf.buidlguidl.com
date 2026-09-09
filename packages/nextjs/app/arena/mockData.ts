@@ -32,6 +32,7 @@ export interface Agent {
   solved: number[];
   status: AgentStatus;
   statusChangedAt: string | null;
+  lastHeardAt: string | null;
   tokens: number;
   cost: number | null;
   usagePending: boolean;

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { CopyButton } from "./CopyButton";
 import { ModelName } from "./ModelName";
 import { SfxToggle } from "./SfxToggle";
 import {
@@ -88,6 +89,47 @@ function activeRunConflict(cause: unknown): ActiveRunConflict | null {
     : null;
 }
 
+const JOINABLE_STATES = new Set<RunState>([
+  "created",
+  "awaiting_signature",
+  "preparing",
+  "awaiting_funding",
+  "ready",
+  "running",
+]);
+
+function InviteBlock({ runId }: { runId: string }) {
+  const [origin, setOrigin] = useState("");
+  const run = useArenaStore(selectRun);
+  useEffect(() => setOrigin(window.location.origin), []);
+  const path = `/arena/join?run=${encodeURIComponent(runId)}`;
+  const url = `${origin}${path}`;
+  const count = run?.entrants.filter(entrant => entrant.kind === "external" && !entrant.removedAt).length ?? 0;
+  return (
+    <div className="mt-6 w-full max-w-3xl rounded-lg border border-[#00FBFF]/25 bg-[#00090b]/60 px-4 py-3 space-y-2">
+      <div className="text-xs font-bold tracking-widest text-[#00FBFF]/60">OPEN TO OUTSIDE AGENTS</div>
+      <p className="text-sm text-[#00FBFF]/75">
+        Anyone can race an agent from their own machine in this run. Send them this link.
+      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <code className="min-w-0 flex-1 basis-full sm:basis-0 break-all text-sm text-[#FFBE00]">{url}</code>
+        <CopyButton text={url} label="COPY LINK" compact />
+        <Link
+          href={path}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 rounded border border-[#00FBFF]/40 px-3 py-1.5 text-xs tracking-widest hover:border-[#00FBFF] hover:bg-[#00FBFF]/10"
+        >
+          SETUP PAGE ▸
+        </Link>
+      </div>
+      <p className="text-xs text-[#00FBFF]/55">
+        {count === 0 ? "No external entrants yet" : `${count} external ${count === 1 ? "entrant" : "entrants"} joined`}
+      </p>
+    </div>
+  );
+}
+
 export function ArenaLobby({
   agents,
   onLaunch,
@@ -116,6 +158,8 @@ export function ArenaLobby({
   const runError = useArenaStore(selectRunError);
 
   const logId = useRef(0);
+  const externalEntrants = useRef<Map<string, { removed: boolean }>>(new Map());
+  const externalRunId = useRef<string | null>(null);
   // The run this lobby started, if any — the only one the 3-2-1 belongs to.
   const launchedHere = useRef<string | null>(null);
   const lastRunState = useRef<string | null>(null);
@@ -190,6 +234,30 @@ export function ArenaLobby({
       run.state === "failed" ? RED : run.state === "running" ? GREEN : CY,
     );
   }, [pushLog, run]);
+
+  useEffect(() => {
+    const runId = run?.id ?? null;
+    const entrants = run?.entrants ?? [];
+    if (externalRunId.current !== runId) {
+      externalRunId.current = runId;
+      externalEntrants.current = new Map(
+        entrants
+          .filter(entrant => entrant.kind === "external")
+          .map(entrant => [entrant.id, { removed: !!entrant.removedAt }]),
+      );
+      return;
+    }
+    for (const entrant of entrants) {
+      if (entrant.kind !== "external") continue;
+      const previous = externalEntrants.current.get(entrant.id);
+      if (!previous) {
+        pushLog(`${entrant.name} joined with its own agent`, GREEN);
+      } else if (!previous.removed && entrant.removedAt) {
+        pushLog(`${entrant.name} was removed by the operator`, YELLOW);
+      }
+      externalEntrants.current.set(entrant.id, { removed: !!entrant.removedAt });
+    }
+  }, [run?.id, run?.entrants, pushLog]);
 
   const readyCount = run?.entrants.length ?? 0;
 
@@ -808,13 +876,23 @@ export function ArenaLobby({
               arena is only ever a new race: a finished run walks out of reach the
               moment its URL goes. */}
           {phase === "idle" && (
-            <Link
-              href="/arena/runs"
-              className="mt-6 text-xs font-bold tracking-widest text-[#00FBFF]/50 transition hover:text-[#00FBFF]"
-            >
-              PREVIOUS RUNS ▸
-            </Link>
+            <div className="mt-6 flex gap-6">
+              <Link
+                href="/arena/runs"
+                className="text-xs font-bold tracking-widest text-[#00FBFF]/50 transition hover:text-[#00FBFF]"
+              >
+                PREVIOUS RUNS ▸
+              </Link>
+              <Link
+                href="/arena/join"
+                className="text-xs font-bold tracking-widest text-[#00FBFF]/50 transition hover:text-[#00FBFF]"
+              >
+                BRING YOUR OWN AGENT ▸
+              </Link>
+            </div>
           )}
+
+          {run && JOINABLE_STATES.has(run.state) && <InviteBlock runId={run.id} />}
 
           {/* primary action */}
           <div className="lobby-primary-action mt-10 h-16 flex items-center justify-center gap-3">

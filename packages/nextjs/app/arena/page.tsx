@@ -39,6 +39,7 @@ import {
   selectEmptyNarration,
   selectFeed,
   selectLastFlagEvent,
+  selectLastHeardAt,
   selectNarrationByEntrant,
   selectNarrationFor,
   selectPendingSteersFor,
@@ -66,8 +67,6 @@ type OverviewTab = "race" | "grid";
 type RaceColumnMode = "challenges" | "order";
 
 const fmtTokens = (tokens: number) => `${(tokens / 1000).toFixed(0)}k`;
-const agentTokensLabel = (agent: Agent) =>
-  agent.kind === "external" && agent.tokens === 0 ? "—" : fmtTokens(agent.tokens);
 const USAGE_PENDING_TOOLTIP = "Filled in at the end of the run, live usage is unavailable";
 // A flag cell opens the challenge (and its contract) instead of focusing the
 // agent, so the ring is the hint that the cell is its own target.
@@ -86,16 +85,14 @@ function ExternalTag({ agent }: { agent: Agent }) {
   ) : null;
 }
 
-function DeclaredUsage({ agent, value }: { agent: Agent; value: number | null }) {
-  return agent.kind === "external" && value !== null ? (
-    <span
-      className={`${ARENA_TIP} cursor-help`}
-      data-tip="self-declared by the entrant"
-      aria-label="self-declared by the entrant"
-    >
-      *
+function LastHeard({ agent, now }: { agent: Agent; now: number }) {
+  if (agent.kind !== "external") return null;
+  const age = agent.lastHeardAt === null ? null : fmtAge(agent.lastHeardAt, now);
+  return (
+    <span className="shrink-0 text-xs tabular-nums text-[#00FBFF]/50">
+      {age === null ? "no report yet" : age === "—" ? "last heard just now" : `last heard ${age} ago`}
     </span>
-  ) : null;
+  );
 }
 
 function DeclaredRuntime({ agent }: { agent: Agent }) {
@@ -267,6 +264,7 @@ function secondsFrom(start: string | null, end: string | null): number | null {
 function agentsFromRun(
   entrants: EntrantSummary[] | null,
   statusChangedAt: Record<string, string> | null,
+  lastHeardAt: Record<string, string> | null,
   startedAt: string | null,
   runState: RunState | null,
 ): Agent[] {
@@ -292,6 +290,7 @@ function agentsFromRun(
         solved: [],
         status: "idle",
         statusChangedAt: null,
+        lastHeardAt: null,
         tokens: 0,
         cost: null,
         usagePending,
@@ -327,6 +326,7 @@ function agentsFromRun(
       solved: entrant.solves.map(solve => solve.challengeId),
       status: entrant.status,
       statusChangedAt: statusChangedAt?.[entrant.id] ?? null,
+      lastHeardAt: entrant.kind === "external" ? lastHeardAt?.[entrant.id] ?? null : null,
       tokens: entrant.inputTokens + entrant.outputTokens,
       cost: entrant.costUsd,
       usagePending: entrant.kind === "hosted" && usagePending,
@@ -385,6 +385,7 @@ function ArenaScreen() {
   const runState = useArenaStore(selectRunState);
   const runEntrants = useArenaStore(selectRunEntrants);
   const statusChangedAt = useArenaStore(selectStatusChangedAt);
+  const lastHeardAt = useArenaStore(selectLastHeardAt);
   const statusSeededAt = useArenaStore(selectStatusSeededAt);
   const serverOffsetMs = useArenaStore(selectServerOffsetMs);
   const runStartedAt = useArenaStore(selectRunStartedAt);
@@ -432,8 +433,8 @@ function ArenaScreen() {
   }, [currentRunId]);
 
   const agents = useMemo(
-    () => agentsFromRun(runEntrants, statusChangedAt, runStartedAt, runState),
-    [runEntrants, runStartedAt, runState, statusChangedAt],
+    () => agentsFromRun(runEntrants, statusChangedAt, lastHeardAt, runStartedAt, runState),
+    [runEntrants, runStartedAt, runState, statusChangedAt, lastHeardAt],
   );
   const startMatch = useCallback(() => setLiveStarted(true), []);
 
@@ -697,6 +698,7 @@ function ArenaScreen() {
         allFinished={allFinished}
         runFailed={runFailed}
         runStopping={runState === "stopping"}
+        runId={runId}
         agentCount={agents.length}
         connectionStatus={connectionStatus}
         onViewResults={allFinished ? () => setView("results") : undefined}
@@ -972,20 +974,14 @@ function FinalCeremony({
                               ? `${agent.solved.length}/${CHALLENGES.length}`
                               : fmtClock(agent.finishedAt)}
                           </div>
-                          <div className="mt-0.5 whitespace-nowrap text-xs tracking-[0.12em] tabular-nums">
-                            <span className="text-[#00FBFF]/50">
-                              {agentTokensLabel(agent)} TOK
-                              <DeclaredUsage agent={agent} value={agent.tokens || null} /> ·{" "}
-                            </span>
-                            <span className={agent.cost === null ? "text-[#00FBFF]/50" : "text-[#FFBE00]/70"}>
-                              {agent.cost === null
-                                ? agent.kind === "external"
-                                  ? "—"
-                                  : "N/A"
-                                : `$${agent.cost.toFixed(2)}`}
-                              <DeclaredUsage agent={agent} value={agent.cost} />
-                            </span>
-                          </div>
+                          {agent.kind === "hosted" && (
+                            <div className="mt-0.5 whitespace-nowrap text-xs tracking-[0.12em] tabular-nums">
+                              <span className="text-[#00FBFF]/50">{fmtTokens(agent.tokens)} TOK · </span>
+                              <span className={agent.cost === null ? "text-[#00FBFF]/50" : "text-[#FFBE00]/70"}>
+                                {agent.cost === null ? "N/A" : `$${agent.cost.toFixed(2)}`}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
@@ -1085,16 +1081,20 @@ function FinalistCard({ agent, place }: { agent: Agent; place: PodiumPlace }) {
         >
           {agent.finishedAt === null ? `${agent.solved.length}/${CHALLENGES.length} FLAGS` : fmtClock(agent.finishedAt)}
         </div>
-        {/* When the hero slot carries the flags, the footer only needs tokens.
-            When it carries the clock, the footer keeps flags ahead of tokens. */}
-        <div className="mt-1 text-sm tracking-[0.16em] text-[#00FBFF]/60">
-          {agent.finishedAt === null
-            ? `${agentTokensLabel(agent)} TOK`
-            : `${agent.solved.length}/${CHALLENGES.length} FLAGS · ${agentTokensLabel(agent)} TOK`}
-          <DeclaredUsage agent={agent} value={agent.tokens || null} /> ·{" "}
-          {agent.cost === null ? (agent.kind === "external" ? "COST —" : "COST N/A") : `$${agent.cost.toFixed(2)}`}
-          <DeclaredUsage agent={agent} value={agent.cost} />
-        </div>
+        {agent.kind === "external" ? (
+          agent.finishedAt !== null && (
+            <div className="mt-1 text-sm tracking-[0.16em] text-[#00FBFF]/60">
+              {agent.solved.length}/{CHALLENGES.length} FLAGS
+            </div>
+          )
+        ) : (
+          <div className="mt-1 text-sm tracking-[0.16em] text-[#00FBFF]/60">
+            {agent.finishedAt === null
+              ? `${fmtTokens(agent.tokens)} TOK`
+              : `${agent.solved.length}/${CHALLENGES.length} FLAGS · ${fmtTokens(agent.tokens)} TOK`}{" "}
+            · {agent.cost === null ? "COST N/A" : `$${agent.cost.toFixed(2)}`}
+          </div>
+        )}
       </article>
     </div>
   );
@@ -1186,6 +1186,7 @@ function TopBar({
   runFailed,
   runStopping,
   agentCount,
+  runId,
   connectionStatus,
   onViewResults,
   onStop,
@@ -1197,6 +1198,7 @@ function TopBar({
   runFailed: boolean;
   runStopping: boolean;
   agentCount: number;
+  runId: string | null;
   connectionStatus: ConnectionStatus;
   onViewResults?: () => void;
   onStop?: () => Promise<void>;
@@ -1232,6 +1234,16 @@ function TopBar({
         <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{agentCount} AGENTS</span>
         <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{CHALLENGES.length} CHALLENGES</span>
       </div>
+      {runId !== null && !allFinished && !runFailed && !runStopping && (
+        <Link
+          href={`/arena/join?run=${encodeURIComponent(runId)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hidden lg:inline-block px-2 py-0.5 border border-[#FFBE00]/40 rounded text-sm text-[#FFBE00]/80 hover:text-[#FFBE00] hover:border-[#FFBE00] tracking-wider"
+        >
+          + BRING YOUR OWN AGENT
+        </Link>
+      )}
       {timeUp && (
         <span className="animate-pulse rounded border border-[#FF5861] bg-[#FF5861]/15 px-3 py-1 text-sm font-bold tracking-widest text-[#FF5861]">
           DEADLINE REACHED · OPERATOR: STOP THE RUN
@@ -1436,6 +1448,7 @@ function AgentLog({
         {focused.kind === "external" && (
           <div className="flex flex-wrap items-center gap-2">
             <DeclaredRuntime agent={focused} />
+            <LastHeard agent={focused} now={narrationNow} />
             {focused.url && /^https?:\/\//i.test(focused.url) && (
               <a
                 href={focused.url}
@@ -1932,22 +1945,13 @@ function RaceView({
             <span
               className={`arena-race-tokens w-16 text-right ${dataText} tabular-nums shrink-0 text-[#00FBFF]/75 ${fadeClass}`}
             >
-              {a.usagePending && a.tokens === 0 ? <PendingUsage /> : agentTokensLabel(a)}
-              <DeclaredUsage agent={a} value={a.tokens || null} />
+              {a.kind === "hosted" && (a.usagePending && a.tokens === 0 ? <PendingUsage /> : fmtTokens(a.tokens))}
             </span>
             <span
               className={`arena-race-cost w-20 text-right ${dataText} tabular-nums shrink-0 text-[#FFBE00]/90 ${fadeClass}`}
             >
-              {a.cost !== null ? (
-                `$${a.cost.toFixed(2)}`
-              ) : a.usagePending ? (
-                <PendingUsage />
-              ) : a.kind === "external" ? (
-                "—"
-              ) : (
-                "N/A"
-              )}
-              <DeclaredUsage agent={a} value={a.cost} />
+              {a.kind === "hosted" &&
+                (a.cost !== null ? `$${a.cost.toFixed(2)}` : a.usagePending ? <PendingUsage /> : "N/A")}
             </span>
 
             {/* Order mode reads as the route the agent took; challenge mode parks every
@@ -2318,6 +2322,7 @@ function GridCard({
           <ModelName name={agent.handle} effort={agent.effort} />
         </span>
         <ExternalTag agent={agent} />
+        <LastHeard agent={agent} now={narrationNow} />
         {/* No flag count and no chip for the ambient states: the strip below counts
             the flags, and every character saved here is one the handle keeps. */}
         {agent.removedAt ? (
@@ -3015,6 +3020,11 @@ function NarrationPopover({
           </span>
         </span>
         <span className="mt-1 block text-xs tracking-wide text-[#00FBFF]/50">{agentRuntimeLabel(agent)}</span>
+        {agent.kind === "external" && (
+          <span className="block">
+            <LastHeard agent={agent} now={now} />
+          </span>
+        )}
         <span
           className={`mt-3 block whitespace-pre-line leading-snug text-[#00FBFF]/90 ${
             compact ? "text-sm" : "text-base"

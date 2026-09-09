@@ -55,6 +55,7 @@ export const useArenaStore = create<ArenaStore>(set => ({
                   current.projection.statusSeededAt,
                   seededAt,
                 ),
+                lastHeardAt: mergeLastHeardAt(projection.lastHeardAt, current.projection.lastHeardAt),
                 statusSeededAt: current.projection.statusSeededAt,
               }
             : projection,
@@ -158,6 +159,14 @@ function resolvePendingSteers(pending: Record<string, string[]>, event: ArenaEve
   return { ...pending, [event.payload.entrantId]: [...queue.slice(0, index), ...queue.slice(index + 1)] };
 }
 
+function mergeLastHeardAt(fresh: Record<string, string>, held: Record<string, string>): Record<string, string> {
+  const merged = { ...fresh };
+  for (const [id, ts] of Object.entries(held)) {
+    if (!merged[id] || Date.parse(ts) > Date.parse(merged[id])) merged[id] = ts;
+  }
+  return merged;
+}
+
 // An entrant history did not touch keeps what the previous seed held: the earlier
 // bound, and for one nothing has ever been observed about, the first seed's own
 // stamp. An entrant that only shows up in the new snapshot has gone unobserved
@@ -210,6 +219,7 @@ export const selectRunId = (state: ArenaStore) => state.projection?.run.id ?? nu
 export const selectRunState = (state: ArenaStore) => state.projection?.run.state ?? null;
 export const selectRunChainId = (state: ArenaStore) => state.projection?.run.chainId ?? null;
 export const selectRunEntrants = (state: ArenaStore) => state.projection?.run.entrants ?? null;
+export const selectLastHeardAt = (state: ArenaStore) => state.projection?.lastHeardAt ?? null;
 export const selectStatusChangedAt = (state: ArenaStore) => state.projection?.statusChangedAt ?? null;
 export const selectStatusSeededAt = (state: ArenaStore) => state.projection?.statusSeededAt ?? null;
 export const selectServerOffsetMs = (state: ArenaStore) => state.serverOffsetMs ?? 0;
