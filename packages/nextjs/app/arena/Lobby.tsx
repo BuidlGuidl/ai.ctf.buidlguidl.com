@@ -849,9 +849,13 @@ export function ArenaLobby({
               role="alert"
               className="mb-4 w-full max-w-4xl rounded border border-[#FF5861]/40 bg-[#FF5861]/10 px-3 py-2 text-base text-[#FF5861]"
             >
-              {problems.map((problem, index) => (
-                <div key={index}>
-                  {serverProblems.includes(problem) && problem.index !== null ? `Slot ${problem.index + 1}: ` : ""}
+              {localProblems.map((problem, index) => (
+                <div key={`local-${index}`}>{problem.message}</div>
+              ))}
+              {/* Backend issues carry no slot text of their own, so the slot is named here. */}
+              {serverProblems.map((problem, index) => (
+                <div key={`server-${index}`}>
+                  {problem.index !== null ? `Slot ${problem.index + 1}: ` : ""}
                   {problem.message}
                 </div>
               ))}

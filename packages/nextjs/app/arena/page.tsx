@@ -2749,7 +2749,9 @@ function FeedRow({ item, displays }: { item: FeedItem; displays: Record<string, 
 
 function ChatRow({ msg, displays }: { msg: ChatItem; displays: Record<string, RosterDisplay> }) {
   const display = displays[msg.fromId] ?? displayForEntrant({ id: msg.fromId, harness: "agent", model: msg.fromId });
-  const handle = msg.director ? "ALL AGENTS" : display.handle;
+  // A director line names its target: a real broadcast carries "director" as the
+  // sender, while a steer keeps the entrant it was aimed at.
+  const handle = msg.fromId === "director" ? "ALL AGENTS" : display.handle;
   if (msg.director) {
     return (
       <div className="flex items-start gap-2 feed-in rounded bg-[#FFBE00]/10 border border-[#FFBE00]/30 px-2 py-1">

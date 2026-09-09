@@ -215,9 +215,11 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         const entrantIds = pending.entrantIds.filter(id => id !== event.payload.entrantId);
         return { ...next, pendingBroadcast: entrantIds.length === 0 ? null : { ...pending, entrantIds } };
       }
+      // The sender stays the entrant the steer was aimed at, so the stream can name
+      // the target; only a real broadcast is sent as "director".
       return appendChat(next, {
         id: event.id,
-        fromId: "director",
+        fromId: event.payload.entrantId,
         text: event.payload.text,
         director: true,
       });
