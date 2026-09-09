@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type SelectHTMLAttributes, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ModelName } from "./ModelName";
 import { SfxToggle } from "./SfxToggle";
@@ -241,7 +241,8 @@ export function ArenaLobby({
     ? "launching"
     : "failed";
 
-  const cards = phase === "idle" ? idleAgents(roster, displayContext) : agents;
+  // Keep the roster visible while run creation has not yet returned any agents.
+  const cards = phase === "idle" || phase === "connecting" ? idleAgents(roster, displayContext) : agents;
 
   const pushLog = useCallback((text: string, color: string) => {
     setLog(prev => [{ id: ++logId.current, text, color }, ...prev].slice(0, 60));
@@ -850,7 +851,7 @@ export function ArenaLobby({
             >
               {problems.map((problem, index) => (
                 <div key={index}>
-                  {problem.index === null ? "" : `Slot ${problem.index + 1}: `}
+                  {serverProblems.includes(problem) && problem.index !== null ? `Slot ${problem.index + 1}: ` : ""}
                   {problem.message}
                 </div>
               ))}
@@ -1376,11 +1377,7 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
       <div className="lobby-slot-identity text-center h-[64px] shrink-0 flex flex-col justify-center -mx-1.5">
         {active ? (
           <>
-            <div
-              className="lobby-slot-name text-base font-bold leading-tight"
-              style={{ color: agent.color }}
-              title={[agent.model, agent.effort].filter(Boolean).join(" ")}
-            >
+            <div className="lobby-slot-name text-base font-bold leading-tight" style={{ color: agent.color }}>
               <ModelName name={agent.model} effort={agent.effort} />
             </div>
             <div className="lobby-slot-harness text-base text-[#00FBFF]/75 leading-tight">{agent.harness}</div>
@@ -1694,6 +1691,18 @@ const PICKER_BUTTON =
 const PICKER_INPUT =
   "w-full rounded border border-[#00FBFF]/30 bg-black/60 px-2 py-1 text-[#00FBFF] focus:border-[#00FBFF] focus:outline-none";
 
+function SelectField(props: SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <span className="relative block">
+      <select {...props} className={`${PICKER_INPUT} appearance-none pr-9`} />
+      <ChevronDownIcon
+        aria-hidden="true"
+        className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-[#00FBFF]"
+      />
+    </span>
+  );
+}
+
 function AgentEditor({
   index,
   pick,
@@ -1824,8 +1833,7 @@ function AgentEditor({
         <div className="grid gap-4">
           <label className="min-w-0">
             Harness
-            <select
-              className={PICKER_INPUT}
+            <SelectField
               value={harness}
               onChange={event => {
                 setHarness(event.target.value as HarnessId);
@@ -1840,7 +1848,7 @@ function AgentEditor({
                   {item.label}
                 </option>
               ))}
-            </select>
+            </SelectField>
           </label>
           <div className="min-w-0">
             <label htmlFor="agent-model-input">Model</label>
@@ -1883,9 +1891,10 @@ function AgentEditor({
                     event.preventDefault();
                     if (options[active]) choose(options[active]);
                   }
-                  if (event.key === "Escape") {
+                  if (event.key === "Escape" && open) {
                     event.preventDefault();
                     setOpen(false);
+                    event.stopPropagation();
                   }
                 }}
               />
@@ -1944,8 +1953,7 @@ function AgentEditor({
           </div>
           <label className="min-w-0">
             Effort
-            <select
-              className={PICKER_INPUT}
+            <SelectField
               value={effort}
               disabled={!selected}
               onChange={event => setEffort(event.target.value as RosterEffort)}
@@ -1958,7 +1966,7 @@ function AgentEditor({
                   {item}
                 </option>
               ))}
-            </select>
+            </SelectField>
           </label>
         </div>
         <div className="mt-6 flex flex-wrap items-center justify-end gap-2">

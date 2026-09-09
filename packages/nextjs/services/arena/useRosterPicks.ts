@@ -50,7 +50,9 @@ export function useRosterPicks() {
         ) {
           const ids = new Set<string>();
           setPicks(
-            saved.picks.map(({ id, ...pick }: RosterPick) => {
+            saved.picks.map(({ harness, model, effort, id }: RosterPick) => {
+              // Copy only supported fields because the backend rejects unknown keys.
+              const pick: RosterPick = { harness, model, effort };
               if (
                 typeof id !== "string" ||
                 !/^[a-z][a-z0-9-]*$/.test(id) ||

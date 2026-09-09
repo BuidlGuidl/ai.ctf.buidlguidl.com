@@ -2,6 +2,7 @@ import type { AgentOption, AgentsResponse, HarnessId, RosterEffort, RosterEntry 
 import { type AgentKey, agentKey, agentsByKey, describeModelId, slug } from "./rosterBuilder";
 
 // Explicit efforts keep vendor defaults from changing the race.
+// Every entry must stay on the backend's curated agents list, or fresh loads disable CREATE RUN and RESET TO DEFAULT restores the problem.
 export const DEFAULT_ROSTER: readonly RosterEntry[] = [
   { id: "opus-5", harness: "claude", model: "claude-opus-5", effort: "high" },
   { id: "glm-53", harness: "opencode", model: "openrouter/z-ai/glm-5.3", effort: "high" },
@@ -62,7 +63,7 @@ export function displayForEntrant(entrant: DisplayEntrant, context: DisplayConte
     context.known?.[agentKey(entrant.harness as HarnessId, entrant.model)] ?? describeModelId(entrant.model);
   return {
     handle: `${entrant.harness}-${slug(label)}`,
-    color: context.laneIndex === undefined ? "#00FBFF" : LANE_COLORS[context.laneIndex % 10],
+    color: context.laneIndex === undefined ? "#00FBFF" : LANE_COLORS[context.laneIndex % LANE_COLORS.length],
     short:
       (vendor || label)
         .replace(/[^a-z]/gi, "")

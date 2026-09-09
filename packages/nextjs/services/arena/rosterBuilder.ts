@@ -77,8 +77,9 @@ export function validateRoster(
     const curatedAgent = curated[key];
     const agent = curatedAgent ?? known[key];
     if (!curatedAgent) {
-      if (pick.harness === "opencode" && harness?.customModels) {
-        if (!pick.model.startsWith("openrouter/")) add("OpenCode custom models must start with openrouter/");
+      if (harness?.customModels) {
+        if (pick.harness === "opencode" && !pick.model.startsWith("openrouter/"))
+          add("OpenCode custom models must start with openrouter/");
       } else add(`${harness?.label ?? pick.harness} does not run ${pick.model}`);
     }
     if (agent && pick.effort && !agent.efforts.includes(pick.effort))

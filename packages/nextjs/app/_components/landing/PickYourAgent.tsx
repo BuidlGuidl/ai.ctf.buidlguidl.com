@@ -40,8 +40,12 @@ export function PickYourAgent() {
     if (phase !== "pre") return;
     const next = picked === id ? null : id;
     setPicked(next);
-    if (next) window.localStorage.setItem(STORAGE_KEY, next);
-    else window.localStorage.removeItem(STORAGE_KEY);
+    try {
+      if (next) window.localStorage.setItem(STORAGE_KEY, next);
+      else window.localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Picks remain usable when browser storage is blocked.
+    }
   };
 
   const pickedRacer = racers.find(racer => racer.id === picked) ?? null;
