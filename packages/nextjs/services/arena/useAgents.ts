@@ -7,6 +7,9 @@ export function useAgents() {
   return useQuery({
     queryKey: ["arenaAgents"],
     staleTime: 5 * 60_000,
+    // One quick retry lets brief outages recover without delaying the error state.
+    retry: 1,
+    retryDelay: 1000,
     queryFn: ({ signal }) => arenaClient.getAgents(signal),
   });
 }

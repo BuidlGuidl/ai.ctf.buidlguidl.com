@@ -42,6 +42,7 @@ import {
   agentKey,
   agentsByKey,
   buildRoster,
+  describeModelId,
   issuesToProblems,
   validateRoster,
 } from "~~/services/arena/rosterBuilder";
@@ -969,7 +970,7 @@ export function ArenaLobby({
                   : undefined
               }
               onConfirm={(pick, option) => {
-                noteAgent(option);
+                if (option) noteAgent(option);
                 setPicks(
                   editing === picks.length
                     ? [...picks, pick]
@@ -1728,11 +1729,17 @@ function AgentEditor({
   known: Record<AgentKey, AgentOption>;
   onCancel: () => void;
   onRemove?: () => void;
-  onConfirm: (pick: RosterPick, agent: AgentOption) => void;
+  onConfirm: (pick: RosterPick, agent?: AgentOption) => void;
 }) {
   const [harness, setHarness] = useState<HarnessId>(pick?.harness ?? data.harnesses[0]?.id ?? "codex");
+  // Preserve an unlisted pick's name and effort so the operator can see what the slot held.
+  const [standIn] = useState<AgentOption | undefined>(() =>
+    pick && !known[agentKey(pick.harness, pick.model)]
+      ? { harness: pick.harness, model: pick.model, ...describeModelId(pick.model), efforts: [pick.effort] }
+      : undefined,
+  );
   const [selected, setSelected] = useState<AgentOption | undefined>(() =>
-    pick ? known[agentKey(pick.harness, pick.model)] : undefined,
+    pick ? known[agentKey(pick.harness, pick.model)] ?? standIn : undefined,
   );
   const [effort, setEffort] = useState<RosterEffort | "">(pick?.effort ?? "");
   const [query, setQuery] = useState(selected?.label ?? "");
@@ -1997,7 +2004,9 @@ function AgentEditor({
             className={PICKER_BUTTON}
             disabled={!selected || !effort || !selected.efforts.includes(effort)}
             onClick={() => {
-              if (selected && effort) onConfirm({ harness, model: selected.model, effort }, selected);
+              // Keep the stand-in out of saved extras so it cannot change roster validation.
+              if (selected && effort)
+                onConfirm({ harness, model: selected.model, effort }, selected === standIn ? undefined : selected);
             }}
           >
             {pick ? "CONFIRM" : "ADD TO ROSTER"}

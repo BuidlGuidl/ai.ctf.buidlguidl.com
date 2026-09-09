@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { type AgentOption, HARNESS_IDS, ROSTER_EFFORTS } from "./arena-types";
 import { DEFAULT_ROSTER } from "./roster";
 import { ENTRANT_ID_MAX, type RosterPick, agentKey, picksFromRoster } from "./rosterBuilder";
@@ -33,7 +33,12 @@ function savedAgent(value: unknown): value is AgentOption {
 
 export function useRosterPicks() {
   const [picks, setPicks] = useState<RosterPick[]>(() => picksFromRoster(DEFAULT_ROSTER));
-  const [extras, setExtras] = useState<AgentOption[]>([]);
+  const [rawExtras, setRawExtras] = useState<AgentOption[]>([]);
+  // Keep labels only for current picks without losing agents noted before their picks are set.
+  const extras = useMemo(() => {
+    const keys = new Set(picks.map(pick => agentKey(pick.harness, pick.model)));
+    return rawExtras.filter(agent => keys.has(agentKey(agent.harness, agent.model)));
+  }, [rawExtras, picks]);
   const [picksLoaded, setPicksLoaded] = useState(false);
   useEffect(() => {
     try {
@@ -66,7 +71,7 @@ export function useRosterPicks() {
               return { ...pick, id };
             }),
           );
-          setExtras(saved.extras);
+          setRawExtras(saved.extras);
         }
       }
     } catch {
@@ -84,7 +89,7 @@ export function useRosterPicks() {
   }, [picks, extras, picksLoaded]);
   const noteAgent = useCallback(
     (option: AgentOption) =>
-      setExtras(previous => [
+      setRawExtras(previous => [
         ...previous.filter(agent => agentKey(agent.harness, agent.model) !== agentKey(option.harness, option.model)),
         option,
       ]),
