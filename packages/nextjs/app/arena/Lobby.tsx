@@ -1690,6 +1690,8 @@ const PICKER_BUTTON =
   "rounded border border-[#00FBFF]/30 px-3 py-1 font-dotGothic text-sm tracking-widest hover:border-[#00FBFF] hover:bg-[#00FBFF] hover:text-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#00FBFF] disabled:opacity-40";
 const PICKER_INPUT =
   "w-full rounded border border-[#00FBFF]/30 bg-black/60 px-2 py-1 text-[#00FBFF] focus:border-[#00FBFF] focus:outline-none";
+// One line under the modal heading. Kept here so the wording is a one-line change.
+const EDITOR_HINT = "Effort levels depend on the harness and model.";
 
 function SelectField(props: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
@@ -1827,9 +1829,7 @@ function AgentEditor({
         <h2 id="agent-editor-heading" className="pr-10 font-dotGothic text-lg tracking-widest">
           {pick ? `EDIT SLOT ${index + 1}` : "ADD AGENT"}
         </h2>
-        <p className="mt-2 mb-5 pr-10 text-sm text-[#00FBFF]/60">
-          Pick a harness, then a model, then the effort it runs at.
-        </p>
+        <p className="mt-2 mb-5 pr-10 text-sm text-[#00FBFF]/60">{EDITOR_HINT}</p>
         <div className="grid gap-4">
           <label className="min-w-0">
             Harness
@@ -1900,7 +1900,7 @@ function AgentEditor({
               />
               <button
                 type="button"
-                className={`${PICKER_BUTTON} absolute top-1/2 right-1 flex h-6 w-6 -translate-y-1/2 items-center justify-center border-0 p-0`}
+                className="absolute top-1/2 right-1 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-[#00FBFF] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#00FBFF]"
                 aria-label="Show models"
                 tabIndex={-1}
                 onMouseDown={event => event.preventDefault()}
