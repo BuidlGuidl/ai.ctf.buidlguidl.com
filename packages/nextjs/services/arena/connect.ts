@@ -22,6 +22,8 @@ const BACKFILL_TYPES = [
   // Both prompts replay, so without the cut between them the abandoned session
   // and its replacement rebuild as one continuous console.
   "entrant.restarted",
+  "entrant.joined",
+  "entrant.removed",
   "entrant.nudged",
   "entrant.narration",
   "director.broadcast",

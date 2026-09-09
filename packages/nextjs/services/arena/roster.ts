@@ -149,16 +149,37 @@ const ROSTER_EFFORT_BY_ID: Readonly<Record<string, RosterEffort | undefined>> = 
 
 // The run reports what actually ran, so its effort wins when present; the preset
 // pin covers runs that predate the backend carrying effort for this harness.
-export function displayForEntrant(id: string, harness: string, model: string, effort?: RosterEffort): RosterDisplay {
+export function displayForEntrant(
+  id: string,
+  harness: string | undefined,
+  model: string,
+  effort?: RosterEffort,
+): RosterDisplay {
   const preset = ROSTER_DISPLAY[id];
   if (preset) return { ...preset, effort: effort ?? ROSTER_EFFORT_BY_ID[id] };
   return {
     handle: id,
     color: "#00FBFF",
-    short: harness.slice(0, 2).toUpperCase(),
-    vendor: harness,
-    harnessLabel: harness,
+    short: (harness ?? "agent").slice(0, 2).toUpperCase(),
+    vendor: harness ?? "agent",
+    harnessLabel: harness ?? "undeclared",
     modelLabel: model,
+    effort,
+  };
+}
+
+const EXTERNAL_COLORS = ["#FF8FA3", "#80FFDB", "#B8C0FF", "#F4A261", "#90E0EF", "#D4A373", "#F9C6F0", "#C7D36F"];
+
+export function displayForExternal(id: string, name: string, harness?: string, model?: string, effort?: string) {
+  let hash = 2166136261;
+  for (const character of id) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
+  return {
+    handle: name,
+    short: Array.from(name).slice(0, 2).join("").toUpperCase(),
+    color: EXTERNAL_COLORS[(hash >>> 0) % EXTERNAL_COLORS.length],
+    vendor: harness ?? "undeclared",
+    harnessLabel: harness ?? "undeclared",
+    modelLabel: model ?? "undeclared",
     effort,
   };
 }

@@ -1,4 +1,4 @@
-// Copied from agents-arena-backend contract/arena-types.ts, sweep-funds branch (pre-merge, base 04923a0).
+// Copied from agents-arena-backend contract/arena-types.ts at commit a35a4a7 (plugin-your-own-agent branch).
 // Do not edit here — sync from the backend repo (formatting follows this repo's
 // prettier). Endpoint docs live there in contract/API.md.
 
@@ -41,11 +41,15 @@ export interface EntrantSolve {
   txHash: string;
 }
 
-export interface EntrantSummary {
+// Who runs the entrant. `hosted` is the arena's own container; `external` is an
+// agent someone else runs on their own machine with their own key (issue #60,
+// "bring your own agent"). Scoring keys on the wallet address, so both kinds
+// share one board, one solve poller, and one event vocabulary.
+export type EntrantKind = "hosted" | "external";
+
+// Common to every lane, whoever runs it.
+export interface EntrantSummaryBase {
   id: string;
-  harness: HarnessId;
-  model: string;
-  effort?: RosterEffort;
   address: string | null;
   status: EntrantStatus;
   flags: number;
@@ -62,6 +66,38 @@ export interface EntrantSummary {
   // is the journal cursor the line used, so clients can audit its source window.
   narration?: { text: string; ts: string; basedOnEventId: number };
 }
+
+export interface HostedEntrantSummary extends EntrantSummaryBase {
+  kind: "hosted";
+  harness: HarnessId;
+  model: string;
+  effort?: RosterEffort;
+}
+
+// What the outsider declared at join time. Free text, unverified, display only:
+// the arena cannot see what is really running, so a client labels these fields
+// "self-declared". `usage` events from an external lane are self-declared too.
+export interface ExternalEntrantSummary extends EntrantSummaryBase {
+  kind: "external";
+  name: string;
+  harness?: string;
+  model?: string;
+  effort?: string;
+  url?: string;
+  joinedAt: string;
+  // Set when the operator removed the lane. Its token is dead and its address
+  // no longer polls for solves; the lane stays on the board, greyed out.
+  removedAt?: string;
+  // Task-specific facts about this entrant. Today the only task is the CTF.
+  task?: {
+    // Flags the wallet already held when it joined. Every address can mint each
+    // flag once forever, so a wallet that raced before cannot re-earn those.
+    // The operator sees this and decides whether to remove the entrant.
+    ctfFlagsBeforeJoin: number;
+  };
+}
+
+export type EntrantSummary = HostedEntrantSummary | ExternalEntrantSummary;
 
 export interface RunSnapshot {
   id: string;
@@ -143,6 +179,25 @@ export type ArenaEvent =
       type: "entrant.narration";
       payload: { entrantId: string; text: string; basedOnEventId: number };
     })
+  // An external entrant registered (or re-registered with the same wallet, which
+  // replaces its entry). Carries what a board needs to open the lane without a
+  // snapshot fetch. A client treats a repeat for a known id as an update.
+  | (ArenaEventBase & {
+      type: "entrant.joined";
+      payload: {
+        entrantId: string;
+        kind: "external";
+        name: string;
+        address: string;
+        harness?: string;
+        model?: string;
+        effort?: string;
+        url?: string;
+      };
+    })
+  // The operator removed an external entrant. Its token is revoked and its
+  // address stops polling for solves. The lane stays visible, greyed out.
+  | (ArenaEventBase & { type: "entrant.removed"; payload: { entrantId: string; reason?: string } })
   | (ArenaEventBase & { type: "entrant.error"; payload: { entrantId: string; message: string } })
   | (ArenaEventBase & { type: "run.error"; payload: { message: string } })
   // Tokens count only what this event covers — codex emits one per turn, opencode
@@ -266,8 +321,114 @@ export interface BroadcastResponse {
   failed: { entrantId: string; message: string }[];
 }
 
+// Remove an external entrant. Hosted entrants cannot be removed; stop the run.
+export interface RemoveEntrantResponse {
+  accepted: boolean;
+}
+
 export interface NonceResponse {
   nonce: string;
+}
+
+// ---------------------------------------------------------------------------
+// Agent API: what an external entrant's own process calls. The agent always
+// dials out; the arena never calls in. Every route except join is authenticated
+// with the per-entrant bearer token that join returns. See API.md, "Agent API".
+// ---------------------------------------------------------------------------
+
+// The exact text the agent's wallet signs (EIP-191 personal_sign), with the
+// three placeholders filled in. `nonce` comes from GET /auth/nonce. The address
+// is the one in the request body, verbatim; the server compares it to the
+// recovered signer case-insensitively.
+export const JOIN_MESSAGE_TEMPLATE = "Join Agents Arena run {runId} as {address} with nonce {nonce}";
+
+export interface JoinRunRequest {
+  runId: string;
+  // The agent wallet. One wallet, one entrant per run; re-joining with the same
+  // wallet replaces the entry and revokes the earlier token.
+  address: string;
+  nonce: string;
+  signature: string;
+  // Display name, 1–40 characters. Required.
+  name: string;
+  // Self-declared and unverified. Each at most 80 characters; url at most 200
+  // and must be http(s).
+  harness?: string;
+  model?: string;
+  effort?: string;
+  url?: string;
+}
+
+export interface JoinRunResponse {
+  // Server-assigned from the address: `ext-` plus its first 12 hex characters.
+  entrantId: string;
+  // Bearer token for the other agent routes. Shown once; the arena stores only a
+  // hash. Dies when the run stops or the operator removes the entrant.
+  token: string;
+  run: RunSnapshot;
+}
+
+// What the run asks this entrant to do. `task` is null until the run is
+// `running`; poll until it is set. The run's `state` tells the agent whether to
+// wait, work, or stop.
+export interface AgentTaskResponse {
+  runId: string;
+  entrantId: string;
+  state: RunState;
+  startedAt: string | null;
+  deadlineAt: string | null;
+  task: string | null;
+}
+
+// One reported event. `seq` is a client-chosen integer, unique per token; the
+// server drops a seq it has already accepted, so a retried batch is safe. Any
+// unique increasing number works — a millisecond timestamp is fine. The server
+// sets `entrantId`, `ts`, and the journal position; the agent cannot write into
+// another lane. Shapes mirror the ArenaEvent payloads of the same name.
+export type AgentEventInput =
+  | { seq: number; type: "agent.message"; text: string }
+  | { seq: number; type: "agent.reasoning"; text: string }
+  | { seq: number; type: "tool.call"; tool: string; toolCallId: string; detail: string }
+  | { seq: number; type: "tool.result"; tool: string; toolCallId: string; ok: boolean; detail: string }
+  | {
+      seq: number;
+      type: "usage";
+      inputTokens: number;
+      outputTokens: number;
+      cachedInputTokens?: number;
+      costUsd?: number | null;
+    }
+  | { seq: number; type: "entrant.status"; status: EntrantStatus };
+
+export interface AgentEventsRequest {
+  // 1–100 events per batch; the whole body at most 256 KiB; each string field
+  // at most 16,000 characters (the feed shows the first 4,000).
+  events: AgentEventInput[];
+}
+
+export interface AgentEventsResponse {
+  accepted: number;
+  // Events whose seq the server had already accepted. Not an error.
+  duplicates: number;
+}
+
+export type InboxMessageKind = "steer" | "broadcast";
+
+// An operator message waiting for the agent. `cursor` is the value to pass as
+// `after` on the next poll. Fetching a message is what delivers it: the journal
+// records `entrant.steered` at that moment, not when the operator typed it.
+export interface InboxMessage {
+  cursor: number;
+  kind: InboxMessageKind;
+  text: string;
+  ts: string;
+}
+
+export interface AgentInboxResponse {
+  messages: InboxMessage[];
+  // Highest cursor the server holds for this entrant; equals the last message's
+  // cursor when `messages` is non-empty, else the value the agent passed.
+  cursor: number;
 }
 
 // The EIP-4361 message the operator's wallet signed, verbatim, plus its signature.

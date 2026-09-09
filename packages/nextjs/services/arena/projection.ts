@@ -1,5 +1,5 @@
-import type { ArenaEvent, EntrantStatus, RunSnapshot } from "./arena-types";
-import { displayForEntrant } from "./roster";
+import type { ArenaEvent, EntrantStatus, ExternalEntrantSummary, RunSnapshot } from "./arena-types";
+import { displayForEntrant, displayForExternal } from "./roster";
 
 export interface ConsoleEntry {
   id: number;
@@ -14,7 +14,7 @@ export interface ConsoleEntry {
 
 export interface FeedItem {
   id: number;
-  type: "flag" | "blocked" | "resumed" | "done" | "restarted";
+  type: "flag" | "blocked" | "resumed" | "done" | "restarted" | "joined" | "removed";
   agentId: string;
   color: string;
   text: string;
@@ -145,6 +145,60 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         runFinishedAt: event.payload.state === "finished" ? event.ts : next.runFinishedAt,
         runError: event.payload.reason ?? next.runError,
       };
+    case "entrant.joined": {
+      const { entrantId: id, name, address, harness, model, effort, url } = event.payload;
+      const declared = { name, address, harness, model, effort, url };
+      if (next.run.entrants.some(entrant => entrant.id === id)) {
+        next = updateEntrant(next, id, entrant =>
+          entrant.kind === "external" ? { ...entrant, ...declared } : entrant,
+        );
+      } else {
+        const entrant: ExternalEntrantSummary = {
+          id,
+          kind: "external",
+          ...declared,
+          status: "idle",
+          flags: 0,
+          solves: [],
+          inputTokens: 0,
+          outputTokens: 0,
+          costUsd: null,
+          currentChallengeId: null,
+          joinedAt: event.ts,
+        };
+        next = {
+          ...next,
+          run: { ...next.run, entrants: [...next.run.entrants, entrant] },
+          statusChangedAt: { ...next.statusChangedAt, [id]: event.ts },
+          consoleByEntrant: { ...next.consoleByEntrant, [id]: [] },
+          previewsByEntrant: { ...next.previewsByEntrant, [id]: [] },
+          narrationByEntrant: { ...next.narrationByEntrant, [id]: [] },
+          fundingByEntrant: { ...next.fundingByEntrant, [id]: { address, wei: null, funded: false } },
+        };
+      }
+      return appendFeed(next, {
+        id: event.id,
+        type: "joined",
+        agentId: id,
+        color: displayForExternal(id, name).color,
+        text: `${name} joined the race`,
+      });
+    }
+    case "entrant.removed": {
+      const id = event.payload.entrantId;
+      next = updateEntrant(next, id, entrant =>
+        entrant.kind === "external" ? { ...entrant, removedAt: event.ts, status: "done" } : entrant,
+      );
+      next = { ...next, statusChangedAt: { ...next.statusChangedAt, [id]: event.ts } };
+      const display = displayFor(id, next);
+      return appendFeed(next, {
+        id: event.id,
+        type: "removed",
+        agentId: id,
+        color: display.color,
+        text: `${display.handle} was removed by the operator${event.payload.reason ? `: ${event.payload.reason}` : ""}`,
+      });
+    }
     case "entrant.status": {
       const id = event.payload.entrantId;
       const previous = state.run.entrants.find(entrant => entrant.id === id)?.status;
@@ -159,7 +213,7 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         ...updateEntrant(next, id, entrant => ({ ...entrant, status: event.payload.status })),
         statusChangedAt: { ...state.statusChangedAt, [id]: changedAt },
       };
-      const item = statusFeedItem(event, previous);
+      const item = statusFeedItem(event, previous, next);
       return item ? appendFeed(next, item) : next;
     }
     case "agent.message":
@@ -170,7 +224,7 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         text: event.payload.text,
       });
       next = appendPreview(next, event.payload.entrantId, `› ${singleLine(event.payload.text)}`);
-      return appendChat(next, entrantChat(event));
+      return appendChat(next, entrantChat(event, next));
     case "agent.reasoning":
       next = appendConsole(next, event.payload.entrantId, {
         id: event.id,
@@ -222,7 +276,7 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
       return appendChat(next, {
         id: event.id,
         fromId: "director",
-        fromHandle: displayFor(event.payload.entrantId).handle,
+        fromHandle: displayFor(event.payload.entrantId, next).handle,
         color: "#FFBE00",
         text: event.payload.text,
         director: true,
@@ -246,7 +300,7 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         kind: "steer",
         text: "restarted this session — the agent starts over from its opening prompt",
       });
-      const display = displayFor(event.payload.entrantId);
+      const display = displayFor(event.payload.entrantId, next);
       return appendFeed(next, {
         id: event.id,
         type: "restarted",
@@ -306,7 +360,7 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         kind: "flag",
         text: `Captured Challenge ${event.payload.challengeId}`,
       });
-      const display = displayFor(event.payload.entrantId);
+      const display = displayFor(event.payload.entrantId, next);
       next = appendFeed(next, {
         id: event.id,
         type: "flag",
@@ -466,8 +520,9 @@ function appendChat(state: ProjectionState, item: ChatItem): ProjectionState {
 function statusFeedItem(
   event: Extract<ArenaEvent, { type: "entrant.status" }>,
   previous: EntrantStatus | undefined,
+  next: ProjectionState,
 ): FeedItem | null {
-  const display = displayFor(event.payload.entrantId);
+  const display = displayFor(event.payload.entrantId, next);
   if (event.payload.status === "blocked") {
     return {
       id: event.id,
@@ -498,8 +553,8 @@ function statusFeedItem(
   return null;
 }
 
-function entrantChat(event: Extract<ArenaEvent, { type: "agent.message" }>): ChatItem {
-  const display = displayFor(event.payload.entrantId);
+function entrantChat(event: Extract<ArenaEvent, { type: "agent.message" }>, next: ProjectionState): ChatItem {
+  const display = displayFor(event.payload.entrantId, next);
   return {
     id: event.id,
     fromId: event.payload.entrantId,
@@ -509,7 +564,10 @@ function entrantChat(event: Extract<ArenaEvent, { type: "agent.message" }>): Cha
   };
 }
 
-function displayFor(entrantId: string) {
+function displayFor(entrantId: string, state: ProjectionState) {
+  const entrant = state.run.entrants.find(candidate => candidate.id === entrantId);
+  if (entrant?.kind === "external")
+    return displayForExternal(entrantId, entrant.name, entrant.harness, entrant.model, entrant.effort);
   return displayForEntrant(entrantId, "agent", entrantId);
 }
 

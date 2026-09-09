@@ -4,6 +4,7 @@ import type {
   CreateRunRequest,
   HistoryPage,
   NonceResponse,
+  RemoveEntrantResponse,
   RestartResponse,
   RunListItem,
   RunListResponse,
@@ -91,6 +92,11 @@ export const arenaClient = {
       {
         method: "POST",
       },
+    ),
+  removeEntrant: (runId: string, entrantId: string) =>
+    arenaFetch<RemoveEntrantResponse>(
+      `/runs/${encodeURIComponent(runId)}/entrants/${encodeURIComponent(entrantId)}/remove`,
+      { method: "POST" },
     ),
   broadcast: (runId: string, body: BroadcastRequest) =>
     arenaFetch<BroadcastResponse>(`/runs/${encodeURIComponent(runId)}/broadcast`, { method: "POST", body }),

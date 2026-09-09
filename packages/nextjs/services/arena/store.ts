@@ -119,6 +119,8 @@ export const useArenaStore = create<ArenaStore>(set => ({
       // The queued response can lose the race against the steer's own injection
       // event. A hint for a steer the console already shows would never resolve.
       if (current.projection === null || current.projection.runFinishedAt !== null) return current;
+      const entrant = current.projection.run.entrants.find(candidate => candidate.id === entrantId);
+      if (entrant?.kind === "external" && entrant.removedAt) return current;
       const injected = (current.projection.consoleByEntrant[entrantId] ?? []).some(
         entry => entry.kind === "steer" && entry.text === text && entry.id > sinceEventId,
       );
@@ -144,7 +146,7 @@ function resolvePendingSteers(pending: Record<string, string[]>, event: ArenaEve
   }
   // A restart throws the queue away with the session, so those hints resolve to
   // nothing and would otherwise hang over the lane for the rest of the race.
-  if (event.type === "entrant.restarted" && pending[event.payload.entrantId]) {
+  if ((event.type === "entrant.restarted" || event.type === "entrant.removed") && pending[event.payload.entrantId]) {
     return { ...pending, [event.payload.entrantId]: [] };
   }
   if (event.type !== "entrant.steered") return pending;

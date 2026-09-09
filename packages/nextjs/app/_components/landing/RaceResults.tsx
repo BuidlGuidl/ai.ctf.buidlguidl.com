@@ -8,9 +8,9 @@ import { ModelName } from "~~/app/arena/ModelName";
 import { CHALLENGES } from "~~/app/arena/mockData";
 import { BlockieAvatar } from "~~/components/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
-import type { RosterEffort, RunSnapshot } from "~~/services/arena/arena-types";
+import type { RunSnapshot } from "~~/services/arena/arena-types";
 import { arenaClient } from "~~/services/arena/client";
-import { displayForEntrant } from "~~/services/arena/roster";
+import { displayForEntrant, displayForExternal } from "~~/services/arena/roster";
 import { getBlockExplorerAddressLink } from "~~/utils/scaffold-eth";
 
 const ChallengeModal = dynamic(() => import("./ChallengeModal"), { ssr: false });
@@ -27,7 +27,7 @@ const CELL =
 interface Row {
   id: string;
   handle: string;
-  effort?: RosterEffort;
+  effort?: string;
   runtime: string;
   color: string;
   short: string;
@@ -56,7 +56,10 @@ function rowsFromRun(run: RunSnapshot): Row[] {
   const startMs = run.startedAt ? Date.parse(run.startedAt) : NaN;
   return run.entrants
     .map(entrant => {
-      const display = displayForEntrant(entrant.id, entrant.harness, entrant.model, entrant.effort);
+      const display =
+        entrant.kind === "hosted"
+          ? displayForEntrant(entrant.id, entrant.harness, entrant.model, entrant.effort)
+          : displayForExternal(entrant.id, entrant.name, entrant.harness, entrant.model, entrant.effort);
       const lastSolveAt = entrant.solves.at(-1)?.ts ?? null;
       const clearedMs = entrant.solves.length >= TOTAL && lastSolveAt ? Date.parse(lastSolveAt) : NaN;
       return {

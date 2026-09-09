@@ -223,7 +223,12 @@ export function ArenaLobby({
     setAmount(value);
   }, []);
 
-  const addresses = useMemo(() => agents.flatMap(agent => (agent.address ? [agent.address] : [])), [agents]);
+  const hostedAgents = useMemo(() => agents.filter(agent => agent.kind === "hosted"), [agents]);
+  const externalCount = agents.length - hostedAgents.length;
+  const addresses = useMemo(
+    () => hostedAgents.flatMap(agent => (agent.address ? [agent.address] : [])),
+    [hostedAgents],
+  );
   const fundingActive = phase === "preparing" || phase === "funding" || phase === "ready" || phase === "launching";
   const {
     balances,
@@ -245,7 +250,7 @@ export function ArenaLobby({
   // Counted off the chain as well as the backend: the operator sends one
   // transaction and then watches this number, so it has to move when the money
   // lands, not when the backend gets around to saying so.
-  const fundedCount = agents.filter(
+  const fundedCount = hostedAgents.filter(
     agent =>
       rowStatus(
         agent.address ? balances[agent.address] : undefined,
@@ -254,7 +259,8 @@ export function ArenaLobby({
       ) === "ready",
   ).length;
   const progressCount = fundingActive ? fundedCount : readyCount;
-  const progressDone = agents.length > 0 && progressCount === agents.length;
+  const progressTotal = fundingActive ? hostedAgents.length : agents.length;
+  const progressDone = progressTotal > 0 && progressCount === progressTotal;
 
   const fundAll = useCallback(async () => {
     const target = requiredRef.current;
@@ -281,7 +287,7 @@ export function ArenaLobby({
       const current = fresh.data;
       // Top up the shortfall rather than the full amount, so resuming after a
       // failure — or raising the target mid-run — never overshoots.
-      const pending = agents
+      const pending = hostedAgents
         .flatMap(agent =>
           agent.address ? [{ agent, address: agent.address, shortfall: target - (current[agent.address] ?? 0n) }] : [],
         )
@@ -349,7 +355,7 @@ export function ArenaLobby({
     } finally {
       setFunding(false);
     }
-  }, [agents, amount, ensureChain, fundingChainId, mode, targetNetwork, transactor, pushLog, refetchBalances]);
+  }, [hostedAgents, amount, ensureChain, fundingChainId, mode, targetNetwork, transactor, pushLog, refetchBalances]);
 
   const openLobby = useCallback(async () => {
     unlockSfx();
@@ -667,7 +673,7 @@ export function ArenaLobby({
               ) : fundingActive ? (
                 <span>
                   <span className="text-[#00FBFF] font-bold tabular-nums">{fundedCount}</span>
-                  <span className="text-[#00FBFF]/40"> / {agents.length}</span> agents funded
+                  <span className="text-[#00FBFF]/40"> / {hostedAgents.length}</span> agents funded
                   {phase === "funding" && <span className="lobby-blink"> · waiting…</span>}
                 </span>
               ) : (
@@ -755,7 +761,7 @@ export function ArenaLobby({
             <div
               className="h-full rounded-full transition-all duration-500"
               style={{
-                width: `${agents.length ? (progressCount / agents.length) * 100 : 0}%`,
+                width: `${progressTotal ? (progressCount / progressTotal) * 100 : 0}%`,
                 background: progressDone ? GREEN : CY,
                 boxShadow: `0 0 12px ${progressDone ? GREEN : CY}`,
               }}
@@ -763,24 +769,32 @@ export function ArenaLobby({
           </div>
 
           {phase === "preparing" || phase === "funding" || phase === "ready" ? (
-            <FundingBoard
-              agents={agents}
-              balances={balances}
-              fundingProjection={fundingProjection}
-              required={required}
-              amount={amount}
-              thresholdWei={thresholdWei}
-              onAmountChange={handleAmountChange}
-              onFund={fundAll}
-              onConnect={openConnectModal}
-              funding={funding}
-              isConnected={isConnected}
-              mode={mode}
-              canFund={canFund}
-              networkName={fundingChainId === 31337 ? "Localhost" : targetNetwork.name}
-              balancesUnreachable={balancesUnreachable}
-              locked={phase !== "funding"}
-            />
+            <>
+              <FundingBoard
+                agents={hostedAgents}
+                balances={balances}
+                fundingProjection={fundingProjection}
+                required={required}
+                amount={amount}
+                thresholdWei={thresholdWei}
+                onAmountChange={handleAmountChange}
+                onFund={fundAll}
+                onConnect={openConnectModal}
+                funding={funding}
+                isConnected={isConnected}
+                mode={mode}
+                canFund={canFund}
+                networkName={fundingChainId === 31337 ? "Localhost" : targetNetwork.name}
+                balancesUnreachable={balancesUnreachable}
+                locked={phase !== "funding"}
+              />
+              {externalCount > 0 && (
+                <p className="mt-2 text-sm text-[#00FBFF]/60">
+                  {externalCount} external {externalCount === 1 ? "entrant brings its" : "entrants bring their"} own gas
+                  and {externalCount === 1 ? "is" : "are"} not waited on.
+                </p>
+              )}
+            </>
           ) : (
             <div className="lobby-slot-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 w-full max-w-4xl">
               {agents.map((a, i) => {
@@ -1162,6 +1176,11 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
         opacity: idle ? 0.82 : active ? 1 : 0.84,
       }}
     >
+      {agent.kind === "external" && (
+        <span className="absolute top-1.5 right-2 text-[9px] tracking-wider" style={{ color: agent.color }}>
+          EXTERNAL
+        </span>
+      )}
       {/* slot number */}
       <span className="absolute top-1.5 left-2 text-sm text-[#00FBFF]/55 tabular-nums">P{index + 1}</span>
 
@@ -1193,9 +1212,23 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
         {active ? (
           <>
             <div className="lobby-slot-name text-base font-bold leading-tight" style={{ color: agent.color }}>
-              <ModelName name={agent.model} effort={agent.effort} />
+              <ModelName name={agent.kind === "external" ? agent.handle : agent.model} effort={agent.effort} />
             </div>
-            <div className="lobby-slot-harness text-base text-[#00FBFF]/75 leading-tight">{agent.harness}</div>
+            <div
+              className="lobby-slot-harness text-base text-[#00FBFF]/75 leading-tight"
+              title={
+                agent.kind === "external"
+                  ? `${agent.harness} · ${agent.model}${agent.effort ? ` · ${agent.effort}` : ""} · self-declared`
+                  : undefined
+              }
+            >
+              {agent.harness}
+            </div>
+            {agent.kind === "external" && (
+              <span className="text-[9px] text-[#00FBFF]/60" title="declared by the entrant, not checked by the arena">
+                self-declared
+              </span>
+            )}
           </>
         ) : (
           <div className="text-base text-[#00FBFF]/55 tracking-widest">{idle ? "NOT ASSIGNED" : "———"}</div>

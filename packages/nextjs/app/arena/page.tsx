@@ -27,7 +27,7 @@ import type { EntrantSummary, RunState } from "~~/services/arena/arena-types";
 import { ArenaApiError, arenaClient } from "~~/services/arena/client";
 import { connectRun } from "~~/services/arena/connect";
 import type { ChatItem, ConsoleEntry, FeedItem, NarrationEntry } from "~~/services/arena/projection";
-import { ROSTER, displayForEntrant } from "~~/services/arena/roster";
+import { ROSTER, displayForEntrant, displayForExternal } from "~~/services/arena/roster";
 import { playSfx, useArenaSfx } from "~~/services/arena/sfx";
 import {
   type ConnectionStatus,
@@ -66,6 +66,8 @@ type OverviewTab = "race" | "grid";
 type RaceColumnMode = "challenges" | "order";
 
 const fmtTokens = (tokens: number) => `${(tokens / 1000).toFixed(0)}k`;
+const agentTokensLabel = (agent: Agent) =>
+  agent.kind === "external" && agent.tokens === 0 ? "—" : fmtTokens(agent.tokens);
 const USAGE_PENDING_TOOLTIP = "Filled in at the end of the run, live usage is unavailable";
 // A flag cell opens the challenge (and its contract) instead of focusing the
 // agent, so the ring is the hint that the cell is its own target.
@@ -75,6 +77,36 @@ const ARENA_TIP_BASE =
   "tooltip [--tooltip-color:#0a1e23] [--tooltip-text-color:#00FBFFcc] before:border before:border-[#00FBFF]/40 before:text-[10px] before:shadow-[0_0_14px_rgba(0,251,255,0.25)]";
 const ARENA_TIP = `${ARENA_TIP_BASE} tooltip-bottom after:border-b-[#00FBFF]/60`;
 const NARRATION_ONLY_STORAGE_KEY = "arena.log.narrationOnly";
+
+function ExternalTag({ agent }: { agent: Agent }) {
+  return agent.kind === "external" ? (
+    <span className="ml-1 shrink-0 text-[9px] font-normal tracking-wider" style={{ color: agent.color }}>
+      EXTERNAL
+    </span>
+  ) : null;
+}
+
+function DeclaredUsage({ agent, value }: { agent: Agent; value: number | null }) {
+  return agent.kind === "external" && value !== null ? (
+    <span
+      className={`${ARENA_TIP} cursor-help`}
+      data-tip="self-declared by the entrant"
+      aria-label="self-declared by the entrant"
+    >
+      *
+    </span>
+  ) : null;
+}
+
+function DeclaredRuntime({ agent }: { agent: Agent }) {
+  return (
+    <span className="text-xs text-[#00FBFF]/60 break-words">
+      {agent.harness} · {agent.model}
+      {agent.effort ? ` · ${agent.effort}` : ""}{" "}
+      <span title="declared by the entrant, not checked by the arena">· self-declared</span>
+    </span>
+  );
+}
 
 function PendingUsage() {
   return (
@@ -196,7 +228,9 @@ const activeTarget = (a: Agent): number | null => {
 };
 
 const agentRuntimeLabel = (agent: Agent) =>
-  `${agent.harness} + ${agent.model}${agent.effort ? ` · ${agent.effort}` : ""}`;
+  `${agent.harness} + ${agent.model}${agent.effort ? ` · ${agent.effort}` : ""}${
+    agent.kind === "external" ? " · self-declared" : ""
+  }`;
 
 function statusHeldForMs(agent: Agent, now: number | null): number {
   if (now === null || agent.statusChangedAt === null) return 0;
@@ -207,6 +241,7 @@ function statusHeldForMs(agent: Agent, now: number | null): number {
 // `now` is null while the run is not live, so a locked board never fades. A
 // finisher that cleared every flag is done, not dead, so it keeps full colour.
 function isAgentFaded(agent: Agent, now: number | null): boolean {
+  if (agent.removedAt) return true;
   if (now === null || agent.finishedAt !== null) return false;
   if (agent.status === "done") return true;
   if (agent.status !== "idle") return false;
@@ -218,6 +253,7 @@ function isAgentFaded(agent: Agent, now: number | null): boolean {
 // keeps its colour and its warning pulse, because it wants the director's
 // attention rather than less of it.
 function isAgentStalled(agent: Agent, now: number | null): boolean {
+  if (agent.removedAt) return false;
   if (isAgentFaded(agent, now)) return true;
   if (now === null || agent.finishedAt !== null || agent.status !== "blocked") return false;
   return statusHeldForMs(agent, now) >= IDLE_FADE_MS;
@@ -240,6 +276,11 @@ function agentsFromRun(
       const display = displayForEntrant(entrant.id, entrant.harness, entrant.model);
       return {
         id: entrant.id,
+        kind: "hosted",
+        name: null,
+        url: null,
+        removedAt: null,
+        flagsBeforeJoin: null,
         handle: display.handle,
         harness: display.harnessLabel,
         model: display.modelLabel,
@@ -262,11 +303,19 @@ function agentsFromRun(
   }
 
   return entrants.map(entrant => {
-    const display = displayForEntrant(entrant.id, entrant.harness, entrant.model, entrant.effort);
+    const display =
+      entrant.kind === "hosted"
+        ? displayForEntrant(entrant.id, entrant.harness, entrant.model, entrant.effort)
+        : displayForExternal(entrant.id, entrant.name, entrant.harness, entrant.model, entrant.effort);
     const lastSolve = entrant.solves.at(-1)?.ts ?? null;
     const clearedAt = entrant.solves.length >= CHALLENGES.length ? lastSolve : null;
     return {
       id: entrant.id,
+      kind: entrant.kind,
+      name: entrant.kind === "external" ? entrant.name : null,
+      url: entrant.kind === "external" ? entrant.url ?? null : null,
+      removedAt: entrant.kind === "external" ? entrant.removedAt ?? null : null,
+      flagsBeforeJoin: entrant.kind === "external" ? entrant.task?.ctfFlagsBeforeJoin ?? null : null,
       handle: display.handle,
       harness: display.harnessLabel,
       model: display.modelLabel,
@@ -280,7 +329,7 @@ function agentsFromRun(
       statusChangedAt: statusChangedAt?.[entrant.id] ?? null,
       tokens: entrant.inputTokens + entrant.outputTokens,
       cost: entrant.costUsd,
-      usagePending,
+      usagePending: entrant.kind === "hosted" && usagePending,
       lastSolveAt: lastSolve,
       finishedAt: secondsFrom(startedAt, clearedAt),
       currentChallengeId: entrant.currentChallengeId,
@@ -598,6 +647,11 @@ function ArenaScreen() {
     await arenaClient.restartEntrant(runId, focused.id);
   }, [focused, runId]);
 
+  const remove = useCallback(async () => {
+    if (!runId || focused?.kind !== "external" || focused.removedAt) return;
+    await arenaClient.removeEntrant(runId, focused.id);
+  }, [focused, runId]);
+
   if (route.runId && !runId && (connectionStatus === "not-found" || connectionStatus === "error")) {
     return (
       <RunExitPanel
@@ -741,6 +795,7 @@ function ArenaScreen() {
                 onSteer={steer}
                 onBroadcast={broadcast}
                 onRestart={restart}
+                onRemove={remove}
                 onInvalidate={operator.invalidate}
                 onSignIn={operator.signIn}
               />
@@ -887,7 +942,10 @@ function FinalCeremony({
                       <div
                         key={agent.id}
                         className="final-result-in flex min-h-16 items-center gap-2 rounded-md border border-[#00FBFF]/15 bg-[#001014]/60 px-3 sm:gap-3 sm:px-4"
-                        style={{ animationDelay: `${1.15 + (place - 4) * 0.08}s` }}
+                        style={{
+                          animationDelay: `${1.15 + (place - 4) * 0.08}s`,
+                          filter: agent.removedAt ? "opacity(0.5)" : undefined,
+                        }}
                       >
                         <span className="race-final-position w-8 text-center font-dotGothic text-xl text-[#00ff9c]">
                           {place}
@@ -895,8 +953,12 @@ function FinalCeremony({
                         <AgentBlockieLink agent={agent} />
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-lg font-bold text-white">{agent.handle}</div>
+                          {agent.removedAt && <StatusChip status={agent.status} removedAt={agent.removedAt} />}
                           <div className="mt-0.5 truncate text-sm text-[#00FBFF]/70">
                             {agent.harness} · <ModelName name={agent.model} effort={agent.effort} />
+                            {agent.kind === "external" && (
+                              <span title="declared by the entrant, not checked by the arena"> · self-declared</span>
+                            )}
                           </div>
                         </div>
                         {agent.finishedAt !== null && (
@@ -911,9 +973,17 @@ function FinalCeremony({
                               : fmtClock(agent.finishedAt)}
                           </div>
                           <div className="mt-0.5 whitespace-nowrap text-xs tracking-[0.12em] tabular-nums">
-                            <span className="text-[#00FBFF]/50">{fmtTokens(agent.tokens)} TOK · </span>
+                            <span className="text-[#00FBFF]/50">
+                              {agentTokensLabel(agent)} TOK
+                              <DeclaredUsage agent={agent} value={agent.tokens || null} /> ·{" "}
+                            </span>
                             <span className={agent.cost === null ? "text-[#00FBFF]/50" : "text-[#FFBE00]/70"}>
-                              {agent.cost === null ? "N/A" : `$${agent.cost.toFixed(2)}`}
+                              {agent.cost === null
+                                ? agent.kind === "external"
+                                  ? "—"
+                                  : "N/A"
+                                : `$${agent.cost.toFixed(2)}`}
+                              <DeclaredUsage agent={agent} value={agent.cost} />
                             </span>
                           </div>
                         </div>
@@ -969,6 +1039,7 @@ function FinalistCard({ agent, place }: { agent: Agent; place: PodiumPlace }) {
         }`}
         style={{
           borderColor: podium.tone,
+          filter: agent.removedAt ? "opacity(0.5)" : undefined,
           boxShadow: winner ? "0 0 44px -10px rgba(255,190,0,.6)" : `0 0 30px -14px ${podium.tone}`,
           animationDelay: `${delay}s`,
         }}
@@ -1000,8 +1071,12 @@ function FinalistCard({ agent, place }: { agent: Agent; place: PodiumPlace }) {
           </div>
         </div>
         <div className={`mt-3 truncate font-bold text-white ${winner ? "text-2xl" : "text-lg"}`}>{agent.handle}</div>
+        {agent.removedAt && <StatusChip status={agent.status} removedAt={agent.removedAt} />}
         <div className="mt-0.5 truncate text-sm text-[#00FBFF]/70">
           {agent.harness} · <ModelName name={agent.model} effort={agent.effort} />
+          {agent.kind === "external" && (
+            <span title="declared by the entrant, not checked by the arena"> · self-declared</span>
+          )}
         </div>
         <div
           className={`mt-3 font-dotGothic tabular-nums ${
@@ -1014,9 +1089,11 @@ function FinalistCard({ agent, place }: { agent: Agent; place: PodiumPlace }) {
             When it carries the clock, the footer keeps flags ahead of tokens. */}
         <div className="mt-1 text-sm tracking-[0.16em] text-[#00FBFF]/60">
           {agent.finishedAt === null
-            ? `${fmtTokens(agent.tokens)} TOK`
-            : `${agent.solved.length}/${CHALLENGES.length} FLAGS · ${fmtTokens(agent.tokens)} TOK`}{" "}
-          · {agent.cost === null ? "COST N/A" : `$${agent.cost.toFixed(2)}`}
+            ? `${agentTokensLabel(agent)} TOK`
+            : `${agent.solved.length}/${CHALLENGES.length} FLAGS · ${agentTokensLabel(agent)} TOK`}
+          <DeclaredUsage agent={agent} value={agent.tokens || null} /> ·{" "}
+          {agent.cost === null ? (agent.kind === "external" ? "COST —" : "COST N/A") : `$${agent.cost.toFixed(2)}`}
+          <DeclaredUsage agent={agent} value={agent.cost} />
         </div>
       </article>
     </div>
@@ -1347,6 +1424,7 @@ function AgentLog({
             <span className="text-[#00FBFF]/70">AGENT LOG · </span>
             <ModelName name={focused.handle} effort={focused.effort} />
           </span>
+          <ExternalTag agent={focused} />
           <button
             onClick={onClose}
             title="back to race"
@@ -1355,8 +1433,23 @@ function AgentLog({
             ✕
           </button>
         </div>
+        {focused.kind === "external" && (
+          <div className="flex flex-wrap items-center gap-2">
+            <DeclaredRuntime agent={focused} />
+            {focused.url && /^https?:\/\//i.test(focused.url) && (
+              <a
+                href={focused.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="break-all text-xs text-[#00FBFF]/70 underline"
+              >
+                {focused.url}
+              </a>
+            )}
+          </div>
+        )}
         <div className="flex items-center gap-2">
-          <StatusChip status={focused.status} />
+          <StatusChip status={focused.status} removedAt={focused.removedAt} />
           {focused.finishedAt !== null ? (
             <span className="px-1.5 py-0.5 rounded font-bold shrink-0 text-sm text-[#00ff9c] border border-[#00ff9c]/40">
               CLEARED · {fmtClock(focused.finishedAt)}
@@ -1730,7 +1823,7 @@ function RaceView({
         const narrationTip = latestNarration
           ? `${runtimeLabel}\n${latestNarration.text} · ${fmtAge(latestNarration.ts, narrationNow)}`
           : undefined;
-        const faded = isAgentFaded(a, now) && selectedId !== a.id;
+        const faded = isAgentFaded(a, now) && (selectedId !== a.id || !!a.removedAt);
         const fadeClass = `transition-opacity duration-300 group-hover:opacity-100 ${
           faded ? "opacity-50" : "opacity-100"
         }`;
@@ -1800,7 +1893,7 @@ function RaceView({
               )}
             </span>
             <span className={`flex shrink-0 ${fadeClass}`}>
-              <StatusDot status={a.status} />
+              <StatusDot status={a.status} removedAt={a.removedAt} />
             </span>
             <span className={`flex shrink-0 ${fadeClass}`}>
               <AgentBlockieLink agent={a} compact={compact} />
@@ -1811,9 +1904,21 @@ function RaceView({
               } shrink-0 text-left ${latestNarration ? "z-20" : ""}`}
               title={latestNarration ? undefined : runtimeLabel}
             >
-              <span className={`block truncate font-bold text-white ${fadeClass}`}>
-                <ModelName name={a.handle} effort={a.effort} />
+              <span
+                className={`${
+                  a.kind === "external" ? "flex items-center" : "block"
+                } truncate font-bold text-white ${fadeClass}`}
+              >
+                {a.kind === "external" ? (
+                  <span className="min-w-0 truncate">
+                    <ModelName name={a.handle} effort={a.effort} />
+                  </span>
+                ) : (
+                  <ModelName name={a.handle} effort={a.effort} />
+                )}
+                <ExternalTag agent={a} />
               </span>
+              {a.removedAt && <StatusChip status={a.status} removedAt={a.removedAt} />}
               {latestNarration && (
                 <NarrationPopover
                   agent={a}
@@ -1827,12 +1932,22 @@ function RaceView({
             <span
               className={`arena-race-tokens w-16 text-right ${dataText} tabular-nums shrink-0 text-[#00FBFF]/75 ${fadeClass}`}
             >
-              {a.usagePending && a.tokens === 0 ? <PendingUsage /> : fmtTokens(a.tokens)}
+              {a.usagePending && a.tokens === 0 ? <PendingUsage /> : agentTokensLabel(a)}
+              <DeclaredUsage agent={a} value={a.tokens || null} />
             </span>
             <span
               className={`arena-race-cost w-20 text-right ${dataText} tabular-nums shrink-0 text-[#FFBE00]/90 ${fadeClass}`}
             >
-              {a.cost !== null ? `$${a.cost.toFixed(2)}` : a.usagePending ? <PendingUsage /> : "N/A"}
+              {a.cost !== null ? (
+                `$${a.cost.toFixed(2)}`
+              ) : a.usagePending ? (
+                <PendingUsage />
+              ) : a.kind === "external" ? (
+                "—"
+              ) : (
+                "N/A"
+              )}
+              <DeclaredUsage agent={a} value={a.cost} />
             </span>
 
             {/* Order mode reads as the route the agent took; challenge mode parks every
@@ -2174,7 +2289,7 @@ function GridCard({
   const narration = useArenaStore(selectNarrationFor(agent.id));
   const latestNarration = narration.at(-1);
   const finished = agent.status === "done";
-  const faded = isAgentFaded(agent, now) && !selected;
+  const faded = isAgentFaded(agent, now) && (!selected || !!agent.removedAt);
   const fadeClass = `transition-opacity duration-300 group-hover:opacity-100 ${faded ? "opacity-50" : "opacity-100"}`;
   return (
     <div
@@ -2202,9 +2317,12 @@ function GridCard({
         <span className="text-base font-bold text-white truncate flex-1">
           <ModelName name={agent.handle} effort={agent.effort} />
         </span>
+        <ExternalTag agent={agent} />
         {/* No flag count and no chip for the ambient states: the strip below counts
             the flags, and every character saved here is one the handle keeps. */}
-        {agent.finishedAt !== null ? (
+        {agent.removedAt ? (
+          <StatusChip status={agent.status} removedAt={agent.removedAt} />
+        ) : agent.finishedAt !== null ? (
           <span className="shrink-0 text-sm font-bold tabular-nums text-[#00ff9c]">
             ◆ {fmtFinishTime(agent.finishedAt)}
           </span>
@@ -2508,6 +2626,7 @@ function OperatorStrip({
   onSteer,
   onBroadcast,
   onRestart,
+  onRemove,
   onInvalidate,
   onSignIn,
 }: {
@@ -2523,6 +2642,7 @@ function OperatorStrip({
   onSteer: (text: string) => Promise<void>;
   onBroadcast: (text: string) => Promise<void>;
   onRestart: () => Promise<void>;
+  onRemove: () => Promise<void>;
   onInvalidate: () => void;
   onSignIn: () => Promise<void>;
 }) {
@@ -2530,7 +2650,7 @@ function OperatorStrip({
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [armed, setArmed] = useState(false);
+  const [armed, setArmed] = useState<"restart" | "remove" | null>(null);
   const [confirmDisabled, setConfirmDisabled] = useState(false);
   const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2538,20 +2658,20 @@ function OperatorStrip({
   const disarm = useCallback(() => {
     clearTimeout(armTimer.current ?? undefined);
     clearTimeout(confirmTimer.current ?? undefined);
-    setArmed(false);
+    setArmed(null);
     setConfirmDisabled(false);
   }, []);
 
-  const arm = () => {
+  const arm = (action: "restart" | "remove") => {
     clearTimeout(armTimer.current ?? undefined);
     clearTimeout(confirmTimer.current ?? undefined);
-    setArmed(true);
+    setArmed(action);
     setConfirmDisabled(true);
     confirmTimer.current = setTimeout(() => {
       setConfirmDisabled(false);
       confirmTimer.current = null;
     }, STOP_CONFIRM_DWELL_MS);
-    armTimer.current = setTimeout(() => setArmed(false), STOP_ARM_MS);
+    armTimer.current = setTimeout(() => setArmed(null), STOP_ARM_MS);
   };
 
   useEffect(
@@ -2567,7 +2687,7 @@ function OperatorStrip({
   // leave a disabled button pulsing CONFIRM for the rest of the window.
   useEffect(() => {
     disarm();
-  }, [disarm, focused?.id, restartable, archived]);
+  }, [disarm, focused?.id, focused?.removedAt, restartable, archived, authenticated]);
 
   const send = async (action: (text: string) => Promise<void>) => {
     const text = draft.trim();
@@ -2593,9 +2713,9 @@ function OperatorStrip({
   // which is why it takes two clicks. The arm lapses on its own; a native confirm
   // dialog would cover the broadcast.
   const restart = async () => {
-    if (busy || archived || !restartable || !focused) return;
-    if (!armed) {
-      arm();
+    if (busy || archived || !restartable || focused?.kind !== "hosted") return;
+    if (armed !== "restart") {
+      arm("restart");
       return;
     }
     if (confirmDisabled) return;
@@ -2610,6 +2730,30 @@ function OperatorStrip({
         setError("operator session expired — sign in again");
       } else {
         setError(cause instanceof Error ? cause.message : "The restart request failed");
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    if (busy || focused?.kind !== "external" || focused.removedAt) return;
+    if (armed !== "remove") {
+      arm("remove");
+      return;
+    }
+    if (confirmDisabled) return;
+    disarm();
+    setBusy(true);
+    setError(null);
+    try {
+      await onRemove();
+    } catch (cause) {
+      if (cause instanceof ArenaApiError && cause.status === 401) {
+        onInvalidate();
+        setError("operator session expired — sign in again");
+      } else {
+        setError(cause instanceof Error ? cause.message : "The remove request failed");
       }
     } finally {
       setBusy(false);
@@ -2644,6 +2788,18 @@ function OperatorStrip({
       </div>
       {authenticated ? (
         <>
+          {focused?.kind === "external" && (
+            <div className="mb-1 flex flex-wrap items-center gap-x-2 text-xs text-[#FFBE00]/80">
+              {focused.flagsBeforeJoin !== null && (
+                <span>
+                  {focused.flagsBeforeJoin === 0
+                    ? "held no flags before joining"
+                    : `held ${focused.flagsBeforeJoin} flags before joining`}
+                </span>
+              )}
+              <DeclaredRuntime agent={focused} />
+            </div>
+          )}
           <div className="flex items-center gap-1.5">
             <input
               value={draft}
@@ -2668,18 +2824,32 @@ function OperatorStrip({
             </button>
             {/* Only in focus mode: a restart names one lane, and the overview
                 has no target to name. */}
-            {focused && (
+            {focused?.kind === "hosted" && (
               <button
                 onClick={() => void restart()}
-                disabled={busy || archived || !restartable || (armed && confirmDisabled)}
+                disabled={busy || archived || !restartable || (armed === "restart" && confirmDisabled)}
                 title={`drop ${focused.handle}'s session and re-feed its opening prompt`}
                 className={`shrink-0 whitespace-nowrap rounded border px-2 py-1 text-sm font-bold disabled:opacity-40 ${
-                  armed
+                  armed === "restart"
                     ? "animate-pulse border-[#FFBE00] bg-[#FFBE00] text-black"
                     : "border-[#FFBE00]/50 text-[#FFBE00]"
                 }`}
               >
-                {armed ? "CONFIRM RESTART" : "RESTART AGENT"}
+                {armed === "restart" ? "CONFIRM RESTART" : "RESTART AGENT"}
+              </button>
+            )}
+            {focused?.kind === "external" && (
+              <button
+                onClick={() => void remove()}
+                disabled={busy || !!focused.removedAt || (armed === "remove" && confirmDisabled)}
+                title={focused.removedAt ? `removed at ${focused.removedAt}` : `remove ${focused.handle} from the run`}
+                className={`shrink-0 whitespace-nowrap rounded border px-2 py-1 text-sm font-bold disabled:opacity-40 ${
+                  armed === "remove"
+                    ? "animate-pulse border-[#FFBE00] bg-[#FFBE00] text-black"
+                    : "border-[#FFBE00]/50 text-[#FFBE00]"
+                }`}
+              >
+                {armed === "remove" ? "CONFIRM REMOVE" : "REMOVE ENTRANT"}
               </button>
             )}
           </div>
@@ -2714,6 +2884,8 @@ const FEED_STYLE: Record<FeedItem["type"], { icon: string; cls: string }> = {
   flag: { icon: "🏁", cls: "text-[#00ff9c] font-bold" },
   blocked: { icon: "⚠", cls: "text-[#FFBE00] font-bold" },
   resumed: { icon: "▶", cls: "text-[#00FBFF]/70" },
+  joined: { icon: "+", cls: "text-[#00ff9c]" },
+  removed: { icon: "−", cls: "text-[#FFBE00]" },
   restarted: { icon: "↻", cls: "text-[#FFBE00] font-bold" },
   // Clearing the board is the loudest thing an agent can do, so it outranks a
   // single flag capture in the stream.
@@ -2787,11 +2959,11 @@ const STATUS_STYLE: Record<AgentStatus, { glyph: string; color: string; label: s
   done: { glyph: "◆", color: "#7fd8dd", label: "done — agent process exited" },
 };
 
-function StatusDot({ status }: { status: AgentStatus }) {
+function StatusDot({ status, removedAt }: { status: AgentStatus; removedAt?: string | null }) {
   const s = STATUS_STYLE[status];
   return (
     <span
-      title={s.label}
+      title={removedAt ? `removed at ${removedAt}` : s.label}
       className={`arena-status-dot w-4 shrink-0 text-center text-sm leading-none ${
         status === "blocked" ? "blocked-pulse" : ""
       }`}
@@ -2839,7 +3011,7 @@ function NarrationPopover({
             }`}
             style={{ color: s.color, border: `1px solid ${s.color}55`, background: `${s.color}12` }}
           >
-            {s.glyph} {agent.status}
+            {s.glyph} {agent.removedAt ? "REMOVED" : agent.status}
           </span>
         </span>
         <span className="mt-1 block text-xs tracking-wide text-[#00FBFF]/50">{agentRuntimeLabel(agent)}</span>
@@ -2859,19 +3031,19 @@ function NarrationPopover({
 // `working` and `idle` are the ambient states, so the glyph carries them and the
 // header keeps its width for the handle. The two that mean something happened
 // get the word spelled out.
-function StatusChip({ status }: { status: AgentStatus }) {
+function StatusChip({ status, removedAt }: { status: AgentStatus; removedAt?: string | null }) {
   const s = STATUS_STYLE[status];
   const loud = status === "blocked" || status === "done";
   return (
     <span
-      title={s.label}
+      title={removedAt ? `removed at ${removedAt}` : s.label}
       className={`px-1.5 py-0.5 rounded text-sm font-bold tracking-wider shrink-0 ${
         status === "blocked" ? "blocked-pulse" : ""
       }`}
       style={{ color: s.color, border: `1px solid ${s.color}55`, background: `${s.color}12` }}
     >
       {s.glyph}
-      {loud && ` ${status}`}
+      {removedAt ? " REMOVED" : loud && ` ${status}`}
     </span>
   );
 }
