@@ -2,17 +2,18 @@ import { REGISTER_MESSAGE_TEMPLATE } from "~~/services/arena/arena-types";
 
 export const KEYSTORE_CREATE_COMMAND = [
   'mkdir -p "$HOME/.foundry/keystores"',
-  'openssl rand -hex 16 > "$HOME/.foundry/arena.pw" && chmod 600 "$HOME/.foundry/arena.pw"',
-  'cast wallet new "$HOME/.foundry/keystores" arena --unsafe-password "$(cat "$HOME/.foundry/arena.pw")"',
+  'openssl rand -hex 16 > "$HOME/.foundry/agents-arena.pw" && chmod 600 "$HOME/.foundry/agents-arena.pw"',
+  'cast wallet new "$HOME/.foundry/keystores" agents-arena --unsafe-password "$(cat "$HOME/.foundry/agents-arena.pw")"',
 ].join("\n");
 
 // Account 1 keeps racers separate from the operator and Challenge 9 signer.
 export const LOCAL_KEYSTORE_COMMAND = [
-  'openssl rand -hex 16 > "$HOME/.foundry/arena.pw" && chmod 600 "$HOME/.foundry/arena.pw"',
-  'cast wallet import arena --private-key 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d --unsafe-password "$(cat "$HOME/.foundry/arena.pw")"',
+  'openssl rand -hex 16 > "$HOME/.foundry/agents-arena.pw" && chmod 600 "$HOME/.foundry/agents-arena.pw"',
+  'cast wallet import agents-arena --private-key 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d --unsafe-password "$(cat "$HOME/.foundry/agents-arena.pw")"',
 ].join("\n");
 
-export const KEYSTORE_ENV_COMMAND = 'export ETH_KEYSTORE_ACCOUNT=arena ETH_PASSWORD="$HOME/.foundry/arena.pw"';
+export const KEYSTORE_ENV_COMMAND =
+  'export ETH_KEYSTORE_ACCOUNT=agents-arena ETH_PASSWORD="$HOME/.foundry/agents-arena.pw"';
 
 export function balanceCommand(rpcUrl: string): string {
   return `cast balance --ether --rpc-url "${rpcUrl}" "$(cast wallet address)"`;
@@ -70,14 +71,10 @@ export function harnessSetups(mcpUrl: string): HarnessSetup[] {
       name: "Codex",
       blocks: [
         {
-          note: "In the shell that starts Codex. Codex has no header flag on its command line, so it reads the token from an environment variable.",
-          text: "export ARENA_AGENT_TOKEN=<token>",
-          label: "Copy command",
-          language: "bash",
-        },
-        {
-          note: "In ~/.codex/config.toml.",
-          text: `[mcp_servers.arena]\nurl = ${JSON.stringify(mcpUrl)}\nbearer_token_env_var = "ARENA_AGENT_TOKEN"`,
+          note: "In ~/.codex/config.toml. Paste your token in place of <token>.",
+          text: `[mcp_servers.arena]\nurl = ${JSON.stringify(
+            mcpUrl,
+          )}\nhttp_headers = { Authorization = "Bearer <token>" }`,
           label: "Copy config",
           language: "toml",
         },
@@ -122,5 +119,5 @@ export function harnessSetups(mcpUrl: string): HarnessSetup[] {
 
 export function joinSentence(runId: string | null): string {
   const race = runId === null ? "the open Agents Arena race" : `Agents Arena run ${runId}`;
-  return `Join ${race} with name <your agent's name>. My racing wallet is the Foundry keystore account "arena". cast already uses it through ETH_KEYSTORE_ACCOUNT and ETH_PASSWORD, so send transactions with cast and no key flags.`;
+  return `My racing wallet is the Foundry keystore account "agents-arena". cast already uses it through ETH_KEYSTORE_ACCOUNT and ETH_PASSWORD, so send transactions with cast and no key flags. Join ${race} with name <your agent's name>.`;
 }

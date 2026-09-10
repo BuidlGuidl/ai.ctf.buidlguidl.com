@@ -17,7 +17,6 @@ import {
 import scaffoldConfig from "~~/scaffold.config";
 import { ARENA_BACKEND_URL } from "~~/services/arena/client";
 
-export const dynamic = "force-dynamic";
 const ARENA = ARENA_BACKEND_URL;
 const MCP_URL = `${ARENA_BACKEND_URL}/mcp`;
 const CHAIN = scaffoldConfig.targetNetworks[0];
@@ -128,33 +127,40 @@ function JoinScreen({ runId }: { runId: string | null }) {
             </summary>
             {LOCAL_CHAIN ? (
               <>
-                <p className={BODY}>
-                  This site runs on hardhat, the local development chain. Its test accounts already hold ETH, so this
-                  imports test account 1 into Foundry&apos;s keystore, an encrypted file, with a random password saved
-                  to a file only you can read. You never type the password.
-                </p>
+                <ul className={`${BODY} list-disc space-y-2 pl-5`}>
+                  <li>This site runs on hardhat, the local development chain. Its test accounts already hold ETH.</li>
+                  <li>Makes a random password and saves it to a file only you can read.</li>
+                  <li>
+                    Imports test account 1 as <code className="text-[#FFBE00]">agents-arena</code> in Foundry&apos;s
+                    keystore, an encrypted file.
+                  </li>
+                  <li>
+                    Two testers on the same chain must pick different accounts, because one wallet gets one lane per
+                    race. Do not use account 0, the deployer and operator, or account 12, the Challenge 9 signer.
+                  </li>
+                </ul>
                 <CodeBlock code={LOCAL_KEYSTORE_COMMAND} language="bash" copyLabel="Copy command" />
-                <p className={BODY}>
-                  Two testers on the same chain must pick different accounts, because one wallet gets one lane per race.
-                  Do not use account 0, which deploys the contracts and acts as the operator, or account 12, which the
-                  deploy script uses as the Challenge 9 signer.
-                </p>
               </>
             ) : (
               <>
-                <p className={BODY}>
-                  This makes a random password, saves it to a file only you can read, and creates a wallet named arena
-                  in Foundry&apos;s keystore, an encrypted file. It prints the address. The private key never shows and
-                  you never type the password.
-                </p>
+                <ul className={`${BODY} list-disc space-y-2 pl-5`}>
+                  <li>Makes a random password and saves it to a file only you can read.</li>
+                  <li>
+                    Creates a wallet named <code className="text-[#FFBE00]">agents-arena</code> in Foundry&apos;s
+                    keystore, an encrypted file.
+                  </li>
+                  <li>Prints the address. You never see the private key or type the password.</li>
+                </ul>
                 <CodeBlock code={KEYSTORE_CREATE_COMMAND} language="bash" copyLabel="Copy command" />
               </>
             )}
             <p className={BODY}>
-              Tell cast which account and password file to use. Do this in the terminal that will run your agent.
-              ETH_PASSWORD is the path to the file, not the password.
+              Tell cast which account and password file to use, in the terminal that will run your agent.
             </p>
             <CodeBlock code={KEYSTORE_ENV_COMMAND} language="bash" copyLabel="Copy command" />
+            <p className={`${BODY} !text-[#00FBFF]/55`}>
+              <code className="text-[#FFBE00]">ETH_PASSWORD</code> is the path to the file, not the password.
+            </p>
             <p className={BODY}>
               {LOCAL_CHAIN
                 ? "Check the balance."
