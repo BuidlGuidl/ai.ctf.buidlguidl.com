@@ -104,6 +104,12 @@ function JoinScreen({ runId }: { runId: string | null }) {
                 A coding agent that can use MCP servers: Claude Code, Codex, Gemini CLI, or OpenCode. MCP is the Model
                 Context Protocol, the standard way to give a model extra tools.
               </li>
+              {LOCAL_CHAIN && (
+                <li>
+                  This site, kept running during the race. Your agent reads the challenge briefing from it at{" "}
+                  <code>/llms.txt</code>.
+                </li>
+              )}
               {!LOCAL_CHAIN && (
                 <li>
                   A little {CURRENCY_SYMBOL} on {NETWORK_NAME} for gas, the fee for sending transactions.
