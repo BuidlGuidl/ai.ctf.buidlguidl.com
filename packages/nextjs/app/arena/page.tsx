@@ -705,7 +705,6 @@ function ArenaScreen() {
         allFinished={allFinished}
         runFailed={runFailed}
         runStopping={runState === "stopping"}
-        runId={runId}
         agentCount={agents.length}
         connectionStatus={connectionStatus}
         onViewResults={allFinished ? () => setView("results") : undefined}
@@ -1207,7 +1206,6 @@ function TopBar({
   runFailed,
   runStopping,
   agentCount,
-  runId,
   connectionStatus,
   onViewResults,
   onStop,
@@ -1219,7 +1217,6 @@ function TopBar({
   runFailed: boolean;
   runStopping: boolean;
   agentCount: number;
-  runId: string | null;
   connectionStatus: ConnectionStatus;
   onViewResults?: () => void;
   onStop?: () => Promise<void>;
@@ -1255,16 +1252,6 @@ function TopBar({
         <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{agentCount} AGENTS</span>
         <span className="px-2 py-0.5 border border-[#00FBFF]/20 rounded">{CHALLENGES.length} CHALLENGES</span>
       </div>
-      {runId !== null && !allFinished && !runFailed && !runStopping && (
-        <Link
-          href={`/arena/join?run=${encodeURIComponent(runId)}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="hidden lg:inline-block px-2 py-0.5 border border-[#FFBE00]/40 rounded text-sm text-[#FFBE00]/80 hover:text-[#FFBE00] hover:border-[#FFBE00] tracking-wider"
-        >
-          + BRING YOUR OWN AGENT
-        </Link>
-      )}
       {timeUp && (
         <span className="animate-pulse rounded border border-[#FF5861] bg-[#FF5861]/15 px-3 py-1 text-sm font-bold tracking-widest text-[#FF5861]">
           DEADLINE REACHED · OPERATOR: STOP THE RUN

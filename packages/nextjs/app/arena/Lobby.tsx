@@ -100,32 +100,23 @@ const JOINABLE_STATES = new Set<RunState>([
 
 function InviteBlock({ runId }: { runId: string }) {
   const [origin, setOrigin] = useState("");
-  const run = useArenaStore(selectRun);
   useEffect(() => setOrigin(window.location.origin), []);
   const path = `/arena/join?run=${encodeURIComponent(runId)}`;
   const url = `${origin}${path}`;
-  const count = run?.entrants.filter(entrant => entrant.kind === "external" && !entrant.removedAt).length ?? 0;
   return (
-    <div className="mt-6 w-full max-w-3xl rounded-lg border border-[#00FBFF]/25 bg-[#00090b]/60 px-4 py-3 space-y-2">
-      <div className="text-xs font-bold tracking-widest text-[#00FBFF]/60">OPEN TO OUTSIDE AGENTS</div>
-      <p className="text-sm text-[#00FBFF]/75">
-        Anyone can race an agent from their own machine in this run. Send them this link.
-      </p>
-      <div className="flex flex-wrap items-center gap-3">
-        <code className="min-w-0 flex-1 basis-full sm:basis-0 break-all text-sm text-[#FFBE00]">{url}</code>
+    <div className="mt-4 flex w-full max-w-4xl flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-[#00FBFF]/15 px-3 py-2 font-dotGothic text-xs tracking-widest text-[#00FBFF]/60">
+      <span className="mr-auto">Outside agents can join this run</span>
+      <div className="flex items-center gap-3">
         <CopyButton text={url} label="COPY LINK" compact />
         <Link
           href={path}
           target="_blank"
           rel="noopener noreferrer"
-          className="shrink-0 rounded border border-[#00FBFF]/40 px-3 py-1.5 text-xs tracking-widest hover:border-[#00FBFF] hover:bg-[#00FBFF]/10"
+          className="shrink-0 rounded py-1.5 hover:text-[#00FBFF] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00FBFF]"
         >
           SETUP PAGE ▸
         </Link>
       </div>
-      <p className="text-xs text-[#00FBFF]/55">
-        {count === 0 ? "No external entrants yet" : `${count} external ${count === 1 ? "entrant" : "entrants"} joined`}
-      </p>
     </div>
   );
 }
@@ -1166,58 +1157,16 @@ function FundingBoard({
       </div>
       {externalAgents.length > 0 && (
         <section className="mt-6" aria-labelledby="joined-external-agents">
-          <h3 id="joined-external-agents" className="mb-1 text-base font-bold tracking-widest text-[#00FBFF]/75">
-            ▤ JOINED WITH THEIR OWN AGENT
+          <h3 id="joined-external-agents" className="mb-3 font-dotGothic text-xs tracking-widest text-[#00FBFF]/60">
+            Joined with their own agent
           </h3>
-          <p className="mb-3 text-sm uppercase text-[#00FBFF]/60">
-            {externalAgents.length} {externalAgents.length === 1 ? "entrant has" : "entrants have"} joined
-          </p>
-          <div className="lobby-funding-list rounded-lg border border-[#00FBFF]/20 bg-[#00090b]/60 divide-y divide-[#00FBFF]/10 max-h-[46vh] overflow-y-auto">
+          <div className="lobby-slot-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 w-full max-w-4xl">
             {externalAgents.map((agent, i) => (
-              <JoinedExternalRow key={agent.id} agent={agent} index={agents.length + i} />
+              <Slot key={agent.id} agent={agent} state="ready" idle={false} index={agents.length + i} />
             ))}
           </div>
         </section>
       )}
-    </div>
-  );
-}
-
-function JoinedExternalRow({ agent, index }: { agent: Agent; index: number }) {
-  return (
-    <div className="lobby-funding-row flex items-center gap-3 px-3 py-2 text-base transition-colors">
-      <span className="w-8 shrink-0 text-sm text-[#00FBFF]/55 tabular-nums">P{index + 1}</span>
-      <span
-        className="lobby-funding-avatar w-8 h-8 shrink-0 rounded-full overflow-hidden"
-        style={{ border: `1px solid ${agent.color}` }}
-      >
-        {agent.address ? (
-          <BlockieAvatar address={agent.address} ensImage={null} size={32} />
-        ) : (
-          <span className="flex h-full items-center justify-center text-xs" style={{ color: agent.color }}>
-            {agent.short}
-          </span>
-        )}
-      </span>
-      <span className="lobby-funding-agent w-56 shrink-0 truncate font-bold" style={{ color: agent.color }}>
-        {agent.handle}
-      </span>
-      <span className="lobby-funding-address hidden sm:flex items-center text-[#00FBFF]/70">
-        {agent.address ? (
-          <Address address={agent.address} hideBlockie openLinkInNewTab size="base" />
-        ) : (
-          "Address not given"
-        )}
-      </span>
-      <span className="lobby-funding-balance ml-auto min-w-0 break-words text-[#00FBFF]/70">
-        {declaredRuntimeParts(agent) ?? "harness and model not given"}
-      </span>
-      <span
-        className="lobby-funding-status min-w-52 shrink-0 whitespace-nowrap text-right text-sm font-bold tracking-widest"
-        style={{ color: GREEN }}
-      >
-        JOINED ✓
-      </span>
     </div>
   );
 }
