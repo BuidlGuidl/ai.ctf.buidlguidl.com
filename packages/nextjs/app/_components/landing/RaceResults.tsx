@@ -10,7 +10,7 @@ import { BlockieAvatar } from "~~/components/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 import type { RunSnapshot } from "~~/services/arena/arena-types";
 import { arenaClient } from "~~/services/arena/client";
-import { displayForEntrant, displayForExternal } from "~~/services/arena/roster";
+import { declaredRuntimeParts, displayForEntrant, displayForExternal } from "~~/services/arena/roster";
 import { getBlockExplorerAddressLink } from "~~/utils/scaffold-eth";
 
 const ChallengeModal = dynamic(() => import("./ChallengeModal"), { ssr: false });
@@ -60,13 +60,23 @@ function rowsFromRun(run: RunSnapshot): Row[] {
         entrant.kind === "hosted"
           ? displayForEntrant(entrant.id, entrant.harness, entrant.model, entrant.effort)
           : displayForExternal(entrant.id, entrant.name, entrant.harness, entrant.model, entrant.effort);
+      const parts = declaredRuntimeParts({
+        harness: display.harnessLabel,
+        model: display.modelLabel,
+        effort: display.effort,
+      });
       const lastSolveAt = entrant.solves.at(-1)?.ts ?? null;
       const clearedMs = entrant.solves.length >= TOTAL && lastSolveAt ? Date.parse(lastSolveAt) : NaN;
       return {
         id: entrant.id,
         handle: display.handle,
         effort: display.effort,
-        runtime: `${display.harnessLabel} + ${display.modelLabel}${display.effort ? ` · ${display.effort}` : ""}`,
+        runtime:
+          entrant.kind === "external"
+            ? parts === null
+              ? "harness and model not given"
+              : `${parts} · self-declared`
+            : `${display.harnessLabel} + ${display.modelLabel}${display.effort ? ` · ${display.effort}` : ""}`,
         color: display.color,
         short: display.short,
         address: entrant.address,

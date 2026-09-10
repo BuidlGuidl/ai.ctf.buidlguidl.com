@@ -178,8 +178,13 @@ export function displayForExternal(id: string, name: string, harness?: string, m
     short: Array.from(name).slice(0, 2).join("").toUpperCase(),
     color: EXTERNAL_COLORS[(hash >>> 0) % EXTERNAL_COLORS.length],
     vendor: harness ?? "undeclared",
-    harnessLabel: harness ?? "undeclared",
-    modelLabel: model ?? "undeclared",
+    harnessLabel: harness ?? "",
+    modelLabel: model ?? "",
     effort,
   };
+}
+
+// Keep missing declarations out of the external runtime line.
+export function declaredRuntimeParts(agent: { harness: string; model: string; effort?: string }): string | null {
+  return [agent.harness, agent.model, agent.effort].filter(Boolean).join(" · ") || null;
 }

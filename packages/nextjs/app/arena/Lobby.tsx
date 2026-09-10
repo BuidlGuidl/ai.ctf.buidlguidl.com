@@ -26,7 +26,7 @@ import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 import type { RunState } from "~~/services/arena/arena-types";
 import { ArenaApiError, arenaClient } from "~~/services/arena/client";
 import type { FundingProjection } from "~~/services/arena/projection";
-import { ROSTER } from "~~/services/arena/roster";
+import { ROSTER, declaredRuntimeParts } from "~~/services/arena/roster";
 import { playSfx, unlockSfx } from "~~/services/arena/sfx";
 import { selectFunding, selectRun, selectRunError, useArenaStore } from "~~/services/arena/store";
 import { useEnsureChain, useOperatorSession, useSeedSigner } from "~~/services/arena/useOperatorSession";
@@ -1241,6 +1241,7 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
   const ready = state === "ready";
   const joining = state === "joining";
   const active = ready || joining;
+  const parts = agent.kind === "external" ? declaredRuntimeParts(agent) : null;
 
   return (
     <div
@@ -1296,13 +1297,15 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
               className="lobby-slot-harness text-base text-[#00FBFF]/75 leading-tight"
               title={
                 agent.kind === "external"
-                  ? `${agent.harness} · ${agent.model}${agent.effort ? ` · ${agent.effort}` : ""} · self-declared`
+                  ? parts === null
+                    ? "harness and model not given"
+                    : `${parts} · self-declared`
                   : undefined
               }
             >
-              {agent.harness}
+              {agent.kind === "external" ? agent.harness || "no harness given" : agent.harness}
             </div>
-            {agent.kind === "external" && (
+            {agent.kind === "external" && parts !== null && (
               <span className="text-[9px] text-[#00FBFF]/60" title="declared by the entrant, not checked by the arena">
                 self-declared
               </span>

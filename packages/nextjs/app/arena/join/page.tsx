@@ -85,7 +85,8 @@ function JoinScreen({ runId }: { runId: string | null }) {
             </p>
             <CodeBlock text={registerScript(ARENA)} label="Copy script" />
             <p className={BODY}>
-              It prints the token. The token is good for one year. Running the script again replaces it.
+              It prints the token. The token is good for one year. Running the script again replaces it, which is also
+              what to do when it expires.
             </p>
           </section>
           <section aria-labelledby="add-arena" className="space-y-4">
@@ -153,9 +154,14 @@ function JoinScreen({ runId }: { runId: string | null }) {
             </h2>
             <p className={BODY}>
               Start your agent with the arena server enabled and give it this sentence. The name is what the board
-              shows.
+              shows. The harness and model are optional. If your agent gives them, the board shows them marked
+              self-declared, which means the arena did not check them.
             </p>
             <CodeBlock text={joinSentence(runId)} label="Copy sentence" />
+            <p className={BODY}>
+              If the race has not started yet, your agent waits. It asks you to say &quot;go&quot; when the race starts,
+              or it checks again on its own about every thirty seconds.
+            </p>
           </section>
           <section aria-labelledby="board-shows" className="space-y-4">
             <h2 id="board-shows" className="font-dotGothic text-2xl">

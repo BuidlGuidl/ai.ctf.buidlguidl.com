@@ -27,7 +27,7 @@ import type { EntrantSummary, RunState } from "~~/services/arena/arena-types";
 import { ArenaApiError, arenaClient } from "~~/services/arena/client";
 import { connectRun } from "~~/services/arena/connect";
 import type { ChatItem, ConsoleEntry, FeedItem, NarrationEntry } from "~~/services/arena/projection";
-import { ROSTER, displayForEntrant, displayForExternal } from "~~/services/arena/roster";
+import { ROSTER, declaredRuntimeParts, displayForEntrant, displayForExternal } from "~~/services/arena/roster";
 import { playSfx, useArenaSfx } from "~~/services/arena/sfx";
 import {
   type ConnectionStatus,
@@ -96,11 +96,11 @@ function LastHeard({ agent, now }: { agent: Agent; now: number }) {
 }
 
 function DeclaredRuntime({ agent }: { agent: Agent }) {
+  const parts = declaredRuntimeParts(agent);
   return (
     <span className="text-xs text-[#00FBFF]/60 break-words">
-      {agent.harness} · {agent.model}
-      {agent.effort ? ` · ${agent.effort}` : ""}{" "}
-      <span title="declared by the entrant, not checked by the arena">· self-declared</span>
+      {parts ?? "harness and model not given"}
+      {parts !== null && <span title="declared by the entrant, not checked by the arena"> · self-declared</span>}
     </span>
   );
 }
@@ -224,10 +224,13 @@ const activeTarget = (a: Agent): number | null => {
   return CHALLENGES.some(c => c.id === id) ? id : null;
 };
 
-const agentRuntimeLabel = (agent: Agent) =>
-  `${agent.harness} + ${agent.model}${agent.effort ? ` · ${agent.effort}` : ""}${
-    agent.kind === "external" ? " · self-declared" : ""
-  }`;
+const agentRuntimeLabel = (agent: Agent) => {
+  if (agent.kind === "external") {
+    const parts = declaredRuntimeParts(agent);
+    return parts === null ? "harness and model not given" : `${parts} · self-declared`;
+  }
+  return `${agent.harness} + ${agent.model}${agent.effort ? ` · ${agent.effort}` : ""}`;
+};
 
 function statusHeldForMs(agent: Agent, now: number | null): number {
   if (now === null || agent.statusChangedAt === null) return 0;
@@ -957,9 +960,20 @@ function FinalCeremony({
                           <div className="truncate text-lg font-bold text-white">{agent.handle}</div>
                           {agent.removedAt && <StatusChip status={agent.status} removedAt={agent.removedAt} />}
                           <div className="mt-0.5 truncate text-sm text-[#00FBFF]/70">
-                            {agent.harness} · <ModelName name={agent.model} effort={agent.effort} />
-                            {agent.kind === "external" && (
-                              <span title="declared by the entrant, not checked by the arena"> · self-declared</span>
+                            {agent.kind === "external" ? (
+                              <>
+                                {declaredRuntimeParts(agent) ?? "harness and model not given"}
+                                {declaredRuntimeParts(agent) !== null && (
+                                  <span title="declared by the entrant, not checked by the arena">
+                                    {" "}
+                                    · self-declared
+                                  </span>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                {agent.harness} · <ModelName name={agent.model} effort={agent.effort} />
+                              </>
                             )}
                           </div>
                         </div>
@@ -1069,9 +1083,17 @@ function FinalistCard({ agent, place }: { agent: Agent; place: PodiumPlace }) {
         <div className={`mt-3 truncate font-bold text-white ${winner ? "text-2xl" : "text-lg"}`}>{agent.handle}</div>
         {agent.removedAt && <StatusChip status={agent.status} removedAt={agent.removedAt} />}
         <div className="mt-0.5 truncate text-sm text-[#00FBFF]/70">
-          {agent.harness} · <ModelName name={agent.model} effort={agent.effort} />
-          {agent.kind === "external" && (
-            <span title="declared by the entrant, not checked by the arena"> · self-declared</span>
+          {agent.kind === "external" ? (
+            <>
+              {declaredRuntimeParts(agent) ?? "harness and model not given"}
+              {declaredRuntimeParts(agent) !== null && (
+                <span title="declared by the entrant, not checked by the arena"> · self-declared</span>
+              )}
+            </>
+          ) : (
+            <>
+              {agent.harness} · <ModelName name={agent.model} effort={agent.effort} />
+            </>
           )}
         </div>
         <div
