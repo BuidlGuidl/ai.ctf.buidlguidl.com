@@ -79,7 +79,11 @@ const NARRATION_ONLY_STORAGE_KEY = "arena.log.narrationOnly";
 
 function ExternalTag({ agent }: { agent: Agent }) {
   return agent.kind === "external" ? (
-    <span className="ml-1 shrink-0 text-[9px] font-normal tracking-wider" style={{ color: agent.color }}>
+    <span
+      className="ml-1 shrink-0 text-[9px] font-normal tracking-wider"
+      style={{ color: agent.color }}
+      title="runs on its own machine; what it declares about itself is not checked by the arena"
+    >
       EXTERNAL
     </span>
   ) : null;
@@ -957,19 +961,14 @@ function FinalCeremony({
                         </span>
                         <AgentBlockieLink agent={agent} />
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-lg font-bold text-white">{agent.handle}</div>
+                          <div className="flex items-baseline text-lg font-bold text-white">
+                            <span className="truncate">{agent.handle}</span>
+                            <ExternalTag agent={agent} />
+                          </div>
                           {agent.removedAt && <StatusChip status={agent.status} removedAt={agent.removedAt} />}
                           <div className="mt-0.5 truncate text-sm text-[#00FBFF]/70">
                             {agent.kind === "external" ? (
-                              <>
-                                {declaredRuntimeParts(agent) ?? "harness and model not given"}
-                                {declaredRuntimeParts(agent) !== null && (
-                                  <span title="declared by the entrant, not checked by the arena">
-                                    {" "}
-                                    · self-declared
-                                  </span>
-                                )}
-                              </>
+                              declaredRuntimeParts(agent) ?? "harness and model not given"
                             ) : (
                               <>
                                 {agent.harness} · <ModelName name={agent.model} effort={agent.effort} />
@@ -1080,16 +1079,16 @@ function FinalistCard({ agent, place }: { agent: Agent; place: PodiumPlace }) {
             )}
           </div>
         </div>
-        <div className={`mt-3 truncate font-bold text-white ${winner ? "text-2xl" : "text-lg"}`}>{agent.handle}</div>
+        <div
+          className={`mt-3 flex items-baseline justify-center font-bold text-white ${winner ? "text-2xl" : "text-lg"}`}
+        >
+          <span className="truncate">{agent.handle}</span>
+          <ExternalTag agent={agent} />
+        </div>
         {agent.removedAt && <StatusChip status={agent.status} removedAt={agent.removedAt} />}
         <div className="mt-0.5 truncate text-sm text-[#00FBFF]/70">
           {agent.kind === "external" ? (
-            <>
-              {declaredRuntimeParts(agent) ?? "harness and model not given"}
-              {declaredRuntimeParts(agent) !== null && (
-                <span title="declared by the entrant, not checked by the arena"> · self-declared</span>
-              )}
-            </>
+            declaredRuntimeParts(agent) ?? "harness and model not given"
           ) : (
             <>
               {agent.harness} · <ModelName name={agent.model} effort={agent.effort} />

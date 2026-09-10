@@ -292,7 +292,7 @@ export function ArenaLobby({
   }, []);
 
   const hostedAgents = useMemo(() => agents.filter(agent => agent.kind === "hosted"), [agents]);
-  const externalCount = agents.length - hostedAgents.length;
+  const externalAgents = useMemo(() => agents.filter(agent => agent.kind === "external"), [agents]);
   const addresses = useMemo(
     () => hostedAgents.flatMap(agent => (agent.address ? [agent.address] : [])),
     [hostedAgents],
@@ -840,6 +840,7 @@ export function ArenaLobby({
             <>
               <FundingBoard
                 agents={hostedAgents}
+                externalAgents={externalAgents}
                 balances={balances}
                 fundingProjection={fundingProjection}
                 required={required}
@@ -856,12 +857,6 @@ export function ArenaLobby({
                 balancesUnreachable={balancesUnreachable}
                 locked={phase !== "funding"}
               />
-              {externalCount > 0 && (
-                <p className="mt-2 text-sm text-[#00FBFF]/60">
-                  {externalCount} external {externalCount === 1 ? "entrant brings its" : "entrants bring their"} own gas
-                  and {externalCount === 1 ? "is" : "are"} not waited on.
-                </p>
-              )}
             </>
           ) : (
             <div className="lobby-slot-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 w-full max-w-4xl">
@@ -1049,6 +1044,7 @@ export function ArenaLobby({
 
 function FundingBoard({
   agents,
+  externalAgents,
   balances,
   fundingProjection,
   required,
@@ -1066,6 +1062,7 @@ function FundingBoard({
   locked,
 }: {
   agents: Agent[];
+  externalAgents: Agent[];
   balances: Record<string, bigint>;
   fundingProjection: Record<string, FundingProjection>;
   required: bigint;
@@ -1167,6 +1164,60 @@ function FundingBoard({
           />
         ))}
       </div>
+      {externalAgents.length > 0 && (
+        <section className="mt-6" aria-labelledby="joined-external-agents">
+          <h3 id="joined-external-agents" className="mb-1 text-base font-bold tracking-widest text-[#00FBFF]/75">
+            ▤ JOINED WITH THEIR OWN AGENT
+          </h3>
+          <p className="mb-3 text-sm uppercase text-[#00FBFF]/60">
+            {externalAgents.length} {externalAgents.length === 1 ? "entrant has" : "entrants have"} joined
+          </p>
+          <div className="lobby-funding-list rounded-lg border border-[#00FBFF]/20 bg-[#00090b]/60 divide-y divide-[#00FBFF]/10 max-h-[46vh] overflow-y-auto">
+            {externalAgents.map((agent, i) => (
+              <JoinedExternalRow key={agent.id} agent={agent} index={agents.length + i} />
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function JoinedExternalRow({ agent, index }: { agent: Agent; index: number }) {
+  return (
+    <div className="lobby-funding-row flex items-center gap-3 px-3 py-2 text-base transition-colors">
+      <span className="w-8 shrink-0 text-sm text-[#00FBFF]/55 tabular-nums">P{index + 1}</span>
+      <span
+        className="lobby-funding-avatar w-8 h-8 shrink-0 rounded-full overflow-hidden"
+        style={{ border: `1px solid ${agent.color}` }}
+      >
+        {agent.address ? (
+          <BlockieAvatar address={agent.address} ensImage={null} size={32} />
+        ) : (
+          <span className="flex h-full items-center justify-center text-xs" style={{ color: agent.color }}>
+            {agent.short}
+          </span>
+        )}
+      </span>
+      <span className="lobby-funding-agent w-56 shrink-0 truncate font-bold" style={{ color: agent.color }}>
+        {agent.handle}
+      </span>
+      <span className="lobby-funding-address hidden sm:flex items-center text-[#00FBFF]/70">
+        {agent.address ? (
+          <Address address={agent.address} hideBlockie openLinkInNewTab size="base" />
+        ) : (
+          "Address not given"
+        )}
+      </span>
+      <span className="lobby-funding-balance ml-auto min-w-0 break-words text-[#00FBFF]/70">
+        {declaredRuntimeParts(agent) ?? "harness and model not given"}
+      </span>
+      <span
+        className="lobby-funding-status min-w-52 shrink-0 whitespace-nowrap text-right text-sm font-bold tracking-widest"
+        style={{ color: GREEN }}
+      >
+        JOINED ✓
+      </span>
     </div>
   );
 }

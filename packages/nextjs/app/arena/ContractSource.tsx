@@ -1,44 +1,13 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
+import { flattenTokens, splitTokenRuns } from "./codeTokens";
 import Prism from "prismjs";
 import "prismjs/components/prism-solidity";
 import { CHALLENGE_SOURCES, challengeContractName, challengeSourceUrl } from "~~/data/challengeSources";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 import { getBlockExplorerAddressLink } from "~~/utils/scaffold-eth";
 import { contracts } from "~~/utils/scaffold-eth/contract";
-
-// Enough colour to read a challenge on stream — comments dim, strings warm,
-// keywords cyan.
-const TOKEN_CLASSES: Record<string, string> = {
-  comment: "text-[#00FBFF]/35 italic",
-  string: "text-[#FFBE00]/85",
-  number: "text-[#FFBE00]/85",
-  keyword: "text-[#00FBFF] font-bold",
-  builtin: "text-[#00FBFF] font-bold",
-  boolean: "text-[#00FBFF] font-bold",
-};
-
-type TokenRun = { text: string; cls: string };
-
-function flattenTokens(token: Prism.TokenStream, cls = ""): TokenRun[] {
-  if (typeof token === "string") return [{ text: token, cls }];
-  if (Array.isArray(token)) return token.flatMap(part => flattenTokens(part, cls));
-  return flattenTokens(token.content, TOKEN_CLASSES[token.type] ?? "");
-}
-
-function splitTokenRuns(runs: TokenRun[]) {
-  const lines: TokenRun[][] = [[]];
-
-  for (const run of runs) {
-    run.text.split("\n").forEach((text, i) => {
-      if (i > 0) lines.push([]);
-      if (text) lines[lines.length - 1].push({ text, cls: run.cls });
-    });
-  }
-
-  return lines;
-}
 
 export function ContractSource({ challengeId, accent }: { challengeId: number; accent: string }) {
   const [open, setOpen] = useState(false);

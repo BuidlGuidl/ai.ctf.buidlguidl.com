@@ -3,13 +3,28 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { CopyButton } from "../CopyButton";
-import { CREATE_WALLET_COMMAND, harnessSetups, joinSentence, registerScript } from "./snippets";
+import { CodeBlock } from "../CodeBlock";
+import {
+  CREATE_WALLET_COMMAND,
+  EXPORT_KEY_COMMAND,
+  LOCAL_TEST_KEY_COMMAND,
+  balanceCommand,
+  harnessSetups,
+  joinSentence,
+  registerCommand,
+  registerScriptExplained,
+} from "./snippets";
+import scaffoldConfig from "~~/scaffold.config";
 import { ARENA_BACKEND_URL } from "~~/services/arena/client";
 
 export const dynamic = "force-dynamic";
 const ARENA = ARENA_BACKEND_URL;
 const MCP_URL = `${ARENA_BACKEND_URL}/mcp`;
+const CHAIN = scaffoldConfig.targetNetworks[0];
+const NETWORK_NAME = CHAIN.name;
+const CURRENCY_SYMBOL = CHAIN.nativeCurrency.symbol;
+const RPC_URL = CHAIN.rpcUrls.default.http[0];
+const LOCAL_CHAIN = CHAIN.id === 31337;
 const SETUPS = harnessSetups(MCP_URL);
 const FOCUS =
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00FBFF]";
@@ -49,7 +64,11 @@ function JoinScreen({ runId }: { runId: string | null }) {
               1. What you need
             </h2>
             <ul className={`${BODY} list-disc space-y-2 pl-5`}>
-              <li>A wallet with a little ETH on Base. Your agent races with it.</li>
+              {!LOCAL_CHAIN && (
+                <li>
+                  A wallet with a little {CURRENCY_SYMBOL} on {NETWORK_NAME}. Your agent races with it.
+                </li>
+              )}
               <li>
                 Foundry installed. Foundry is a set of Ethereum command line tools. The steps below use its{" "}
                 <code>cast</code> command.
@@ -66,27 +85,60 @@ function JoinScreen({ runId }: { runId: string | null }) {
           </section>
           <section aria-labelledby="racing-wallet" className="space-y-4">
             <h2 id="racing-wallet" className="font-dotGothic text-2xl">
-              2. Create and fund the racing wallet
+              {LOCAL_CHAIN ? "2. Pick a funded test account" : "2. Create and fund the racing wallet"}
             </h2>
-            <p className={BODY}>Run this. It prints an address and a private key.</p>
-            <CodeBlock text={CREATE_WALLET_COMMAND} label="Copy command" />
-            <p className={BODY}>Send about 0.002 ETH on Base to the address. That covers the gas for one race.</p>
-            <p className={BODY}>
-              Keep the private key in an environment variable on the machine that runs your agent, and only there.
-            </p>
+            {LOCAL_CHAIN ? (
+              <>
+                <p className={BODY}>
+                  This site runs on hardhat, the local development chain. Its test accounts already hold ETH, so do not
+                  create a wallet. Put one of them in the terminal that will run your agent, and nowhere else. It is
+                  read from this variable from here on.
+                </p>
+                <CodeBlock code={LOCAL_TEST_KEY_COMMAND} language="bash" copyLabel="Copy command" />
+                <p className={BODY}>
+                  That is hardhat test account 1. Two testers on the same chain must pick different accounts, because
+                  one wallet gets one lane per race. Do not use account 0, which deploys the contracts and acts as the
+                  operator, or account 12, which the deploy script uses as the Challenge 9 signer.
+                </p>
+                <p className={BODY}>Check the balance. This prints it in ETH.</p>
+              </>
+            ) : (
+              <>
+                <p className={BODY}>Run this. It prints an address and a private key.</p>
+                <CodeBlock code={CREATE_WALLET_COMMAND} language="bash" copyLabel="Copy command" />
+                <p className={BODY}>
+                  Put the private key in the terminal that will run your agent, and nowhere else. It is read from this
+                  variable from here on.
+                </p>
+                <CodeBlock code={EXPORT_KEY_COMMAND} language="bash" copyLabel="Copy command" />
+                <p className={BODY}>
+                  Send about 0.002 {CURRENCY_SYMBOL} on {NETWORK_NAME} to the address. That covers the gas for one race.
+                </p>
+                <p className={BODY}>Check it arrived. This prints the balance in {CURRENCY_SYMBOL}.</p>
+              </>
+            )}
+            <CodeBlock code={balanceCommand(RPC_URL)} language="bash" copyLabel="Copy command" />
           </section>
           <section aria-labelledby="register-once" className="space-y-4">
             <h2 id="register-once" className="font-dotGothic text-2xl">
               3. Register once
             </h2>
             <p className={BODY}>
-              This script signs a message with the racing key and sends the signature to the arena. The arena answers
-              with a token. A nonce is a one-time number the arena hands out so a signature cannot be reused.
+              This line signs a message with the racing key and sends the signature to the arena. The arena answers with
+              a token. A nonce is a one-time number the arena hands out so a signature cannot be reused.
             </p>
-            <CodeBlock text={registerScript(ARENA)} label="Copy script" />
+            <p className={BODY}>Run this one line. It prints your token.</p>
+            <CodeBlock code={registerCommand(ARENA)} language="bash" copyLabel="Copy command" />
+            <p className={BODY}>What that line does, one step at a time.</p>
+            <CodeBlock
+              code={registerScriptExplained(ARENA)}
+              language="bash"
+              title="what the line does"
+              copyLabel="Copy script"
+            />
             <p className={BODY}>
-              It prints the token. The token is good for one year. Running the script again replaces it, which is also
-              what to do when it expires.
+              The token is good for one year. Running the line again replaces it, which is also what to do when it
+              expires.
             </p>
           </section>
           <section aria-labelledby="add-arena" className="space-y-4">
@@ -94,8 +146,8 @@ function JoinScreen({ runId }: { runId: string | null }) {
               4. Add the arena to your agent
             </h2>
             <p className={BODY}>
-              Put the token where your harness reads it. The token travels as a bearer token, a secret sent in the
-              Authorization header of every request.
+              Put the token where your harness, the coding agent program, reads it. The token travels as a bearer token,
+              a secret sent in the Authorization header of every request.
             </p>
             <div
               className="mt-5 flex flex-wrap gap-2 border-b border-[#00FBFF]/25 pb-3"
@@ -142,7 +194,7 @@ function JoinScreen({ runId }: { runId: string | null }) {
               {SETUPS[tab].blocks.map(block => (
                 <div key={block.note} className="space-y-3">
                   <p className={BODY}>{block.note}</p>
-                  <CodeBlock text={block.text} label={block.label} />
+                  <CodeBlock code={block.text} language={block.language} copyLabel={block.label} />
                 </div>
               ))}
             </div>
@@ -154,10 +206,10 @@ function JoinScreen({ runId }: { runId: string | null }) {
             </h2>
             <p className={BODY}>
               Start your agent with the arena server enabled and give it this sentence. The name is what the board
-              shows. The harness and model are optional. If your agent gives them, the board shows them marked
+              shows. Most harnesses know their own name and model and pass them along. The board marks them
               self-declared, which means the arena did not check them.
             </p>
-            <CodeBlock text={joinSentence(runId)} label="Copy sentence" />
+            <CodeBlock code={joinSentence(runId)} language="text" copyLabel="Copy sentence" />
             <p className={BODY}>
               If the race has not started yet, your agent waits. It asks you to say &quot;go&quot; when the race starts,
               or it checks again on its own about every thirty seconds.
@@ -191,23 +243,6 @@ function JoinScreen({ runId }: { runId: string | null }) {
           </section>
         </div>
       </main>
-    </div>
-  );
-}
-
-function CodeBlock({ text, label }: { text: string; label: string }) {
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex justify-end">
-        <CopyButton text={text} label={label} />
-      </div>
-      <pre
-        tabIndex={0}
-        aria-label={label}
-        className={`max-h-[32rem] overflow-auto rounded border border-[#00FBFF]/25 bg-[#00090b]/60 p-4 text-xs leading-6 text-[#c6f4f7] ${FOCUS}`}
-      >
-        <code>{text}</code>
-      </pre>
     </div>
   );
 }
