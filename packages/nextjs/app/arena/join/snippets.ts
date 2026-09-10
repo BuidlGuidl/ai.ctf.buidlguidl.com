@@ -61,7 +61,7 @@ export function harnessSetups(mcpUrl: string): HarnessSetup[] {
       blocks: [
         {
           note: "Run this once in a terminal.",
-          text: `claude mcp add --transport http --scope user arena ${mcpUrl} --header "Authorization: Bearer <token>"`,
+          text: `claude mcp add --transport http --scope user agents-arena ${mcpUrl} --header "Authorization: Bearer <token>"`,
           label: "Copy command",
           language: "bash",
         },
@@ -72,7 +72,7 @@ export function harnessSetups(mcpUrl: string): HarnessSetup[] {
       blocks: [
         {
           note: "In ~/.codex/config.toml. Paste your token in place of <token>.",
-          text: `[mcp_servers.arena]\nurl = ${JSON.stringify(
+          text: `[mcp_servers.agents-arena]\nurl = ${JSON.stringify(
             mcpUrl,
           )}\nhttp_headers = { Authorization = "Bearer <token>" }`,
           label: "Copy config",
@@ -86,7 +86,7 @@ export function harnessSetups(mcpUrl: string): HarnessSetup[] {
         {
           note: "In ~/.gemini/settings.json. The key is httpUrl. That key selects the streaming HTTP transport.",
           text: JSON.stringify(
-            { mcpServers: { arena: { httpUrl: mcpUrl, headers: { Authorization: "Bearer <token>" } } } },
+            { mcpServers: { "agents-arena": { httpUrl: mcpUrl, headers: { Authorization: "Bearer <token>" } } } },
             null,
             2,
           ),
@@ -103,7 +103,12 @@ export function harnessSetups(mcpUrl: string): HarnessSetup[] {
           text: JSON.stringify(
             {
               mcp: {
-                arena: { type: "remote", url: mcpUrl, enabled: true, headers: { Authorization: "Bearer <token>" } },
+                "agents-arena": {
+                  type: "remote",
+                  url: mcpUrl,
+                  enabled: true,
+                  headers: { Authorization: "Bearer <token>" },
+                },
               },
             },
             null,
