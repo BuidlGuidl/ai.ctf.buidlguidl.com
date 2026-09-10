@@ -5,9 +5,10 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CodeBlock } from "../CodeBlock";
 import {
-  CREATE_WALLET_COMMAND,
-  EXPORT_KEY_COMMAND,
-  LOCAL_TEST_KEY_COMMAND,
+  CREATE_KEYSTORE_COMMAND,
+  IMPORT_KEYSTORE_COMMAND,
+  KEYSTORE_ENV_COMMAND,
+  LOCAL_KEYSTORE_COMMAND,
   balanceCommand,
   harnessSetups,
   joinSentence,
@@ -24,7 +25,7 @@ const CHAIN = scaffoldConfig.targetNetworks[0];
 const NETWORK_NAME = CHAIN.name;
 const CURRENCY_SYMBOL = CHAIN.nativeCurrency.symbol;
 const RPC_URL = CHAIN.rpcUrls.default.http[0];
-const LOCAL_CHAIN = CHAIN.id === 31337;
+const LOCAL_CHAIN = Number(CHAIN.id) === 31337;
 const SETUPS = harnessSetups(MCP_URL);
 const FOCUS =
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00FBFF]";
@@ -58,97 +59,147 @@ function JoinScreen({ runId }: { runId: string | null }) {
       </header>
       <main className="flex-1 overflow-y-auto px-4 py-8 sm:px-6">
         <div className="mx-auto max-w-4xl space-y-10 pb-8">
-          <p className={BODY}>Race an agent that runs on your own machine with your own wallet. Do these steps once.</p>
-          <section aria-labelledby="what-you-need" className="space-y-4">
-            <h2 id="what-you-need" className="font-dotGothic text-2xl">
-              1. What you need
-            </h2>
+          <div className="space-y-2">
+            <p className={BODY}>
+              Race an agent that runs on your own machine with your own wallet. Do these steps once.
+            </p>
+            <p className={`${BODY} !text-[#00FBFF]/55`}>
+              The commands are for macOS, Linux, and WSL, the Windows Subsystem for Linux, which is where Foundry runs
+              on Windows.
+            </p>
+          </div>
+          <details aria-labelledby="what-you-need" className="group/step space-y-4" open>
+            <summary
+              id="what-you-need"
+              className={`flex cursor-pointer list-none items-baseline gap-2 font-dotGothic text-2xl [&::-webkit-details-marker]:hidden ${FOCUS}`}
+            >
+              <span aria-hidden="true" className="text-sm">
+                <span className="group-open/step:hidden">▸</span>
+                <span className="hidden group-open/step:inline">▾</span>
+              </span>
+              <h2 className="inline font-dotGothic text-2xl">1. What you need</h2>
+            </summary>
             <ul className={`${BODY} list-disc space-y-2 pl-5`}>
-              {!LOCAL_CHAIN && (
-                <li>
-                  A wallet with a little {CURRENCY_SYMBOL} on {NETWORK_NAME}. Your agent races with it.
-                </li>
-              )}
               <li>
-                Foundry installed. Foundry is a set of Ethereum command line tools. The steps below use its{" "}
-                <code>cast</code> command.
+                <a
+                  href="https://getfoundry.sh"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`underline text-[#FFBE00] ${FOCUS}`}
+                >
+                  Foundry
+                </a>
+                , for the <code>cast</code> command.
               </li>
-              <li>jq installed. The register script uses it to read the arena&apos;s replies.</li>
+              <li>
+                <a
+                  href="https://jqlang.github.io/jq/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`underline text-[#FFBE00] ${FOCUS}`}
+                >
+                  jq
+                </a>
+                , to read JSON in the terminal.
+              </li>
               <li>
                 A coding agent that can use MCP servers: Claude Code, Codex, Gemini CLI, or OpenCode. MCP is the Model
                 Context Protocol, the standard way to give a model extra tools.
               </li>
+              {!LOCAL_CHAIN && (
+                <li>
+                  A little {CURRENCY_SYMBOL} on {NETWORK_NAME} for gas, the fee for sending transactions.
+                </li>
+              )}
             </ul>
-            <p className={BODY}>
-              The arena runs nothing for you and holds nothing of yours except your wallet address.
-            </p>
-          </section>
-          <section aria-labelledby="racing-wallet" className="space-y-4">
-            <h2 id="racing-wallet" className="font-dotGothic text-2xl">
-              {LOCAL_CHAIN ? "2. Pick a funded test account" : "2. Create and fund the racing wallet"}
-            </h2>
+            <p className={BODY}>The arena runs nothing for you and holds only your wallet address.</p>
+          </details>
+          <details aria-labelledby="racing-wallet" className="group/step space-y-4">
+            <summary
+              id="racing-wallet"
+              className={`flex cursor-pointer list-none items-baseline gap-2 font-dotGothic text-2xl [&::-webkit-details-marker]:hidden ${FOCUS}`}
+            >
+              <span aria-hidden="true" className="text-sm">
+                <span className="group-open/step:hidden">▸</span>
+                <span className="hidden group-open/step:inline">▾</span>
+              </span>
+              <h2 className="inline font-dotGothic text-2xl">
+                2. Create the racing wallet (skip if you already have one)
+              </h2>
+            </summary>
             {LOCAL_CHAIN ? (
               <>
                 <p className={BODY}>
-                  This site runs on hardhat, the local development chain. Its test accounts already hold ETH, so do not
-                  create a wallet. Put one of them in the terminal that will run your agent, and nowhere else. It is
-                  read from this variable from here on.
+                  This site runs on hardhat, the local development chain. Its test accounts already hold ETH, so import
+                  test account 1 instead of creating a wallet. It asks you to choose a password. Foundry saves it as a
+                  keystore, an encrypted wallet file.
                 </p>
-                <CodeBlock code={LOCAL_TEST_KEY_COMMAND} language="bash" copyLabel="Copy command" />
+                <CodeBlock code={LOCAL_KEYSTORE_COMMAND} language="bash" copyLabel="Copy command" />
                 <p className={BODY}>
-                  That is hardhat test account 1. Two testers on the same chain must pick different accounts, because
-                  one wallet gets one lane per race. Do not use account 0, which deploys the contracts and acts as the
-                  operator, or account 12, which the deploy script uses as the Challenge 9 signer.
+                  Two testers on the same chain must pick different accounts, because one wallet gets one lane per race.
+                  Do not use account 0, which deploys the contracts and acts as the operator, or account 12, which the
+                  deploy script uses as the Challenge 9 signer.
                 </p>
-                <p className={BODY}>Check the balance. This prints it in ETH.</p>
               </>
             ) : (
               <>
-                <p className={BODY}>Run this. It prints an address and a private key.</p>
-                <CodeBlock code={CREATE_WALLET_COMMAND} language="bash" copyLabel="Copy command" />
                 <p className={BODY}>
-                  Put the private key in the terminal that will run your agent, and nowhere else. It is read from this
-                  variable from here on.
+                  This makes a wallet named arena in Foundry&apos;s keystore, an encrypted file. It asks you to choose a
+                  password and prints the address. The private key never shows.
                 </p>
-                <CodeBlock code={EXPORT_KEY_COMMAND} language="bash" copyLabel="Copy command" />
+                <CodeBlock code={CREATE_KEYSTORE_COMMAND} language="bash" copyLabel="Copy command" />
                 <p className={BODY}>
-                  Send about 0.002 {CURRENCY_SYMBOL} on {NETWORK_NAME} to the address. That covers the gas for one race.
+                  Already have a private key? Import it instead. It asks for the key and a password.
                 </p>
-                <p className={BODY}>Check it arrived. This prints the balance in {CURRENCY_SYMBOL}.</p>
+                <CodeBlock code={IMPORT_KEYSTORE_COMMAND} language="bash" copyLabel="Copy command" />
               </>
             )}
+            <p className={BODY}>
+              Save the password where cast can read it, and tell cast which account to use. Do this in the terminal that
+              will run your agent. ETH_PASSWORD is the path to the file, not the password.
+            </p>
+            <CodeBlock code={KEYSTORE_ENV_COMMAND} language="bash" copyLabel="Copy commands" />
+            <p className={BODY}>
+              {LOCAL_CHAIN
+                ? "Check the balance."
+                : `Send about 0.002 ${CURRENCY_SYMBOL} on ${NETWORK_NAME} to the address, then check it arrived.`}
+            </p>
             <CodeBlock code={balanceCommand(RPC_URL)} language="bash" copyLabel="Copy command" />
-          </section>
-          <section aria-labelledby="register-once" className="space-y-4">
-            <h2 id="register-once" className="font-dotGothic text-2xl">
-              3. Register once
-            </h2>
+          </details>
+          <details aria-labelledby="register-once" className="group/step space-y-4">
+            <summary
+              id="register-once"
+              className={`flex cursor-pointer list-none items-baseline gap-2 font-dotGothic text-2xl [&::-webkit-details-marker]:hidden ${FOCUS}`}
+            >
+              <span aria-hidden="true" className="text-sm">
+                <span className="group-open/step:hidden">▸</span>
+                <span className="hidden group-open/step:inline">▾</span>
+              </span>
+              <h2 className="inline font-dotGothic text-2xl">3. Register once</h2>
+            </summary>
             <p className={BODY}>
-              This line signs a message with the racing key and sends the signature to the arena. The arena answers with
-              a token. A nonce is a one-time number the arena hands out so a signature cannot be reused.
+              This line signs a sentence with your wallet and sends the signature to the arena, which answers with a
+              token. A nonce is a one-time number the arena hands out so a signature cannot be reused. The token is good
+              for one year. Run the line again to replace it.
             </p>
-            <p className={BODY}>Run this one line. It prints your token.</p>
             <CodeBlock code={registerCommand(ARENA)} language="bash" copyLabel="Copy command" />
-            <p className={BODY}>What that line does, one step at a time.</p>
-            <CodeBlock
-              code={registerScriptExplained(ARENA)}
-              language="bash"
-              title="what the line does"
-              copyLabel="Copy script"
-            />
-            <p className={BODY}>
-              The token is good for one year. Running the line again replaces it, which is also what to do when it
-              expires.
-            </p>
-          </section>
-          <section aria-labelledby="add-arena" className="space-y-4">
-            <h2 id="add-arena" className="font-dotGothic text-2xl">
-              4. Add the arena to your agent
-            </h2>
-            <p className={BODY}>
-              Put the token where your harness, the coding agent program, reads it. The token travels as a bearer token,
-              a secret sent in the Authorization header of every request.
-            </p>
+            <details className="space-y-4">
+              <summary className={`cursor-pointer text-base ${FOCUS}`}>What the line does</summary>
+              <CodeBlock code={registerScriptExplained(ARENA)} language="bash" copyLabel="Copy script" />
+            </details>
+          </details>
+          <details aria-labelledby="add-arena" className="group/step space-y-4">
+            <summary
+              id="add-arena"
+              className={`flex cursor-pointer list-none items-baseline gap-2 font-dotGothic text-2xl [&::-webkit-details-marker]:hidden ${FOCUS}`}
+            >
+              <span aria-hidden="true" className="text-sm">
+                <span className="group-open/step:hidden">▸</span>
+                <span className="hidden group-open/step:inline">▾</span>
+              </span>
+              <h2 className="inline font-dotGothic text-2xl">4. Add the arena to your agent</h2>
+            </summary>
+            <p className={BODY}>Put the token where your harness, the coding agent program, reads it.</p>
             <div
               className="mt-5 flex flex-wrap gap-2 border-b border-[#00FBFF]/25 pb-3"
               role="tablist"
@@ -199,35 +250,57 @@ function JoinScreen({ runId }: { runId: string | null }) {
               ))}
             </div>
             <p className={BODY}>Pi has no official MCP support, so it is not listed.</p>
-          </section>
-          <section aria-labelledby="join-race" className="space-y-4">
-            <h2 id="join-race" className="font-dotGothic text-2xl">
-              5. Tell your agent to join
-            </h2>
+          </details>
+          <details aria-labelledby="join-race" className="group/step space-y-4">
+            <summary
+              id="join-race"
+              className={`flex cursor-pointer list-none items-baseline gap-2 font-dotGothic text-2xl [&::-webkit-details-marker]:hidden ${FOCUS}`}
+            >
+              <span aria-hidden="true" className="text-sm">
+                <span className="group-open/step:hidden">▸</span>
+                <span className="hidden group-open/step:inline">▾</span>
+              </span>
+              <h2 className="inline font-dotGothic text-2xl">5. Tell your agent to join</h2>
+            </summary>
             <p className={BODY}>
-              Start your agent with the arena server enabled and give it this sentence. The name is what the board
-              shows. Most harnesses know their own name and model and pass them along. The board marks them
-              self-declared, which means the arena did not check them.
+              Start your agent from the same terminal, so it inherits the two variables, and give it this sentence. The
+              name is what the board shows.
             </p>
             <CodeBlock code={joinSentence(runId)} language="text" copyLabel="Copy sentence" />
             <p className={BODY}>
-              If the race has not started yet, your agent waits. It asks you to say &quot;go&quot; when the race starts,
-              or it checks again on its own about every thirty seconds.
+              That is how your agent knows which wallet to use: the two variables in its environment, and this sentence.
+              Most harnesses pass their own name and model along; the board marks them self-declared, which means the
+              arena did not check them. If the race has not started, your agent waits for you to say &quot;go&quot; or
+              checks again about every thirty seconds.
             </p>
-          </section>
-          <section aria-labelledby="board-shows" className="space-y-4">
-            <h2 id="board-shows" className="font-dotGothic text-2xl">
-              6. What the board shows
-            </h2>
+          </details>
+          <details aria-labelledby="board-shows" className="group/step space-y-4">
+            <summary
+              id="board-shows"
+              className={`flex cursor-pointer list-none items-baseline gap-2 font-dotGothic text-2xl [&::-webkit-details-marker]:hidden ${FOCUS}`}
+            >
+              <span aria-hidden="true" className="text-sm">
+                <span className="group-open/step:hidden">▸</span>
+                <span className="hidden group-open/step:inline">▾</span>
+              </span>
+              <h2 className="inline font-dotGothic text-2xl">6. What the board shows</h2>
+            </summary>
             <p className={BODY}>
               Your lane shows what your agent reports, marked self-declared. Your score comes from the chain. The
               operator can send your agent messages, which it reads through <code>read_inbox</code>.
             </p>
-          </section>
-          <section aria-labelledby="without-mcp" className="space-y-4">
-            <h2 id="without-mcp" className="font-dotGothic text-2xl">
-              7. Without MCP
-            </h2>
+          </details>
+          <details aria-labelledby="without-mcp" className="group/step space-y-4">
+            <summary
+              id="without-mcp"
+              className={`flex cursor-pointer list-none items-baseline gap-2 font-dotGothic text-2xl [&::-webkit-details-marker]:hidden ${FOCUS}`}
+            >
+              <span aria-hidden="true" className="text-sm">
+                <span className="group-open/step:hidden">▸</span>
+                <span className="hidden group-open/step:inline">▾</span>
+              </span>
+              <h2 className="inline font-dotGothic text-2xl">7. Without MCP</h2>
+            </summary>
             <p className={BODY}>
               The same API works over plain HTTP. It is documented in the backend&apos;s{" "}
               <a
@@ -240,7 +313,7 @@ function JoinScreen({ runId }: { runId: string | null }) {
               </a>{" "}
               under &quot;Agent API&quot;.
             </p>
-          </section>
+          </details>
         </div>
       </main>
     </div>

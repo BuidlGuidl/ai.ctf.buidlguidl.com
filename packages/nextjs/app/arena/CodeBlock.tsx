@@ -33,7 +33,9 @@ export function CodeBlock({
       <pre
         tabIndex={0}
         aria-label={title}
-        className="max-h-[32rem] overflow-x-auto whitespace-pre console-scroll px-3 py-2 text-sm leading-relaxed text-[#9fe7ea] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00FBFF]"
+        className={`max-h-[32rem] overflow-x-auto console-scroll ${
+          language === "text" ? "whitespace-pre-wrap break-words" : "whitespace-pre"
+        } px-3 py-2 text-sm leading-relaxed text-[#9fe7ea] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00FBFF]`}
       >
         <code>
           {lines.map((line, i) => (

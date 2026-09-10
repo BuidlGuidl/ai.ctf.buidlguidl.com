@@ -1,37 +1,42 @@
 import { REGISTER_MESSAGE_TEMPLATE } from "~~/services/arena/arena-types";
 
-export const CREATE_WALLET_COMMAND = "cast wallet new";
+export const CREATE_KEYSTORE_COMMAND =
+  'mkdir -p "$HOME/.foundry/keystores" && cast wallet new "$HOME/.foundry/keystores" arena';
 
-export const EXPORT_KEY_COMMAND = "export ARENA_AGENT_PRIVATE_KEY=<the private key it printed>";
+export const IMPORT_KEYSTORE_COMMAND = "cast wallet import arena --interactive";
 
-// Hardhat test account 1: 0x70997970C51812dc3A010C7d01b50e0d17dc79C8.
-// This private key ships publicly with every hardhat install, so printing it is fine.
-export const LOCAL_TEST_KEY_COMMAND =
-  "export ARENA_AGENT_PRIVATE_KEY=0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
+// Account 1 keeps racers separate from the operator and Challenge 9 signer.
+export const LOCAL_KEYSTORE_COMMAND =
+  "cast wallet import arena --private-key 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
+
+export const KEYSTORE_ENV_COMMAND = [
+  `printf '%s' 'the password you chose' > "$HOME/.foundry/arena.pw" && chmod 600 "$HOME/.foundry/arena.pw"`,
+  'export ETH_KEYSTORE_ACCOUNT=arena ETH_PASSWORD="$HOME/.foundry/arena.pw"',
+].join("\n");
 
 export function balanceCommand(rpcUrl: string): string {
-  return `cast balance --ether --rpc-url "${rpcUrl}" "$(cast wallet address --private-key "$ARENA_AGENT_PRIVATE_KEY")"`;
+  return `cast balance --ether --rpc-url "${rpcUrl}" "$(cast wallet address)"`;
 }
 
 export function registerCommand(arena: string): string {
   const message = REGISTER_MESSAGE_TEMPLATE.replace("{address}", "$ADDRESS").replace("{nonce}", "$NONCE");
   return [
-    'ADDRESS=$(cast wallet address --private-key "$ARENA_AGENT_PRIVATE_KEY")',
+    "ADDRESS=$(cast wallet address)",
     `NONCE=$(curl -s "${arena}/auth/nonce" | jq -r .nonce)`,
-    `curl -s -X POST "${arena}/agent/register" -H 'Content-Type: application/json' -d "{\\"address\\":\\"$ADDRESS\\",\\"nonce\\":\\"$NONCE\\",\\"signature\\":\\"$(cast wallet sign --private-key "$ARENA_AGENT_PRIVATE_KEY" "${message}")\\"}" | jq -r .token`,
+    `curl -s -X POST "${arena}/agent/register" -H 'Content-Type: application/json' -d "{\\"address\\":\\"$ADDRESS\\",\\"nonce\\":\\"$NONCE\\",\\"signature\\":\\"$(cast wallet sign "${message}")\\"}" | jq -r .token`,
   ].join(" && ");
 }
 
 export function registerScriptExplained(arena: string): string {
   const message = REGISTER_MESSAGE_TEMPLATE.replace("{address}", "$ADDRESS").replace("{nonce}", "$NONCE");
   return [
-    "# 1. The wallet address that belongs to your private key.",
-    'ADDRESS=$(cast wallet address --private-key "$ARENA_AGENT_PRIVATE_KEY")',
-    "# 2. A nonce from the arena. It can be used once.",
+    "# 1. Read the account address so the arena knows which wallet is registering.",
+    "ADDRESS=$(cast wallet address)",
+    "# 2. Get a nonce so the signature cannot be reused.",
     `NONCE=$(curl -s "${arena}/auth/nonce" | jq -r .nonce)`,
-    "# 3. Sign a sentence that names your address and the nonce.",
-    `SIG=$(cast wallet sign --private-key "$ARENA_AGENT_PRIVATE_KEY" "${message}")`,
-    "# 4. Send the address, the nonce, and the signature. The arena checks the signer and answers with your token.",
+    "# 3. Sign the sentence to prove you control this wallet.",
+    `SIG=$(cast wallet sign "${message}")`,
+    "# 4. Send the proof so the arena can check it and issue a token.",
     `curl -s -X POST "${arena}/agent/register" -H 'Content-Type: application/json' \\`,
     '  -d "{\\"address\\":\\"$ADDRESS\\",\\"nonce\\":\\"$NONCE\\",\\"signature\\":\\"$SIG\\"}" | jq -r .token',
   ].join("\n");
@@ -117,5 +122,5 @@ export function harnessSetups(mcpUrl: string): HarnessSetup[] {
 
 export function joinSentence(runId: string | null): string {
   const race = runId === null ? "the open Agents Arena race" : `Agents Arena run ${runId}`;
-  return `Join ${race} with name <your agent's name>`;
+  return `Join ${race} with name <your agent's name>. My racing wallet is the Foundry keystore account "arena". cast already uses it through ETH_KEYSTORE_ACCOUNT and ETH_PASSWORD, so send transactions with cast and no key flags.`;
 }
