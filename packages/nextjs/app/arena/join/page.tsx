@@ -85,7 +85,7 @@ function JoinScreen({ runId }: { runId: string | null }) {
             </p>
             <CodeBlock text={registerScript(ARENA)} label="Copy script" />
             <p className={BODY}>
-              It prints the token. The token is good for ninety days. Running the script again replaces it.
+              It prints the token. The token is good for one year. Running the script again replaces it.
             </p>
           </section>
           <section aria-labelledby="add-arena" className="space-y-4">

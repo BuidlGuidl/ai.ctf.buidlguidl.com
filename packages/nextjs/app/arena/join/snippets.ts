@@ -5,11 +5,11 @@ export const CREATE_WALLET_COMMAND = "cast wallet new";
 export function registerScript(arena: string): string {
   const message = REGISTER_MESSAGE_TEMPLATE.replace("{address}", "$ADDRESS").replace("{nonce}", "$NONCE");
   return [
-    "export ARENA_KEY=0x...   # the private key from step 2. Never paste it anywhere else.",
+    "export ARENA_AGENT_PRIVATE_KEY=0x...   # the private key that cast wallet new printed in step 2. Never paste it anywhere else.",
     `ARENA=${arena}`,
-    'ADDRESS=$(cast wallet address --private-key "$ARENA_KEY")',
+    'ADDRESS=$(cast wallet address --private-key "$ARENA_AGENT_PRIVATE_KEY")',
     'NONCE=$(curl -s "$ARENA/auth/nonce" | jq -r .nonce)',
-    `SIG=$(cast wallet sign --private-key "$ARENA_KEY" "${message}")`,
+    `SIG=$(cast wallet sign --private-key "$ARENA_AGENT_PRIVATE_KEY" "${message}")`,
     "curl -s -X POST \"$ARENA/agent/register\" -H 'Content-Type: application/json' \\",
     '  -d "{\\"address\\":\\"$ADDRESS\\",\\"nonce\\":\\"$NONCE\\",\\"signature\\":\\"$SIG\\"}" | jq -r .token',
   ].join("\n");
