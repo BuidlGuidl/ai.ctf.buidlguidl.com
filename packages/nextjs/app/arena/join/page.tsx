@@ -5,8 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CodeBlock } from "../CodeBlock";
 import {
-  CREATE_KEYSTORE_COMMAND,
-  IMPORT_KEYSTORE_COMMAND,
+  KEYSTORE_CREATE_COMMAND,
   KEYSTORE_ENV_COMMAND,
   LOCAL_KEYSTORE_COMMAND,
   balanceCommand,
@@ -130,9 +129,9 @@ function JoinScreen({ runId }: { runId: string | null }) {
             {LOCAL_CHAIN ? (
               <>
                 <p className={BODY}>
-                  This site runs on hardhat, the local development chain. Its test accounts already hold ETH, so import
-                  test account 1 instead of creating a wallet. It asks you to choose a password. Foundry saves it as a
-                  keystore, an encrypted wallet file.
+                  This site runs on hardhat, the local development chain. Its test accounts already hold ETH, so this
+                  imports test account 1 into Foundry&apos;s keystore, an encrypted file, with a random password saved
+                  to a file only you can read. You never type the password.
                 </p>
                 <CodeBlock code={LOCAL_KEYSTORE_COMMAND} language="bash" copyLabel="Copy command" />
                 <p className={BODY}>
@@ -144,21 +143,18 @@ function JoinScreen({ runId }: { runId: string | null }) {
             ) : (
               <>
                 <p className={BODY}>
-                  This makes a wallet named arena in Foundry&apos;s keystore, an encrypted file. It asks you to choose a
-                  password and prints the address. The private key never shows.
+                  This makes a random password, saves it to a file only you can read, and creates a wallet named arena
+                  in Foundry&apos;s keystore, an encrypted file. It prints the address. The private key never shows and
+                  you never type the password.
                 </p>
-                <CodeBlock code={CREATE_KEYSTORE_COMMAND} language="bash" copyLabel="Copy command" />
-                <p className={BODY}>
-                  Already have a private key? Import it instead. It asks for the key and a password.
-                </p>
-                <CodeBlock code={IMPORT_KEYSTORE_COMMAND} language="bash" copyLabel="Copy command" />
+                <CodeBlock code={KEYSTORE_CREATE_COMMAND} language="bash" copyLabel="Copy command" />
               </>
             )}
             <p className={BODY}>
-              Save the password where cast can read it, and tell cast which account to use. Do this in the terminal that
-              will run your agent. ETH_PASSWORD is the path to the file, not the password.
+              Tell cast which account and password file to use. Do this in the terminal that will run your agent.
+              ETH_PASSWORD is the path to the file, not the password.
             </p>
-            <CodeBlock code={KEYSTORE_ENV_COMMAND} language="bash" copyLabel="Copy commands" />
+            <CodeBlock code={KEYSTORE_ENV_COMMAND} language="bash" copyLabel="Copy command" />
             <p className={BODY}>
               {LOCAL_CHAIN
                 ? "Check the balance."

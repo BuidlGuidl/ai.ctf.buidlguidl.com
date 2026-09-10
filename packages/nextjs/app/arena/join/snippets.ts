@@ -1,18 +1,18 @@
 import { REGISTER_MESSAGE_TEMPLATE } from "~~/services/arena/arena-types";
 
-export const CREATE_KEYSTORE_COMMAND =
-  'mkdir -p "$HOME/.foundry/keystores" && cast wallet new "$HOME/.foundry/keystores" arena';
-
-export const IMPORT_KEYSTORE_COMMAND = "cast wallet import arena --interactive";
+export const KEYSTORE_CREATE_COMMAND = [
+  'mkdir -p "$HOME/.foundry/keystores"',
+  'openssl rand -hex 16 > "$HOME/.foundry/arena.pw" && chmod 600 "$HOME/.foundry/arena.pw"',
+  'cast wallet new "$HOME/.foundry/keystores" arena --unsafe-password "$(cat "$HOME/.foundry/arena.pw")"',
+].join("\n");
 
 // Account 1 keeps racers separate from the operator and Challenge 9 signer.
-export const LOCAL_KEYSTORE_COMMAND =
-  "cast wallet import arena --private-key 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
-
-export const KEYSTORE_ENV_COMMAND = [
-  `printf '%s' 'the password you chose' > "$HOME/.foundry/arena.pw" && chmod 600 "$HOME/.foundry/arena.pw"`,
-  'export ETH_KEYSTORE_ACCOUNT=arena ETH_PASSWORD="$HOME/.foundry/arena.pw"',
+export const LOCAL_KEYSTORE_COMMAND = [
+  'openssl rand -hex 16 > "$HOME/.foundry/arena.pw" && chmod 600 "$HOME/.foundry/arena.pw"',
+  'cast wallet import arena --private-key 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d --unsafe-password "$(cat "$HOME/.foundry/arena.pw")"',
 ].join("\n");
+
+export const KEYSTORE_ENV_COMMAND = 'export ETH_KEYSTORE_ACCOUNT=arena ETH_PASSWORD="$HOME/.foundry/arena.pw"';
 
 export function balanceCommand(rpcUrl: string): string {
   return `cast balance --ether --rpc-url "${rpcUrl}" "$(cast wallet address)"`;
