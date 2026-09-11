@@ -47,18 +47,29 @@ export function Section({
   number,
   title,
   children,
+  open = false,
 }: {
   id: string;
   number: number;
   title: string;
   children: ReactNode;
+  open?: boolean;
 }) {
   return (
-    <section aria-labelledby={id} className="space-y-4">
-      <h2 id={id} className="font-dotGothic text-2xl">
-        {number}. {title}
-      </h2>
+    <details aria-labelledby={id} className="group/step space-y-4" open={open}>
+      <summary
+        id={id}
+        className={`flex cursor-pointer list-none items-baseline gap-2 font-dotGothic text-2xl [&::-webkit-details-marker]:hidden ${FOCUS}`}
+      >
+        <span aria-hidden="true" className="text-sm">
+          <span className="group-open/step:hidden">▸</span>
+          <span className="hidden group-open/step:inline">▾</span>
+        </span>
+        <h2 className="inline font-dotGothic text-2xl">
+          {number}. {title}
+        </h2>
+      </summary>
       {children}
-    </section>
+    </details>
   );
 }

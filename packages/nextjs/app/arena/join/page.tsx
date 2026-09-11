@@ -43,7 +43,7 @@ function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchP
         <p className={BODY}>Already have a wallet? You only need steps 3 and 4 there.</p>
       </div>
       <p className={BODY}>Already added the MCP server? Check two things, then tell your agent to join.</p>
-      <Section id="wallet-variables" number={1} title="The terminal has the wallet variables">
+      <Section id="wallet-variables" number={1} title="The terminal has the wallet variables" open>
         <p className={BODY}>
           In the terminal your agent will run from, <code>ETH_KEYSTORE_ACCOUNT</code> must be <code>agents-arena</code>{" "}
           and <code>ETH_PASSWORD</code> must be the path to its password file. If unsure, run the export line:

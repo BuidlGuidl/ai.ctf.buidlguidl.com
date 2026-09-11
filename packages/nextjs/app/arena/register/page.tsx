@@ -55,7 +55,7 @@ function RegisterScreen({ runId }: { runId: string | null }) {
           Windows.
         </p>
       </div>
-      <Section id="what-you-need" number={1} title="What you need">
+      <Section id="what-you-need" number={1} title="What you need" open>
         <ul className={`${BODY} list-disc space-y-2 pl-5`}>
           <li>
             <a
