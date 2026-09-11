@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import { AgentsUnavailable } from "./AgentsUnavailable";
 import { SectionHeading } from "./SectionHeading";
 import { MARKETING_RUN_ID, YOUTUBE_WATCH_URL } from "./event";
 import { ModelName } from "~~/app/arena/ModelName";
@@ -10,7 +11,14 @@ import { BlockieAvatar } from "~~/components/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 import type { RunSnapshot } from "~~/services/arena/arena-types";
 import { arenaClient } from "~~/services/arena/client";
-import { declaredRuntimeParts, displayForEntrant, displayForExternal } from "~~/services/arena/roster";
+import {
+  type DisplayContext,
+  type RosterDisplay,
+  declaredRuntimeParts,
+  displayContextFrom,
+  displayMapForEntrants,
+} from "~~/services/arena/roster";
+import { useAgents } from "~~/services/arena/useAgents";
 import { getBlockExplorerAddressLink } from "~~/utils/scaffold-eth";
 
 const ChallengeModal = dynamic(() => import("./ChallengeModal"), { ssr: false });
@@ -50,33 +58,35 @@ const fmtFinish = (seconds: number) => {
   return h > 0 ? `${String(h).padStart(2, "0")}:${ms}` : ms;
 };
 
+function hostedRuntime(display: RosterDisplay): string {
+  return `${display.harnessLabel} + ${display.modelLabel}${display.effort ? ` · ${display.effort}` : ""}`;
+}
+
+// What an outside entrant said about itself; nobody checked it.
+function externalRuntime(display: RosterDisplay): string {
+  const parts = declaredRuntimeParts({
+    harness: display.harnessLabel,
+    model: display.modelLabel,
+    effort: display.effort,
+  });
+  return parts === null ? "harness and model not given" : `${parts} · self-declared`;
+}
+
 // Same order as the board: flags first, then the clock for anyone who cleared
 // the course, then whoever reached that flag count first.
-function rowsFromRun(run: RunSnapshot): Row[] {
+function rowsFromRun(run: RunSnapshot, context: DisplayContext): Row[] {
+  const displays = displayMapForEntrants(run.entrants, context);
   const startMs = run.startedAt ? Date.parse(run.startedAt) : NaN;
   return run.entrants
     .map(entrant => {
-      const display =
-        entrant.kind === "hosted"
-          ? displayForEntrant(entrant.id, entrant.harness, entrant.model, entrant.effort)
-          : displayForExternal(entrant.id, entrant.name, entrant.harness, entrant.model, entrant.effort);
-      const parts = declaredRuntimeParts({
-        harness: display.harnessLabel,
-        model: display.modelLabel,
-        effort: display.effort,
-      });
+      const display = displays[entrant.id];
       const lastSolveAt = entrant.solves.at(-1)?.ts ?? null;
       const clearedMs = entrant.solves.length >= TOTAL && lastSolveAt ? Date.parse(lastSolveAt) : NaN;
       return {
         id: entrant.id,
         handle: display.handle,
         effort: display.effort,
-        runtime:
-          entrant.kind === "external"
-            ? parts === null
-              ? "harness and model not given"
-              : `${parts} · self-declared`
-            : `${display.harnessLabel} + ${display.modelLabel}${display.effort ? ` · ${display.effort}` : ""}`,
+        runtime: entrant.kind === "external" ? externalRuntime(display) : hostedRuntime(display),
         color: display.color,
         short: display.short,
         address: entrant.address,
@@ -97,6 +107,7 @@ function rowsFromRun(run: RunSnapshot): Row[] {
 }
 
 export function RaceResults() {
+  const agentsQuery = useAgents();
   const [run, setRun] = useState<RunSnapshot | null>(null);
   const [failed, setFailed] = useState(false);
   const [mode, setMode] = useState<ColumnMode>("challenges");
@@ -115,7 +126,10 @@ export function RaceResults() {
     return () => controller.abort();
   }, []);
 
-  const rows = useMemo(() => (run ? rowsFromRun(run) : []), [run]);
+  const rows = useMemo(
+    () => (run ? rowsFromRun(run, displayContextFrom(agentsQuery.data)) : []),
+    [run, agentsQuery.data],
+  );
   const explorer = run && run.chainId === targetNetwork.id ? targetNetwork : null;
   const open = CHALLENGES.find(challenge => challenge.id === openId);
   const challengeName = (id: number) => CHALLENGES.find(challenge => challenge.id === id)?.name ?? "";
@@ -174,6 +188,11 @@ export function RaceResults() {
         <p className="text-base text-[#00FBFF]/55">Loading the results…</p>
       ) : (
         <div className="overflow-x-auto">
+          {agentsQuery.isError && (
+            <div className="mb-3">
+              <AgentsUnavailable onRetry={() => agentsQuery.refetch()} />
+            </div>
+          )}
           <div className="min-w-[880px] space-y-1">
             <div className="flex items-center gap-3 px-2 pb-1 text-sm tracking-widest text-[#00FBFF]/55">
               <span className="w-8 shrink-0" />

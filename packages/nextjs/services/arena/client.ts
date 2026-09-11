@@ -1,7 +1,11 @@
 import type {
+  AgentOption,
+  AgentSearchResponse,
+  AgentsResponse,
   BroadcastRequest,
   BroadcastResponse,
   CreateRunRequest,
+  HarnessId,
   HistoryPage,
   NonceResponse,
   RemoveEntrantResponse,
@@ -15,6 +19,7 @@ import type {
   SteerResponse,
   SweepRequest,
   SweepResponse,
+  ValidationErrorResponse,
   VerifyRequest,
   VerifyResponse,
 } from "./arena-types";
@@ -28,6 +33,21 @@ export class ArenaApiError extends Error {
   constructor(public readonly status: number, message: string, public readonly body: unknown = null) {
     super(message);
     this.name = "ArenaApiError";
+  }
+
+  get issues(): ValidationErrorResponse["issues"] {
+    if (!this.body || typeof this.body !== "object") return [];
+    const body = this.body as Partial<ValidationErrorResponse>;
+    if (typeof body.error !== "string" || !Array.isArray(body.issues)) return [];
+    return body.issues.every(
+      issue =>
+        issue &&
+        typeof issue.message === "string" &&
+        Array.isArray(issue.path) &&
+        issue.path.every(part => typeof part === "string" || typeof part === "number"),
+    )
+      ? body.issues
+      : [];
   }
 }
 
@@ -61,6 +81,12 @@ async function runFetch(path: string, options: RequestOptions = {}): Promise<Run
 }
 
 export const arenaClient = {
+  getAgents: (signal?: AbortSignal) => arenaFetch<AgentsResponse>("/agents", { signal }),
+  searchAgents: async (harness: HarnessId, q: string, signal?: AbortSignal): Promise<AgentOption[]> => {
+    const params = new URLSearchParams({ harness, q });
+    const response = await arenaFetch<AgentSearchResponse>(`/agents/search?${params}`, { signal });
+    return response.agents;
+  },
   getNonce: () => arenaFetch<NonceResponse>("/auth/nonce"),
   verify: (body: VerifyRequest) => arenaFetch<VerifyResponse>("/auth/verify", { method: "POST", body }),
   getSession: () => arenaFetch<SessionResponse>("/auth/session"),

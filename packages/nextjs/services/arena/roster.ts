@@ -1,9 +1,9 @@
-import type { RosterEffort, RosterEntry } from "./arena-types";
+import type { AgentOption, AgentsResponse, HarnessId, RosterEffort, RosterEntry } from "./arena-types";
+import { type AgentKey, agentKey, agentsByKey, describeModelId, slug } from "./rosterBuilder";
 
-// Every preset pins an explicit effort so the label states what the entrant runs and
-// vendor-default drift can't change a race. Claude's "high" is its documented default;
-// opencode levels are an explicit override (openrouter caps that harness at high).
-export const ROSTER = [
+// Explicit efforts keep vendor defaults from changing the race.
+// Every entry must stay on the backend's curated agents list, or fresh loads disable CREATE RUN and RESET TO DEFAULT restores the problem.
+export const DEFAULT_ROSTER: readonly RosterEntry[] = [
   { id: "opus-5", harness: "claude", model: "claude-opus-5", effort: "high" },
   { id: "glm-53", harness: "opencode", model: "openrouter/z-ai/glm-5.3", effort: "high" },
   { id: "gpt-55", harness: "codex", model: "gpt-5.5", effort: "high" },
@@ -14,7 +14,7 @@ export const ROSTER = [
   { id: "qwen38-24t", harness: "opencode", model: "openrouter/qwen/qwen3.8-2.4t-a95b", effort: "high" },
   { id: "gpt-55-xhigh", harness: "codex", model: "gpt-5.5", effort: "xhigh" },
   { id: "gpt-55-medium", harness: "codex", model: "gpt-5.5", effort: "medium" },
-] as const satisfies readonly RosterEntry[];
+];
 
 export interface RosterDisplay {
   handle: string;
@@ -23,154 +23,87 @@ export interface RosterDisplay {
   vendor: string;
   harnessLabel: string;
   modelLabel: string;
-  // Absent for harnesses that expose no effort setting — the UI then shows no badge.
-  effort?: RosterEffort;
+  // Every new hosted entrant carries an effort; only runs recorded before efforts
+  // were required lack one. An external entrant declares its effort as free text.
+  effort?: string;
 }
 
-export const ROSTER_DISPLAY: Readonly<Record<string, RosterDisplay>> = {
-  "opus-5": {
-    handle: "claude-opus-5",
-    color: "#2DD4BF",
-    short: "AN",
-    vendor: "Anthropic",
-    harnessLabel: "Claude Code",
-    modelLabel: "Opus 5",
-  },
-  "glm-53": {
-    handle: "opencode-glm-53",
-    color: "#FFE14D",
-    short: "GL",
-    vendor: "Z.ai",
-    harnessLabel: "OpenCode",
-    modelLabel: "GLM-5.3",
-  },
-  "gpt-55": {
-    handle: "codex-gpt-55",
-    color: "#A855F7",
-    short: "OA",
-    vendor: "OpenAI",
-    harnessLabel: "Codex CLI",
-    modelLabel: "GPT-5.5",
-  },
-  "sonnet-5": {
-    handle: "claude-sonnet-5",
-    color: "#22C55E",
-    short: "AN",
-    vendor: "Anthropic",
-    harnessLabel: "Claude Code",
-    modelLabel: "Sonnet 5",
-  },
-  "kimi-k3": {
-    handle: "opencode-kimi-k3",
-    color: "#FF9F1C",
-    short: "KI",
-    vendor: "Moonshot",
-    harnessLabel: "OpenCode",
-    modelLabel: "Kimi K3",
-  },
-  "opus-48": {
-    handle: "claude-opus-48",
-    color: "#60A5FA",
-    short: "AN",
-    vendor: "Anthropic",
-    harnessLabel: "Claude Code",
-    modelLabel: "Opus 4.8",
-  },
-  "deepseek-v4-pro": {
-    handle: "opencode-deepseek-v4-pro",
-    color: "#EC4899",
-    short: "DS",
-    vendor: "DeepSeek",
-    harnessLabel: "OpenCode",
-    modelLabel: "DeepSeek V4 Pro",
-  },
-  "qwen38-24t": {
-    handle: "opencode-qwen38-24t",
-    color: "#A3E635",
-    short: "QW",
-    vendor: "Alibaba",
-    harnessLabel: "OpenCode",
-    modelLabel: "Qwen3.8 2.4T",
-  },
-  // Off the active lineup; kept so finished runs that included them still render.
-  "glm-52": {
-    handle: "opencode-glm-52",
-    color: "#FFE14D",
-    short: "GL",
-    vendor: "Z.ai",
-    harnessLabel: "OpenCode",
-    modelLabel: "GLM-5.2",
-  },
-  "qwen38-27b": {
-    handle: "opencode-qwen38-27b",
-    color: "#A3E635",
-    short: "QW",
-    vendor: "Alibaba",
-    harnessLabel: "OpenCode",
-    modelLabel: "Qwen3.8 27B",
-  },
-  "deepseek-v4": {
-    handle: "opencode-deepseek-v4",
-    color: "#EC4899",
-    short: "DS",
-    vendor: "DeepSeek",
-    harnessLabel: "OpenCode",
-    modelLabel: "DeepSeek V4 Flash",
-  },
-  "opus-5-medium": {
-    handle: "claude-opus-5",
-    color: "#FF5C5C",
-    short: "AN",
-    vendor: "Anthropic",
-    harnessLabel: "Claude Code",
-    modelLabel: "Opus 5",
-  },
-  "gpt-55-xhigh": {
-    handle: "codex-gpt-55",
-    color: "#E2E8F0",
-    short: "OA",
-    vendor: "OpenAI",
-    harnessLabel: "Codex CLI",
-    modelLabel: "GPT-5.5",
-  },
-  "gpt-55-medium": {
-    handle: "codex-gpt-55",
-    color: "#C5A5D7",
-    short: "OA",
-    vendor: "OpenAI",
-    harnessLabel: "Codex CLI",
-    modelLabel: "GPT-5.5",
-  },
-};
+export const LANE_COLORS = [
+  "#2DD4BF",
+  "#FFE14D",
+  "#A855F7",
+  "#22C55E",
+  "#FF9F1C",
+  "#60A5FA",
+  "#EC4899",
+  "#A3E635",
+  "#E2E8F0",
+  "#C5A5D7",
+];
 
-const ROSTER_EFFORT_BY_ID: Readonly<Record<string, RosterEffort | undefined>> = Object.fromEntries(
-  ROSTER.map(entry => [entry.id, "effort" in entry ? entry.effort : undefined]),
-);
+export interface DisplayContext {
+  known?: Record<AgentKey, AgentOption>;
+  harnessLabels?: Record<string, string>;
+  laneIndex?: number;
+}
 
-// The run reports what actually ran, so its effort wins when present; the preset
-// pin covers runs that predate the backend carrying effort for this harness.
-export function displayForEntrant(
-  id: string,
-  harness: string | undefined,
-  model: string,
-  effort?: RosterEffort,
-): RosterDisplay {
-  const preset = ROSTER_DISPLAY[id];
-  if (preset) return { ...preset, effort: effort ?? ROSTER_EFFORT_BY_ID[id] };
+export function displayContextFrom(
+  data: AgentsResponse | undefined,
+  extras: readonly AgentOption[] = [],
+): DisplayContext {
   return {
-    handle: id,
-    color: "#00FBFF",
-    short: (harness ?? "agent").slice(0, 2).toUpperCase(),
-    vendor: harness ?? "agent",
-    harnessLabel: harness ?? "undeclared",
-    modelLabel: model,
-    effort,
+    known: agentsByKey([...extras, ...(data?.agents ?? [])]),
+    harnessLabels: Object.fromEntries((data?.harnesses ?? []).map(harness => [harness.id, harness.label])),
   };
 }
 
+// A hosted entrant (or a roster entry, which has no `kind`) carries a harness id
+// and a model the backend can label. An external entrant only carries what it
+// declared about itself at join time.
+type DisplayEntrant =
+  | { kind?: "hosted"; id: string; harness: string; model: string; effort?: RosterEffort }
+  | { kind: "external"; id: string; name: string; harness?: string; model?: string; effort?: string };
+
+export function displayForEntrant(entrant: DisplayEntrant, context: DisplayContext = {}): RosterDisplay {
+  if (entrant.kind === "external")
+    return displayForExternal(entrant.id, entrant.name, entrant.harness, entrant.model, entrant.effort);
+  const { label, vendor } =
+    context.known?.[agentKey(entrant.harness as HarnessId, entrant.model)] ?? describeModelId(entrant.model);
+  return {
+    handle: `${entrant.harness}-${slug(label)}`,
+    color: context.laneIndex === undefined ? "#00FBFF" : LANE_COLORS[context.laneIndex % LANE_COLORS.length],
+    short:
+      (vendor || label)
+        .replace(/[^a-z]/gi, "")
+        .slice(0, 2)
+        .toUpperCase() || "??",
+    vendor,
+    harnessLabel: context.harnessLabels?.[entrant.harness] ?? entrant.harness,
+    modelLabel: label,
+    effort: entrant.effort,
+  };
+}
+
+export function displayMapForEntrants(
+  entrants: readonly DisplayEntrant[],
+  context?: Omit<DisplayContext, "laneIndex">,
+): Record<string, RosterDisplay> {
+  return Object.fromEntries(
+    entrants.map((entrant, laneIndex) => [entrant.id, displayForEntrant(entrant, { ...context, laneIndex })]),
+  );
+}
+
+// Outside entrants are not on any lane list, so their colour comes from a hash
+// of the id: stable across reloads and distinct from the hosted lane palette.
 const EXTERNAL_COLORS = ["#FF8FA3", "#80FFDB", "#B8C0FF", "#F4A261", "#90E0EF", "#D4A373", "#F9C6F0", "#C7D36F"];
 
-export function displayForExternal(id: string, name: string, harness?: string, model?: string, effort?: string) {
+export function displayForExternal(
+  id: string,
+  name: string,
+  harness?: string,
+  model?: string,
+  effort?: string,
+): RosterDisplay {
   let hash = 2166136261;
   for (const character of id) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
   return {

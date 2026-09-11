@@ -1,6 +1,7 @@
-// Copied from agents-arena-backend contract/arena-types.ts at commit b4fffec (plugin-your-own-agent-mcp-route branch).
-// Do not edit here — sync from the backend repo (formatting follows this repo's
-// prettier). Endpoint docs live there in contract/API.md.
+// Copied from agents-arena-backend contract/arena-types.ts: master at cfd9da6 (agent picker, #80)
+// auto-merged with the plugin-your-own-agent-mcp-route branch at cf588bc; re-sync once that
+// branch is rebased. Do not edit here — sync from the backend repo (formatting follows this
+// repo's prettier). Endpoint docs live there in contract/API.md.
 
 export type RunState =
   | "created"
@@ -18,22 +19,45 @@ export type EntrantStatus = "working" | "idle" | "blocked" | "done";
 export const HARNESS_IDS = ["codex", "opencode", "claude"] as const;
 export type HarnessId = (typeof HARNESS_IDS)[number];
 
-export const ROSTER_MODELS: Readonly<Record<HarnessId, readonly string[]>> = {
-  // gpt-5.6-sol is off the roster: it reads the challenge briefing as a request
-  // to attack real contracts and refuses on security grounds (#48).
-  codex: ["gpt-5.5"],
-  claude: ["claude-opus-5", "claude-opus-4-8", "claude-sonnet-5"],
-  opencode: [
-    "openrouter/z-ai/glm-5.3",
-    "openrouter/moonshotai/kimi-k3",
-    "openrouter/deepseek/deepseek-v4-pro-0813",
-    "openrouter/qwen/qwen3.8-2.4t-a95b",
-  ],
-};
-
-export const ROSTER_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
+// `ultra` exists on the gpt-5.6-sol and gpt-5.6-terra Codex models only.
+export const ROSTER_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultra"] as const;
 export type RosterEffort = (typeof ROSTER_EFFORTS)[number];
-export const OPENCODE_EFFORTS = ["low", "medium", "high"] as const satisfies readonly RosterEffort[];
+
+// A harness plus a model the arena can run, with the effort levels that model
+// accepts. An entrant is an agent placed in a run. `model` is the exact value a
+// RosterEntry carries; `efforts` is never empty.
+export interface AgentOption {
+  harness: HarnessId;
+  model: string;
+  label: string; // 'Opus 5'
+  vendor: string; // 'Anthropic'
+  efforts: readonly RosterEffort[];
+}
+
+export interface HarnessInfo {
+  id: HarnessId;
+  label: string; // 'Claude Code'
+  // True when GET /agents/search also returns OpenRouter models outside the
+  // curated list, and POST /runs accepts them once verified there.
+  customModels: boolean;
+}
+
+export interface AgentsResponse {
+  harnesses: HarnessInfo[];
+  agents: AgentOption[];
+}
+
+export interface AgentSearchResponse {
+  agents: AgentOption[];
+}
+
+// Every 400 for a rejected body carries the zod issues. `path` is the zod path
+// into the body, e.g. ['roster', 2, 'effort'], so a client can point at the
+// entrant that failed.
+export interface ValidationErrorResponse {
+  error: string;
+  issues: { path: (string | number)[]; message: string }[];
+}
 
 export interface EntrantSolve {
   challengeId: number;
@@ -229,7 +253,7 @@ export interface RosterEntry {
   id: string;
   harness: HarnessId;
   model: string;
-  effort?: RosterEffort;
+  effort: RosterEffort;
 }
 
 export interface CreateRunRequest {
