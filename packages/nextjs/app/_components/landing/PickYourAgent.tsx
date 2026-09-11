@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AgentsUnavailable } from "./AgentsUnavailable";
 import { LINKS, PHASE, SITE_URL, X_HANDLE } from "./event";
 import { ModelName } from "~~/app/arena/ModelName";
 import { DEFAULT_ROSTER, displayContextFrom, displayForEntrant } from "~~/services/arena/roster";
@@ -71,6 +72,7 @@ export function PickYourAgent() {
 
   return (
     <div className="flex flex-col gap-6">
+      {agentsQuery.isError && <AgentsUnavailable onRetry={() => agentsQuery.refetch()} />}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {agentsQuery.isPending &&
           DEFAULT_ROSTER.map(entry => (
@@ -115,13 +117,15 @@ export function PickYourAgent() {
                 </span>
                 <span className="text-base leading-tight text-[#00FBFF]/75">{racer.harnessLabel}</span>
               </span>
-              <span className="text-sm font-bold tracking-widest">
-                {active ? (
-                  <span style={{ color: "#00ff9c" }}>YOUR PICK ✓</span>
-                ) : (
-                  <span className="text-[#00FBFF]/25">{racer.vendor.toUpperCase()}</span>
-                )}
-              </span>
+              {(active || racer.vendor) && (
+                <span className="text-sm font-bold tracking-widest">
+                  {active ? (
+                    <span style={{ color: "#00ff9c" }}>YOUR PICK ✓</span>
+                  ) : (
+                    <span className="text-[#00FBFF]/25">{racer.vendor.toUpperCase()}</span>
+                  )}
+                </span>
+              )}
             </button>
           );
         })}

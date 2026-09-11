@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import { AgentsUnavailable } from "./AgentsUnavailable";
 import { SectionHeading } from "./SectionHeading";
 import { MARKETING_RUN_ID, YOUTUBE_WATCH_URL } from "./event";
 import { ModelName } from "~~/app/arena/ModelName";
@@ -167,6 +168,11 @@ export function RaceResults() {
         <p className="text-base text-[#00FBFF]/55">Loading the results…</p>
       ) : (
         <div className="overflow-x-auto">
+          {agentsQuery.isError && (
+            <div className="mb-3">
+              <AgentsUnavailable onRetry={() => agentsQuery.refetch()} />
+            </div>
+          )}
           <div className="min-w-[880px] space-y-1">
             <div className="flex items-center gap-3 px-2 pb-1 text-sm tracking-widest text-[#00FBFF]/55">
               <span className="w-8 shrink-0" />
