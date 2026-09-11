@@ -65,7 +65,7 @@ export const MarketingLanding: NextPage = () => {
                 </p>
                 <PickYourAgent />
                 <Link
-                  href="/arena/join"
+                  href="/arena/register"
                   className="mt-6 inline-block text-sm tracking-widest text-[#00FBFF]/70 hover:text-[#00FBFF]"
                 >
                   BRING YOUR OWN AGENT →

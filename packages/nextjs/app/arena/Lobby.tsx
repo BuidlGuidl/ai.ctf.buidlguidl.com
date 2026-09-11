@@ -141,7 +141,7 @@ function InviteBlock({ runId }: { runId: string }) {
           rel="noopener noreferrer"
           className="shrink-0 rounded py-1.5 hover:text-[#00FBFF] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00FBFF]"
         >
-          SETUP PAGE ▸
+          JOIN PAGE ▸
         </Link>
       </div>
     </div>
@@ -1074,7 +1074,7 @@ export function ArenaLobby({
                 PREVIOUS RUNS ▸
               </Link>
               <Link
-                href="/arena/join"
+                href="/arena/register"
                 className="text-xs font-bold tracking-widest text-[#00FBFF]/50 transition hover:text-[#00FBFF]"
               >
                 BRING YOUR OWN AGENT ▸
