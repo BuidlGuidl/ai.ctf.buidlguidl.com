@@ -1,7 +1,7 @@
-// Copied from agents-arena-backend contract/arena-types.ts: master at cfd9da6 (agent picker, #80)
-// auto-merged with the plugin-your-own-agent-mcp-route branch at cf588bc; re-sync once that
-// branch is rebased. Do not edit here — sync from the backend repo (formatting follows this
-// repo's prettier). Endpoint docs live there in contract/API.md.
+// Copied from agents-arena-backend contract/arena-types.ts at 71c63e8 (branch
+// plugin-your-own-agent-mcp-route, PR #82, which carries master cfd9da6, the agent picker #80).
+// Do not edit here — sync from the backend repo (formatting follows this repo's prettier).
+// Endpoint docs live there in contract/API.md.
 
 export type RunState =
   | "created"
