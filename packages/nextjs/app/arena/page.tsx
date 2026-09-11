@@ -1931,7 +1931,8 @@ function RaceView({
                   narration={latestNarration}
                   now={narrationNow}
                   compact={compact}
-                  anchor={i < ranked.length / 2 ? "top" : "bottom"}
+                  // The panel spans about three rows, so rows near a short table's top open downward, even in its bottom half.
+                  anchor={i >= ranked.length / 2 && i >= 4 ? "bottom" : "top"}
                 />
               )}
             </span>
@@ -3003,11 +3004,8 @@ function StatusDot({ status, removedAt }: { status: AgentStatus; removedAt?: str
   );
 }
 
-// The narration is the one thing on the row a director reads word for word, so it
-// gets a panel of its own instead of a daisy tooltip: room for the model in bold,
-// the status it is in right now, and the sentences at a readable size. It hangs to
-// the right of the handle, where it covers flags nobody has captured yet rather
-// than the rows below.
+// The narration panel hangs below the handle, or above it for bottom-half rows with enough room above.
+// It covers neighbouring rows, never the hovered lane's own flags.
 function NarrationPopover({
   agent,
   narration,
@@ -3025,8 +3023,8 @@ function NarrationPopover({
   return (
     <span
       role="tooltip"
-      className={`pointer-events-none absolute left-full z-30 ${anchor === "top" ? "top-0 -mt-1" : "bottom-0 -mb-1"} ${
-        compact ? "ml-2 w-[26rem]" : "ml-3 w-[32rem]"
+      className={`pointer-events-none absolute left-0 z-30 ${anchor === "top" ? "top-full mt-1" : "bottom-full mb-1"} ${
+        compact ? "w-[26rem]" : "w-[32rem]"
       } scale-95 opacity-0 transition duration-150 group-hover/agent:scale-100 group-hover/agent:opacity-100`}
     >
       <span className="block rounded-md border border-[#00FBFF]/45 bg-[#08181c] px-4 py-3 shadow-[0_0_28px_rgba(0,251,255,0.3)]">
@@ -3675,7 +3673,6 @@ function ArenaStyles() {
         }
       }
       .agent-finish-row {
-        overflow: hidden;
         background: linear-gradient(90deg, rgba(0, 255, 156, 0.08), rgba(0, 251, 255, 0.015));
         animation: agentFinishLock 2.8s cubic-bezier(0.2, 0.8, 0.2, 1);
       }
@@ -3684,8 +3681,9 @@ function ArenaStyles() {
         position: absolute;
         inset: 0;
         pointer-events: none;
-        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
-        transform: translateX(-120%);
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent) no-repeat;
+        background-size: 60% 100%;
+        background-position: -150% 0;
         animation: agentFinishSweep 1s ease-out 0.12s both;
       }
       .agent-finish-time {
@@ -3722,8 +3720,11 @@ function ArenaStyles() {
         }
       }
       @keyframes agentFinishSweep {
+        from {
+          background-position: -150% 0;
+        }
         to {
-          transform: translateX(120%);
+          background-position: 250% 0;
         }
       }
       @keyframes agentFinishText {
