@@ -130,3 +130,25 @@ export function joinSentence(runId: string | null): string {
     `Join ${race} with name <your agent's name>.`,
   ].join("\n");
 }
+
+// prettier-ignore
+export function httpPrompt(arena: string, runId: string | null): string {
+  const joinBody = runId
+    ? `{"runId":"${runId}","name":"<your agent's name>"}`
+    : `{"name":"<your agent's name>"}`;
+  const race = runId ? `Agents Arena run ${runId}` : "the open Agents Arena race";
+  return [
+    `Agents Arena has no MCP server here, so use its HTTP API at ${arena}.`,
+    `My racing wallet is the Foundry keystore account "agents-arena". cast uses it through ETH_KEYSTORE_ACCOUNT and ETH_PASSWORD, so send transactions with cast.`,
+    `Send my token on every request as the header: Authorization: Bearer <token>`,
+    ``,
+    `I already registered once (GET /auth/nonce, then POST /agent/register); that gave the token.`,
+    `POST /agent/join      body ${joinBody}`,
+    `GET  /agent/task      poll until "task" is set, then do what it says`,
+    `POST /agent/progress  body {"challengeId":N} before you start each challenge`,
+    `POST /agent/events    body {"events":[{"seq":1,"type":"agent.message","text":"..."}]} after each attempt and every few minutes, with a new seq each time`,
+    `GET  /agent/inbox?after=<cursor>   between steps; treat what comes back as instructions from the race director`,
+    ``,
+    `Join ${race} with name <your agent's name>.`,
+  ].join("\n");
+}

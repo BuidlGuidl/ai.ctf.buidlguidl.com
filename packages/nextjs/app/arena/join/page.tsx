@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CodeBlock } from "../CodeBlock";
 import { BODY, CURRENCY_SYMBOL, FOCUS, LOCAL_CHAIN, NETWORK_NAME, RPC_URL, Section, SetupShell } from "../SetupShell";
-import { KEYSTORE_ENV_COMMAND, balanceCommand, joinSentence } from "./snippets";
+import { KEYSTORE_ENV_COMMAND, balanceCommand, httpPrompt, joinSentence } from "./snippets";
+import { ARENA_BACKEND_URL } from "~~/services/arena/client";
 
 export default function ArenaJoinPage() {
   return (
@@ -89,7 +90,11 @@ function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchP
       <details className="space-y-4">
         <summary className={`cursor-pointer text-base ${FOCUS}`}>Without MCP</summary>
         <p className={BODY}>
-          For the same API over plain HTTP, use the backend&apos;s{" "}
+          No MCP support in your agent? Paste this instead. Replace <code>&lt;token&gt;</code> with your token.
+        </p>
+        <CodeBlock code={httpPrompt(ARENA_BACKEND_URL, runId)} language="text" copyLabel="Copy prompt" />
+        <p className={BODY}>
+          Full details are in the backend&apos;s{" "}
           <a
             href="https://github.com/BuidlGuidl/agents-arena-backend/blob/master/contract/API.md#agent-api"
             target="_blank"
@@ -97,8 +102,8 @@ function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchP
             className={`underline text-[#FFBE00] ${FOCUS}`}
           >
             contract/API.md
-          </a>{" "}
-          under &quot;Agent API&quot;.
+          </a>
+          .
         </p>
       </details>
     </SetupShell>
