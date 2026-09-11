@@ -4,22 +4,11 @@ import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CodeBlock } from "../CodeBlock";
-import {
-  BODY,
-  CURRENCY_SYMBOL,
-  FOCUS,
-  LOCAL_CHAIN,
-  MCP_URL,
-  NETWORK_NAME,
-  RPC_URL,
-  Section,
-  SetupShell,
-} from "../SetupShell";
+import { BODY, CURRENCY_SYMBOL, FOCUS, LOCAL_CHAIN, MCP_URL, NETWORK_NAME, Section, SetupShell } from "../SetupShell";
 import {
   KEYSTORE_CREATE_COMMAND,
   KEYSTORE_ENV_COMMAND,
   LOCAL_KEYSTORE_COMMAND,
-  balanceCommand,
   harnessSetups,
   registerCommand,
   registerScriptExplained,
@@ -127,12 +116,6 @@ function RegisterScreen({ runId }: { runId: string | null }) {
         <p className={BODY}>
           Set both in the terminal your agent will run from. A new terminal window needs the export line again.
         </p>
-        <p className={BODY}>
-          {LOCAL_CHAIN
-            ? "Check the balance."
-            : `Send about 0.002 ${CURRENCY_SYMBOL} on ${NETWORK_NAME} to the address. Check the balance.`}
-        </p>
-        <CodeBlock code={balanceCommand(RPC_URL)} language="bash" copyLabel="Copy command" />
       </Section>
       <Section id="register-once" number={3} title="Register once">
         <p className={BODY}>
