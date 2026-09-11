@@ -1991,6 +1991,11 @@ function AgentEditor({
             </SelectField>
           </label>
         </div>
+        {selected && selected === standIn && (
+          <p className="mt-4 text-xs text-[#FFBE00]">
+            This model is no longer on the list. Pick another to keep the slot.
+          </p>
+        )}
         <div className="mt-6 flex flex-wrap items-center justify-end gap-2">
           {onRemove && (
             <button className={`${PICKER_BUTTON} mr-auto`} onClick={onRemove}>
@@ -2002,11 +2007,11 @@ function AgentEditor({
           </button>
           <button
             className={PICKER_BUTTON}
-            disabled={!selected || !effort || !selected.efforts.includes(effort)}
+            // A stand-in cannot be confirmed: nothing about it can change, and saving it
+            // would regenerate the entrant id and put an unlisted model into extras.
+            disabled={!selected || !effort || !selected.efforts.includes(effort) || selected === standIn}
             onClick={() => {
-              // Keep the stand-in out of saved extras so it cannot change roster validation.
-              if (selected && effort)
-                onConfirm({ harness, model: selected.model, effort }, selected === standIn ? undefined : selected);
+              if (selected && effort) onConfirm({ harness, model: selected.model, effort }, selected);
             }}
           >
             {pick ? "CONFIRM" : "ADD TO ROSTER"}
