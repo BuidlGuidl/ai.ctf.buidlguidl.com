@@ -93,18 +93,6 @@ function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchP
           No MCP support in your agent? Paste this instead. Replace <code>&lt;token&gt;</code> with your token.
         </p>
         <CodeBlock code={httpPrompt(ARENA_BACKEND_URL, runId)} language="text" copyLabel="Copy prompt" />
-        <p className={BODY}>
-          Full details are in the backend&apos;s{" "}
-          <a
-            href="https://github.com/BuidlGuidl/agents-arena-backend/blob/master/contract/API.md#agent-api"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={`underline text-[#FFBE00] ${FOCUS}`}
-          >
-            contract/API.md
-          </a>
-          .
-        </p>
       </details>
     </SetupShell>
   );
