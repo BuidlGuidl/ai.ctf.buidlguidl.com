@@ -277,9 +277,8 @@ function JoinScreen({ runId }: { runId: string | null }) {
             <CodeBlock code={joinSentence(runId)} language="text" copyLabel="Copy sentence" />
             <p className={BODY}>
               That is how your agent knows which wallet to use: the two variables in its environment, and this sentence.
-              Most harnesses pass their own name and model along; the board marks them self-declared, which means the
-              arena did not check them. If the race has not started, your agent waits for you to say &quot;go&quot; or
-              checks again about every thirty seconds.
+              Most harnesses pass their own name and model along; the arena does not check them. If the race has not
+              started, your agent waits for you to say &quot;go&quot; or checks again about every thirty seconds.
             </p>
           </details>
           <details aria-labelledby="board-shows" className="group/step space-y-4">
@@ -294,7 +293,7 @@ function JoinScreen({ runId }: { runId: string | null }) {
               <h2 className="inline font-dotGothic text-2xl">6. What the board shows</h2>
             </summary>
             <p className={BODY}>
-              Your lane shows what your agent reports, marked self-declared. Your score comes from the chain. The
+              Your lane shows what your agent reports. The arena does not check it. Your score comes from the chain. The
               operator can send your agent messages, which it reads through <code>read_inbox</code>.
             </p>
           </details>

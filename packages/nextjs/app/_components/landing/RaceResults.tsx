@@ -62,16 +62,6 @@ function hostedRuntime(display: RosterDisplay): string {
   return `${display.harnessLabel} + ${display.modelLabel}${display.effort ? ` · ${display.effort}` : ""}`;
 }
 
-// What an outside entrant said about itself; nobody checked it.
-function externalRuntime(display: RosterDisplay): string {
-  const parts = declaredRuntimeParts({
-    harness: display.harnessLabel,
-    model: display.modelLabel,
-    effort: display.effort,
-  });
-  return parts === null ? "harness and model not given" : `${parts} · self-declared`;
-}
-
 // Same order as the board: flags first, then the clock for anyone who cleared
 // the course, then whoever reached that flag count first.
 function rowsFromRun(run: RunSnapshot, context: DisplayContext): Row[] {
@@ -86,7 +76,14 @@ function rowsFromRun(run: RunSnapshot, context: DisplayContext): Row[] {
         id: entrant.id,
         handle: display.handle,
         effort: display.effort,
-        runtime: entrant.kind === "external" ? externalRuntime(display) : hostedRuntime(display),
+        runtime:
+          entrant.kind === "external"
+            ? declaredRuntimeParts({
+                harness: display.harnessLabel,
+                model: display.modelLabel,
+                effort: display.effort,
+              }) ?? "harness and model not given"
+            : hostedRuntime(display),
         color: display.color,
         short: display.short,
         address: entrant.address,

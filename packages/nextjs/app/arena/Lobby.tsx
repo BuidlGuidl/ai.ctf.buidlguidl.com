@@ -1498,21 +1498,10 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
             </div>
             <div
               className="lobby-slot-harness text-base text-[#00FBFF]/75 leading-tight"
-              title={
-                agent.kind === "external"
-                  ? parts === null
-                    ? "harness and model not given"
-                    : `${parts} · self-declared`
-                  : undefined
-              }
+              title={agent.kind === "external" ? parts ?? "harness and model not given" : undefined}
             >
               {agent.kind === "external" ? agent.harness || "no harness given" : agent.harness}
             </div>
-            {agent.kind === "external" && parts !== null && (
-              <span className="text-[9px] text-[#00FBFF]/60" title="declared by the entrant, not checked by the arena">
-                self-declared
-              </span>
-            )}
           </>
         ) : (
           <div className="text-base text-[#00FBFF]/55 tracking-widest">{idle ? "NOT ASSIGNED" : "———"}</div>

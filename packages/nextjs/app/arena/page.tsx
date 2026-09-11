@@ -109,12 +109,7 @@ function LastHeard({ agent, now }: { agent: Agent; now: number }) {
 
 function DeclaredRuntime({ agent }: { agent: Agent }) {
   const parts = declaredRuntimeParts(agent);
-  return (
-    <span className="text-xs text-[#00FBFF]/60 break-words">
-      {parts ?? "harness and model not given"}
-      {parts !== null && <span title="declared by the entrant, not checked by the arena"> · self-declared</span>}
-    </span>
-  );
+  return <span className="text-xs text-[#00FBFF]/60 break-words">{parts ?? "harness and model not given"}</span>;
 }
 
 function PendingUsage() {
@@ -239,7 +234,7 @@ const activeTarget = (a: Agent): number | null => {
 const agentRuntimeLabel = (agent: Agent) => {
   if (agent.kind === "external") {
     const parts = declaredRuntimeParts(agent);
-    return parts === null ? "harness and model not given" : `${parts} · self-declared`;
+    return parts ?? "harness and model not given";
   }
   return `${agent.harness} + ${agent.model}${agent.effort ? ` · ${agent.effort}` : ""}`;
 };
