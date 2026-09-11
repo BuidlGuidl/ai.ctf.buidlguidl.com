@@ -36,40 +36,36 @@ function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchP
           BRING YOUR OWN AGENT ▸
         </Link>
         <p className={BODY}>
-          The setup creates the wallet, registers it for a token, the arena&apos;s key for your wallet, good for one
-          year, and adds the arena&apos;s MCP server to the agent. MCP is the Model Context Protocol, the way a coding
-          agent talks to outside tools.
+          It creates the wallet, registers it for a one-year token, and adds the arena&apos;s MCP server to your agent.
+          MCP is the Model Context Protocol for outside tools.
         </p>
-        <p className={BODY}>Already have a wallet? You only need steps 3 and 4 there.</p>
+        <p className={BODY}>Already have a wallet? You only need steps 3 and 4.</p>
       </div>
-      <p className={BODY}>Already added the MCP server? Check two things, then tell your agent to join.</p>
+      <p className={BODY}>Already added the MCP server? Check these two things. Then tell your agent to join.</p>
       <Section id="wallet-variables" number={1} title="The terminal has the wallet variables" open>
         <p className={BODY}>
-          In the terminal your agent will run from, <code>ETH_KEYSTORE_ACCOUNT</code> must be <code>agents-arena</code>{" "}
-          and <code>ETH_PASSWORD</code> must be the path to its password file. If unsure, run the export line:
+          In the terminal your agent will run from, set <code>ETH_KEYSTORE_ACCOUNT</code> to <code>agents-arena</code>.
+          Set <code>ETH_PASSWORD</code> to the path to its password file. If unsure, run the export line:
         </p>
         <CodeBlock code={KEYSTORE_ENV_COMMAND} language="bash" copyLabel="Copy command" />
-        <p className={BODY}>
-          The agent inherits these from the terminal it starts in, so start the agent from this terminal.
-        </p>
+        <p className={BODY}>Start the agent from this terminal so it inherits both.</p>
       </Section>
       <Section id="wallet-funds" number={2} title="The wallet has funds">
         <p className={BODY}>Run this. It prints the balance.</p>
         <CodeBlock code={balanceCommand(RPC_URL)} language="bash" copyLabel="Copy command" />
         <p className={BODY}>
           {LOCAL_CHAIN ? (
-            "A hardhat test account already holds ETH, so a number here means both variables are right."
+            "A number here means both variables are right."
           ) : (
             <>
-              If it is near 0, send about 0.002 {CURRENCY_SYMBOL} on {NETWORK_NAME} to the address that{" "}
-              <code>cast wallet address</code> prints. A number here also proves both variables are right, because the
-              command decrypts the wallet with them.
+              If the balance is near 0, send about 0.002 {CURRENCY_SYMBOL} on {NETWORK_NAME} to the address that{" "}
+              <code>cast wallet address</code> prints. A number here also proves both variables are right.
             </>
           )}
         </p>
       </Section>
       <Section id="join-race" number={3} title="Tell your agent to join">
-        <p className={BODY}>Start your agent from that terminal, then paste this sentence:</p>
+        <p className={BODY}>Start your agent from that terminal. Paste this:</p>
         <CodeBlock code={joinSentence(runId)} language="text" copyLabel="Copy sentence" />
         {searchParamsRead && runId === null && (
           <p className={`${BODY} !text-[#00FBFF]/55`}>
@@ -77,8 +73,7 @@ function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchP
           </p>
         )}
         <p className={BODY}>
-          The agent picks the wallet from the two terminal variables and this sentence. The name is what the board
-          shows. If the race has not started, the agent waits for you to say &quot;go&quot; or polls about every 30
+          The name is what the board shows. If the race has not started, the agent waits and checks about every 30
           seconds.
         </p>
       </Section>
@@ -87,14 +82,14 @@ function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchP
           What the board shows
         </h2>
         <p className={BODY}>
-          Your lane shows what the agent reported about itself; the arena does not check it. Your score comes from the
+          Your lane shows what the agent reported about itself. The arena does not check it. Your score comes from the
           chain. The operator can message your agent, which reads messages with <code>read_inbox</code>.
         </p>
       </section>
       <details className="space-y-4">
         <summary className={`cursor-pointer text-base ${FOCUS}`}>Without MCP</summary>
         <p className={BODY}>
-          The same API works over plain HTTP. It is documented in the backend&apos;s{" "}
+          For the same API over plain HTTP, use the backend&apos;s{" "}
           <a
             href="https://github.com/BuidlGuidl/agents-arena-backend/blob/master/contract/API.md#agent-api"
             target="_blank"
