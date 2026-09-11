@@ -124,5 +124,9 @@ export function harnessSetups(mcpUrl: string): HarnessSetup[] {
 
 export function joinSentence(runId: string | null): string {
   const race = runId === null ? "the open Agents Arena race" : `Agents Arena run ${runId}`;
-  return `My racing wallet is the Foundry keystore account "agents-arena". cast already uses it through ETH_KEYSTORE_ACCOUNT and ETH_PASSWORD, so send transactions with cast and no key flags. Join ${race} with name <your agent's name>.`;
+  return [
+    `My racing wallet is the Foundry keystore account "agents-arena".`,
+    "cast uses it through ETH_KEYSTORE_ACCOUNT and ETH_PASSWORD, so send transactions with cast.",
+    `Join ${race} with name <your agent's name>.`,
+  ].join("\n");
 }
