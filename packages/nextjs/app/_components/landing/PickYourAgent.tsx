@@ -1,38 +1,55 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AgentsUnavailable } from "./AgentsUnavailable";
 import { LINKS, PHASE, SITE_URL, X_HANDLE } from "./event";
 import { ModelName } from "~~/app/arena/ModelName";
-import { ROSTER, displayForEntrant } from "~~/services/arena/roster";
+import { DEFAULT_ROSTER, displayContextFrom, displayForEntrant } from "~~/services/arena/roster";
+import { useAgents } from "~~/services/arena/useAgents";
 
 const STORAGE_KEY = "ai-ctf-arena:pick";
 const MAX_REASON = 90;
 
-const RACERS = ROSTER.map((entry, index) => ({
-  ...displayForEntrant(entry.id, entry.harness, entry.model, entry.effort),
-  id: entry.id,
-  slot: index + 1,
-}));
-
 export function PickYourAgent() {
+  const agentsQuery = useAgents();
+  const racers = useMemo(() => {
+    if (agentsQuery.isPending) return [];
+    const context = displayContextFrom(agentsQuery.data);
+    return DEFAULT_ROSTER.map((entry, index) => ({
+      ...displayForEntrant(entry, { ...context, laneIndex: index }),
+      id: entry.id,
+      slot: index + 1,
+    }));
+  }, [agentsQuery.data, agentsQuery.isPending]);
+  const pickLoaded = useRef(false);
   const [picked, setPicked] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const phase = PHASE;
 
   useEffect(() => {
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (stored && RACERS.some(racer => racer.id === stored)) setPicked(stored);
-  }, []);
+    if (!racers.length || pickLoaded.current) return;
+    pickLoaded.current = true;
+    try {
+      const stored = window.localStorage.getItem(STORAGE_KEY);
+      if (stored && racers.some(racer => racer.id === stored)) setPicked(stored);
+    } catch {
+      // Picks remain usable when browser storage is blocked.
+    }
+  }, [racers]);
 
   const choose = (id: string) => {
     if (phase !== "pre") return;
     const next = picked === id ? null : id;
     setPicked(next);
-    if (next) window.localStorage.setItem(STORAGE_KEY, next);
-    else window.localStorage.removeItem(STORAGE_KEY);
+    try {
+      if (next) window.localStorage.setItem(STORAGE_KEY, next);
+      else window.localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Picks remain usable when browser storage is blocked.
+    }
   };
 
-  const pickedRacer = RACERS.find(racer => racer.id === picked) ?? null;
+  const pickedRacer = racers.find(racer => racer.id === picked) ?? null;
 
   const shareUrl = useMemo(() => {
     if (!pickedRacer) return null;
@@ -55,8 +72,17 @@ export function PickYourAgent() {
 
   return (
     <div className="flex flex-col gap-6">
+      {agentsQuery.isError && <AgentsUnavailable onRetry={() => agentsQuery.refetch()} />}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {RACERS.map(racer => {
+        {agentsQuery.isPending &&
+          DEFAULT_ROSTER.map(entry => (
+            <div
+              key={entry.id}
+              aria-hidden="true"
+              className="h-[174px] rounded-lg border border-[#00FBFF]/10 bg-[#00FBFF]/5"
+            />
+          ))}
+        {racers.map(racer => {
           const active = racer.id === picked;
           return (
             <button
@@ -91,13 +117,15 @@ export function PickYourAgent() {
                 </span>
                 <span className="text-base leading-tight text-[#00FBFF]/75">{racer.harnessLabel}</span>
               </span>
-              <span className="text-sm font-bold tracking-widest">
-                {active ? (
-                  <span style={{ color: "#00ff9c" }}>YOUR PICK ✓</span>
-                ) : (
-                  <span className="text-[#00FBFF]/25">{racer.vendor.toUpperCase()}</span>
-                )}
-              </span>
+              {(active || racer.vendor) && (
+                <span className="text-sm font-bold tracking-widest">
+                  {active ? (
+                    <span style={{ color: "#00ff9c" }}>YOUR PICK ✓</span>
+                  ) : (
+                    <span className="text-[#00FBFF]/25">{racer.vendor.toUpperCase()}</span>
+                  )}
+                </span>
+              )}
             </button>
           );
         })}

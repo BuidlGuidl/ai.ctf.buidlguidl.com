@@ -1,5 +1,4 @@
 import type { ArenaEvent, EntrantStatus, RunSnapshot } from "./arena-types";
-import { displayForEntrant } from "./roster";
 
 export interface ConsoleEntry {
   id: number;
@@ -16,15 +15,12 @@ export interface FeedItem {
   id: number;
   type: "flag" | "blocked" | "resumed" | "done" | "restarted";
   agentId: string;
-  color: string;
-  text: string;
+  challengeId?: number;
 }
 
 export interface ChatItem {
   id: number;
   fromId: string;
-  fromHandle: string;
-  color: string;
   text: string;
   director?: boolean;
 }
@@ -219,11 +215,11 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         const entrantIds = pending.entrantIds.filter(id => id !== event.payload.entrantId);
         return { ...next, pendingBroadcast: entrantIds.length === 0 ? null : { ...pending, entrantIds } };
       }
+      // The sender stays the entrant the steer was aimed at, so the stream can name
+      // the target; only a real broadcast is sent as "director".
       return appendChat(next, {
         id: event.id,
-        fromId: "director",
-        fromHandle: displayFor(event.payload.entrantId).handle,
-        color: "#FFBE00",
+        fromId: event.payload.entrantId,
         text: event.payload.text,
         director: true,
       });
@@ -246,13 +242,10 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         kind: "steer",
         text: "restarted this session — the agent starts over from its opening prompt",
       });
-      const display = displayFor(event.payload.entrantId);
       return appendFeed(next, {
         id: event.id,
         type: "restarted",
         agentId: event.payload.entrantId,
-        color: display.color,
-        text: `${display.handle} was restarted on a fresh session`,
       });
     }
     case "entrant.nudged":
@@ -271,8 +264,6 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         {
           id: event.id,
           fromId: "director",
-          fromHandle: "ALL AGENTS",
-          color: "#FFBE00",
           text: event.payload.text,
           director: true,
         },
@@ -306,13 +297,11 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         kind: "flag",
         text: `Captured Challenge ${event.payload.challengeId}`,
       });
-      const display = displayFor(event.payload.entrantId);
       next = appendFeed(next, {
         id: event.id,
         type: "flag",
         agentId: event.payload.entrantId,
-        color: display.color,
-        text: `${display.handle} captured Challenge ${event.payload.challengeId}`,
+        challengeId: event.payload.challengeId,
       });
       return {
         ...next,
@@ -467,14 +456,11 @@ function statusFeedItem(
   event: Extract<ArenaEvent, { type: "entrant.status" }>,
   previous: EntrantStatus | undefined,
 ): FeedItem | null {
-  const display = displayFor(event.payload.entrantId);
   if (event.payload.status === "blocked") {
     return {
       id: event.id,
       type: "blocked",
       agentId: event.payload.entrantId,
-      color: display.color,
-      text: `${display.handle} is blocked`,
     };
   }
   if (previous === "blocked" && event.payload.status === "working") {
@@ -482,8 +468,6 @@ function statusFeedItem(
       id: event.id,
       type: "resumed",
       agentId: event.payload.entrantId,
-      color: display.color,
-      text: `${display.handle} resumed work`,
     };
   }
   if (event.payload.status === "done") {
@@ -491,26 +475,17 @@ function statusFeedItem(
       id: event.id,
       type: "done",
       agentId: event.payload.entrantId,
-      color: display.color,
-      text: `${display.handle} exited and recorded its result`,
     };
   }
   return null;
 }
 
 function entrantChat(event: Extract<ArenaEvent, { type: "agent.message" }>): ChatItem {
-  const display = displayFor(event.payload.entrantId);
   return {
     id: event.id,
     fromId: event.payload.entrantId,
-    fromHandle: display.handle,
-    color: display.color,
     text: event.payload.text,
   };
-}
-
-function displayFor(entrantId: string) {
-  return displayForEntrant(entrantId, "agent", entrantId);
 }
 
 function singleLine(text: string): string {

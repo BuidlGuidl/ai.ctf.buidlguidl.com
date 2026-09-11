@@ -27,7 +27,13 @@ import type { EntrantSummary, RunState } from "~~/services/arena/arena-types";
 import { ArenaApiError, arenaClient } from "~~/services/arena/client";
 import { connectRun } from "~~/services/arena/connect";
 import type { ChatItem, ConsoleEntry, FeedItem, NarrationEntry } from "~~/services/arena/projection";
-import { ROSTER, displayForEntrant } from "~~/services/arena/roster";
+import {
+  type DisplayContext,
+  type RosterDisplay,
+  displayContextFrom,
+  displayForEntrant,
+  displayMapForEntrants,
+} from "~~/services/arena/roster";
 import { playSfx, useArenaSfx } from "~~/services/arena/sfx";
 import {
   type ConnectionStatus,
@@ -56,6 +62,7 @@ import {
   selectStatusSeededAt,
   useArenaStore,
 } from "~~/services/arena/store";
+import { useAgents } from "~~/services/arena/useAgents";
 import { useOperatorSession } from "~~/services/arena/useOperatorSession";
 import { getBlockExplorerAddressLink } from "~~/utils/scaffold-eth";
 
@@ -233,36 +240,13 @@ function agentsFromRun(
   statusChangedAt: Record<string, string> | null,
   startedAt: string | null,
   runState: RunState | null,
+  context: DisplayContext,
 ): Agent[] {
   const usagePending = runState !== "finished" && runState !== "failed";
-  if (!entrants) {
-    return ROSTER.map(entrant => {
-      const display = displayForEntrant(entrant.id, entrant.harness, entrant.model);
-      return {
-        id: entrant.id,
-        handle: display.handle,
-        harness: display.harnessLabel,
-        model: display.modelLabel,
-        effort: display.effort,
-        vendor: display.vendor,
-        color: display.color,
-        short: display.short,
-        address: null,
-        solved: [],
-        status: "idle",
-        statusChangedAt: null,
-        tokens: 0,
-        cost: null,
-        usagePending,
-        lastSolveAt: null,
-        finishedAt: null,
-        currentChallengeId: null,
-      };
-    });
-  }
+  if (!entrants) return [];
 
-  return entrants.map(entrant => {
-    const display = displayForEntrant(entrant.id, entrant.harness, entrant.model, entrant.effort);
+  return entrants.map((entrant, index) => {
+    const display = displayForEntrant(entrant, { ...context, laneIndex: index });
     const lastSolve = entrant.solves.at(-1)?.ts ?? null;
     const clearedAt = entrant.solves.length >= CHALLENGES.length ? lastSolve : null;
     return {
@@ -312,6 +296,7 @@ export default function ArenaPage() {
 }
 
 function ArenaScreen() {
+  const agentsQuery = useAgents();
   const [flashes, setFlashes] = useState<string[]>([]);
   const flashTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const [openChallenge, setOpenChallenge] = useState<number | null>(null);
@@ -383,8 +368,13 @@ function ArenaScreen() {
   }, [currentRunId]);
 
   const agents = useMemo(
-    () => agentsFromRun(runEntrants, statusChangedAt, runStartedAt, runState),
-    [runEntrants, runStartedAt, runState, statusChangedAt],
+    () => agentsFromRun(runEntrants, statusChangedAt, runStartedAt, runState, displayContextFrom(agentsQuery.data)),
+    [runEntrants, runStartedAt, runState, statusChangedAt, agentsQuery.data],
+  );
+  // The stream needs the same backend labels and lane colors as the cards, including after the agents list loads.
+  const displays = useMemo(
+    () => displayMapForEntrants(runEntrants ?? [], displayContextFrom(agentsQuery.data)),
+    [runEntrants, agentsQuery.data],
   );
   const startMatch = useCallback(() => setLiveStarted(true), []);
 
@@ -612,7 +602,7 @@ function ArenaScreen() {
     );
   }
 
-  if (!agents.length || (route.runId && !runId)) return <ArenaBoot />;
+  if (route.runId && !runId) return <ArenaBoot />;
 
   if (!liveStarted) {
     return <ArenaLobby agents={agents} onLaunch={startMatch} onStartOver={backToLobby} />;
@@ -726,7 +716,7 @@ function ArenaScreen() {
                 onToggleNarration={toggleNarration}
               />
             ) : (
-              <ArenaStream />
+              <ArenaStream displays={displays} />
             )}
             {/* Run URLs are spectator-shareable, so the strip only shows for someone
                 who is (or was, mid-race) the operator — never as a sign-in invitation. */}
@@ -2439,7 +2429,7 @@ const STREAM_FILTERS: { id: StreamFilter; label: string }[] = [
   { id: "status", label: "STATUS" },
 ];
 
-function ArenaStream() {
+function ArenaStream({ displays }: { displays: Record<string, RosterDisplay> }) {
   const feed = useArenaStore(selectFeed);
   const chat = useArenaStore(selectChat);
   const [filter, setFilter] = useState<StreamFilter>("logs");
@@ -2492,7 +2482,13 @@ function ArenaStream() {
         className="arena-stream-lines flex-1 min-h-0 overflow-y-auto console-scroll px-3 py-1.5 text-base space-y-1"
       >
         {rows.length === 0 && <div className="text-[#00FBFF]/50 italic">waiting for the first event…</div>}
-        {rows.map(r => ("msg" in r ? <ChatRow key={r.id} msg={r.msg} /> : <FeedRow key={r.id} item={r.item} />))}
+        {rows.map(r =>
+          "msg" in r ? (
+            <ChatRow key={r.id} msg={r.msg} displays={displays} />
+          ) : (
+            <FeedRow key={r.id} item={r.item} displays={displays} />
+          ),
+        )}
       </div>
     </div>
   );
@@ -2720,13 +2716,30 @@ const FEED_STYLE: Record<FeedItem["type"], { icon: string; cls: string }> = {
   done: { icon: "◆", cls: "text-[#FFBE00] font-bold" },
 };
 
-function FeedRow({ item }: { item: FeedItem }) {
+function feedText(item: FeedItem, handle: string): string {
+  switch (item.type) {
+    case "flag":
+      return `${handle} captured Challenge ${item.challengeId}`;
+    case "blocked":
+      return `${handle} is blocked`;
+    case "resumed":
+      return `${handle} resumed work`;
+    case "done":
+      return `${handle} exited and recorded its result`;
+    case "restarted":
+      return `${handle} was restarted on a fresh session`;
+  }
+}
+
+function FeedRow({ item, displays }: { item: FeedItem; displays: Record<string, RosterDisplay> }) {
+  const display =
+    displays[item.agentId] ?? displayForEntrant({ id: item.agentId, harness: "agent", model: item.agentId });
   const { icon, cls } = FEED_STYLE[item.type] ?? { icon: "💬", cls: "text-[#00FBFF]/70" };
   return (
     <div className="flex items-start gap-2 feed-in">
-      <span className="w-2.5 h-2.5 mt-1.5 rounded-sm shrink-0" style={{ background: item.color }} />
+      <span className="w-2.5 h-2.5 mt-1.5 rounded-sm shrink-0" style={{ background: display.color }} />
       <span className={cls}>
-        {icon} {item.text}
+        {icon} {feedText(item, display.handle)}
       </span>
     </div>
   );
@@ -2734,12 +2747,16 @@ function FeedRow({ item }: { item: FeedItem }) {
 
 /* ---------------------------------------------------------------- ChatRow */
 
-function ChatRow({ msg }: { msg: ChatItem }) {
+function ChatRow({ msg, displays }: { msg: ChatItem; displays: Record<string, RosterDisplay> }) {
+  const display = displays[msg.fromId] ?? displayForEntrant({ id: msg.fromId, harness: "agent", model: msg.fromId });
+  // A director line names its target: a real broadcast carries "director" as the
+  // sender, while a steer keeps the entrant it was aimed at.
+  const handle = msg.fromId === "director" ? "ALL AGENTS" : display.handle;
   if (msg.director) {
     return (
       <div className="flex items-start gap-2 feed-in rounded bg-[#FFBE00]/10 border border-[#FFBE00]/30 px-2 py-1">
-        <span title={msg.fromHandle} className="max-w-[55%] min-w-0 truncate text-[#FFBE00] font-bold">
-          🎬 inject → {msg.fromHandle}
+        <span title={handle} className="max-w-[55%] min-w-0 truncate text-[#FFBE00] font-bold">
+          🎬 inject → {handle}
         </span>
         <span className="min-w-0 break-words text-[#ffe9a8]">{msg.text}</span>
       </div>
@@ -2747,10 +2764,10 @@ function ChatRow({ msg }: { msg: ChatItem }) {
   }
   return (
     <div className="flex items-start gap-2 feed-in">
-      <span className="w-2.5 h-2.5 mt-1.5 rounded-sm shrink-0" style={{ background: msg.color }} />
+      <span className="w-2.5 h-2.5 mt-1.5 rounded-sm shrink-0" style={{ background: display.color }} />
       <span className="text-white/85 leading-snug">
-        <span className="font-bold" style={{ color: msg.color }}>
-          {msg.fromHandle}
+        <span className="font-bold" style={{ color: display.color }}>
+          {handle}
         </span>
         <span className="text-[#00FBFF]/40">: </span>
         <MentionText text={msg.text} />
