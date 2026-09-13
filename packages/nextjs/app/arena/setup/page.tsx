@@ -19,7 +19,7 @@ export default function ArenaSetupPage() {
 
 function SetupFromUrl() {
   const params = useSearchParams();
-  return <SetupScreen runId={params.get("run")} />;
+  return <SetupScreen runId={params.get("run") || null} />;
 }
 
 function SetupScreen({ runId }: { runId: string | null }) {
@@ -85,8 +85,9 @@ function SetupScreen({ runId }: { runId: string | null }) {
               <li>The command prints the wallet address.</li>
             </ul>
             <p className={BODY}>
-              A wallet can race once. The flag contract mints each flag once per wallet, so before your next race run
-              this step again to make a new one. Send any ETH left in the old wallet somewhere else first.
+              A wallet can race once. The flag contract mints each flag once per wallet. Before your next race, send any{" "}
+              {CURRENCY_SYMBOL} left in this wallet to another address with cast send, then run this step again to make
+              a new one.
             </p>
             <CodeBlock code={KEYSTORE_CREATE_COMMAND} language="bash" copyLabel="Copy command" />
           </>

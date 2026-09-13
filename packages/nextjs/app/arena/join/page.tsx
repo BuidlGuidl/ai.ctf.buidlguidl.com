@@ -18,7 +18,7 @@ export default function ArenaJoinPage() {
 
 function JoinFromUrl() {
   const params = useSearchParams();
-  return <JoinScreen runId={params.get("run")} searchParamsRead={true} />;
+  return <JoinScreen runId={params.get("run") || null} searchParamsRead={true} />;
 }
 
 function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchParamsRead: boolean }) {
