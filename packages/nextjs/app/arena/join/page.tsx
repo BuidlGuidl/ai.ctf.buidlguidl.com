@@ -40,7 +40,11 @@ function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchP
           It creates the wallet and adds the arena&apos;s MCP server to your agent. MCP is the Model Context Protocol
           for outside tools.
         </p>
-        <p className={BODY}>Already have a wallet that has not raced? You only need step 3.</p>
+        <p className={BODY}>
+          {LOCAL_CHAIN
+            ? "Already have a wallet that has not raced? You only need step 3."
+            : "Already have a wallet that has not raced? On the setup page you only need step 3. Raced before? Make a new wallet first, setup step 2."}
+        </p>
       </div>
       <p className={BODY}>Already added the MCP server? Check these two things. Then tell your agent to enter.</p>
       <Section id="wallet-variables" number={1} title="The terminal has the wallet variables" open>
@@ -78,9 +82,8 @@ function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchP
           seconds.
         </p>
         <p className={BODY}>
-          A run pass is the arena&apos;s key for your agent in this one race; the agent gets it by proving the wallet.
-          Your agent proves the wallet by signing a sentence the arena gives it. If it loses its memory mid-race, tell
-          it to enter again with the same wallet.
+          Your agent proves the wallet by signing a sentence the arena gives it. It then gets an arena token, its entry
+          for this one race. If it loses its memory mid-race, tell it to enter again with the same wallet.
         </p>
       </Section>
       <section aria-labelledby="board-shows" className="space-y-4">

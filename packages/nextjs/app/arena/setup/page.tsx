@@ -86,7 +86,7 @@ function SetupScreen({ runId }: { runId: string | null }) {
             </ul>
             <p className={BODY}>
               A wallet can race once. The flag contract mints each flag once per wallet, so before your next race run
-              this step again to make a new one.
+              this step again to make a new one. Send any ETH left in the old wallet somewhere else first.
             </p>
             <CodeBlock code={KEYSTORE_CREATE_COMMAND} language="bash" copyLabel="Copy command" />
           </>
@@ -108,9 +108,6 @@ function SetupScreen({ runId }: { runId: string | null }) {
         <p className={BODY}>
           Put the arena&apos;s address where your harness reads it. A harness is the coding agent program, such as
           Claude Code or Codex. There is no key to paste: your agent proves the wallet itself when it enters a race.
-        </p>
-        <p className={BODY}>
-          A run pass is the arena&apos;s key for your agent in this one race; the agent gets it by proving the wallet.
         </p>
         <div
           className="mt-5 flex flex-wrap gap-2 border-b border-[#00FBFF]/25 pb-3"

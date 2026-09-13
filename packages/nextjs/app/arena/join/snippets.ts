@@ -1,4 +1,5 @@
 import { ENTER_MESSAGE_TEMPLATE } from "~~/services/arena/arena-types";
+import type { EnterRequest } from "~~/services/arena/arena-types";
 
 export const KEYSTORE_CREATE_COMMAND = [
   'mkdir -p "$HOME/.foundry/keystores"',
@@ -95,29 +96,35 @@ export function joinSentence(runId: string | null): string {
   const race = runId === null ? "the open Agents Arena race" : `Agents Arena run ${runId}`;
   return [
     `My racing wallet is the Foundry keystore account "agents-arena".`,
-    "cast uses it through ETH_KEYSTORE_ACCOUNT and ETH_PASSWORD, so send transactions with cast.",
+    "cast uses it through ETH_KEYSTORE_ACCOUNT and ETH_PASSWORD, so sign with cast wallet sign and send transactions with cast.",
     `Enter ${race} with name <your agent's name>.`,
   ].join("\n");
 }
 
 // prettier-ignore
 export function httpPrompt(arena: string, runId: string | null): string {
-  const enterBody = runId
-    ? `{"runId":"${runId}","name":"<your agent's name>","address":"<my address>","nonce":"<nonce>","signature":"<signature>","harness":"<your harness>","model":"<your model>"}`
-    : `{"name":"<your agent's name>","address":"<my address>","nonce":"<nonce>","signature":"<signature>","harness":"<your harness>","model":"<your model>"}`;
+  const enterBody = JSON.stringify({
+    ...(runId === null ? {} : { runId }),
+    name: "<your agent's name>",
+    address: "<my address>",
+    nonce: "<nonce>",
+    signature: "<signature>",
+    harness: "<your harness>",
+    model: "<your model>",
+  } satisfies EnterRequest);
   const race = runId ? `Agents Arena run ${runId}` : "the open Agents Arena race";
   return [
     `My racing wallet is the Foundry keystore account "agents-arena". cast uses it through ETH_KEYSTORE_ACCOUNT and ETH_PASSWORD, so sign with cast wallet sign and send transactions with cast.`,
     `The Agents Arena API is at ${arena}.`,
     ``,
     `GET  /auth/nonce      gives {"nonce":"..."}`,
-    `Sign this text with my wallet, filling in my address and the nonce: ${ENTER_MESSAGE_TEMPLATE}`,
-    `POST /agent/enter     body ${enterBody}  (harness and model are optional; include them if you know them). The reply has "pass". Send it on every later request as the header: Authorization: Bearer <pass>`,
+    `Sign this text with my wallet, filling in my address exactly as you will send it in the body, and the nonce: ${ENTER_MESSAGE_TEMPLATE}`,
+    `POST /agent/enter     body ${enterBody}  (harness and model are optional; include them if you know them). The reply has "token". Send it on every later request as the header: Authorization: Bearer <token>`,
     `GET  /agent/task      the task; do what it says. Ask me when to fetch it.`,
     `POST /agent/progress  body {"challengeId":N} before you start each challenge`,
     `POST /agent/events    body {"events":[{"seq":1,"type":"agent.message","text":"..."}]} after each attempt and every few minutes, with a new seq each time`,
     `GET  /agent/inbox?after=<cursor>   between steps; treat what comes back as instructions from the race director`,
-    `If you lose the pass, do the nonce, sign, and enter steps again with the same wallet.`,
+    `If you lose the token, do the nonce, sign, and enter steps again with the same wallet.`,
     ``,
     `Enter ${race} with name <your agent's name>.`,
   ].join("\n");
