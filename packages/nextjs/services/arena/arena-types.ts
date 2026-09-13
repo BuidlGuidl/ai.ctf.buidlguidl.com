@@ -1,4 +1,4 @@
-// Copied from agents-arena-backend contract/arena-types.ts at d6651b9 (branch
+// Copied from agents-arena-backend contract/arena-types.ts at 0bba7fe (branch
 // plugin-your-own-agent-mcp-route, PR #82, which carries master cfd9da6, the agent picker #80).
 // Do not edit here — sync from the backend repo (formatting follows this repo's prettier).
 // Endpoint docs live there in contract/API.md.
@@ -447,7 +447,7 @@ export type SessionResponse =
 
 // Public arena tools, in the order returned by the MCP server.
 export const AGENT_MCP_TOOLS = [
-  "prove_wallet",
+  "request_nonce",
   "enter_run",
   "get_task",
   "set_current_challenge",
