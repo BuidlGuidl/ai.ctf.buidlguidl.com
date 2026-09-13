@@ -5,37 +5,31 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CodeBlock } from "../CodeBlock";
 import { BODY, CURRENCY_SYMBOL, FOCUS, LOCAL_CHAIN, MCP_URL, NETWORK_NAME, Section, SetupShell } from "../SetupShell";
-import {
-  KEYSTORE_CREATE_COMMAND,
-  KEYSTORE_ENV_COMMAND,
-  LOCAL_KEYSTORE_COMMAND,
-  harnessSetups,
-  registerCommand,
-  registerScriptExplained,
-} from "../join/snippets";
-import { ARENA_BACKEND_URL } from "~~/services/arena/client";
+import { KEYSTORE_CREATE_COMMAND, KEYSTORE_ENV_COMMAND, LOCAL_KEYSTORE_COMMAND, harnessSetups } from "../join/snippets";
 
 const SETUPS = harnessSetups(MCP_URL);
 
-export default function ArenaRegisterPage() {
+export default function ArenaSetupPage() {
   return (
-    <Suspense fallback={<RegisterScreen runId={null} />}>
-      <RegisterFromUrl />
+    <Suspense fallback={<SetupScreen runId={null} />}>
+      <SetupFromUrl />
     </Suspense>
   );
 }
 
-function RegisterFromUrl() {
+function SetupFromUrl() {
   const params = useSearchParams();
-  return <RegisterScreen runId={params.get("run")} />;
+  return <SetupScreen runId={params.get("run")} />;
 }
 
-function RegisterScreen({ runId }: { runId: string | null }) {
+function SetupScreen({ runId }: { runId: string | null }) {
   const [tab, setTab] = useState(0);
   return (
     <SetupShell title="BRING YOUR OWN AGENT" backHref="/arena" backLabel="◂ BACK TO LOBBY">
       <div className="space-y-2">
-        <p className={BODY}>Race an agent that runs on your own machine with your own wallet. Do this once.</p>
+        <p className={BODY}>
+          Race an agent that runs on your own machine with your own wallet. Do this before your first race.
+        </p>
         <p className={`${BODY} !text-[#00FBFF]/55`}>Use macOS, Linux, or WSL, the Windows Subsystem for Linux.</p>
       </div>
       <Section id="what-you-need" number={1} title="What you need" open>
@@ -52,17 +46,6 @@ function RegisterScreen({ runId }: { runId: string | null }) {
             , for the <code>cast</code> command.
           </li>
           <li>
-            <a
-              href="https://jqlang.github.io/jq/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`underline text-[#FFBE00] ${FOCUS}`}
-            >
-              jq
-            </a>
-            , to read JSON in the terminal.
-          </li>
-          <li>
             A coding agent with MCP support, such as Claude Code or Codex. MCP is the Model Context Protocol for outside
             tools.
           </li>
@@ -75,7 +58,7 @@ function RegisterScreen({ runId }: { runId: string | null }) {
         </ul>
         <p className={BODY}>The arena holds only your wallet address.</p>
       </Section>
-      <Section id="racing-wallet" number={2} title="Create the racing wallet (skip if you already have one)">
+      <Section id="racing-wallet" number={2} title="Create the racing wallet">
         <p className={`${BODY} !text-[#FFBE00]`}>
           Running this step again replaces the wallet and its password, and the old wallet cannot be recovered.
         </p>
@@ -101,6 +84,10 @@ function RegisterScreen({ runId }: { runId: string | null }) {
               </li>
               <li>The command prints the wallet address.</li>
             </ul>
+            <p className={BODY}>
+              A wallet can race once. The flag contract mints each flag once per wallet, so before your next race run
+              this step again to make a new one.
+            </p>
             <CodeBlock code={KEYSTORE_CREATE_COMMAND} language="bash" copyLabel="Copy command" />
           </>
         )}
@@ -117,21 +104,13 @@ function RegisterScreen({ runId }: { runId: string | null }) {
           Set both in the terminal your agent will run from. A new terminal window needs the export line again.
         </p>
       </Section>
-      <Section id="register-once" number={3} title="Register once">
+      <Section id="add-arena" number={3} title="Add the arena to your agent">
         <p className={BODY}>
-          This line signs a sentence with your wallet and prints a token. The token is the arena&apos;s key for your
-          wallet and lasts one year. Save it. Paste it in step 4.
+          Put the arena&apos;s address where your harness reads it. A harness is the coding agent program, such as
+          Claude Code or Codex. There is no key to paste: your agent proves the wallet itself when it enters a race.
         </p>
-        <CodeBlock code={registerCommand(ARENA_BACKEND_URL)} language="bash" copyLabel="Copy command" />
-        <details className="space-y-4">
-          <summary className={`cursor-pointer text-base ${FOCUS}`}>What the line does</summary>
-          <CodeBlock code={registerScriptExplained(ARENA_BACKEND_URL)} language="bash" copyLabel="Copy script" />
-        </details>
-      </Section>
-      <Section id="add-arena" number={4} title="Add the arena to your agent">
         <p className={BODY}>
-          Put the token where your harness reads it. A harness is the coding agent program, such as Claude Code or
-          Codex. Replace <code>&lt;token&gt;</code> with the token.
+          A run pass is the arena&apos;s key for your agent in this one race; the agent gets it by proving the wallet.
         </p>
         <div
           className="mt-5 flex flex-wrap gap-2 border-b border-[#00FBFF]/25 pb-3"

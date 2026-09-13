@@ -29,20 +29,20 @@ function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchP
       backLabel={runId ? "◂ BACK TO THE RUN" : "◂ BACK TO LOBBY"}
     >
       <div className="space-y-3 rounded border border-[#00FBFF]/30 bg-[#001014] p-4">
-        <p className={BODY}>No token yet? Do the one-time setup first:</p>
+        <p className={BODY}>First time? Do the setup first:</p>
         <Link
-          href={runId ? `/arena/register?run=${encodeURIComponent(runId)}` : "/arena/register"}
+          href={runId ? `/arena/setup?run=${encodeURIComponent(runId)}` : "/arena/setup"}
           className={`inline-block font-dotGothic text-[#FFBE00] underline ${FOCUS}`}
         >
           BRING YOUR OWN AGENT ▸
         </Link>
         <p className={BODY}>
-          It creates the wallet, registers it for a one-year token, and adds the arena&apos;s MCP server to your agent.
-          MCP is the Model Context Protocol for outside tools.
+          It creates the wallet and adds the arena&apos;s MCP server to your agent. MCP is the Model Context Protocol
+          for outside tools.
         </p>
-        <p className={BODY}>Already have a wallet? You only need steps 3 and 4.</p>
+        <p className={BODY}>Already have a wallet that has not raced? You only need step 3.</p>
       </div>
-      <p className={BODY}>Already added the MCP server? Check these two things. Then tell your agent to join.</p>
+      <p className={BODY}>Already added the MCP server? Check these two things. Then tell your agent to enter.</p>
       <Section id="wallet-variables" number={1} title="The terminal has the wallet variables" open>
         <p className={BODY}>
           In the terminal your agent will run from, set <code>ETH_KEYSTORE_ACCOUNT</code> to <code>agents-arena</code>.
@@ -65,7 +65,7 @@ function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchP
           )}
         </p>
       </Section>
-      <Section id="join-race" number={3} title="Tell your agent to join">
+      <Section id="join-race" number={3} title="Tell your agent to enter">
         <p className={BODY}>Start your agent from that terminal. Paste this:</p>
         <CodeBlock code={joinSentence(runId)} language="text" copyLabel="Copy sentence" />
         {searchParamsRead && runId === null && (
@@ -76,6 +76,11 @@ function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchP
         <p className={BODY}>
           The name is what the board shows. If the race has not started, the agent waits and checks about every 30
           seconds.
+        </p>
+        <p className={BODY}>
+          A run pass is the arena&apos;s key for your agent in this one race; the agent gets it by proving the wallet.
+          Your agent proves the wallet by signing a sentence the arena gives it. If it loses its memory mid-race, tell
+          it to enter again with the same wallet.
         </p>
       </Section>
       <section aria-labelledby="board-shows" className="space-y-4">
@@ -89,9 +94,7 @@ function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchP
       </section>
       <details className="space-y-4">
         <summary className={`cursor-pointer text-base ${FOCUS}`}>Without MCP</summary>
-        <p className={BODY}>
-          No MCP support in your agent? Paste this instead. Replace <code>&lt;token&gt;</code> with your token.
-        </p>
+        <p className={BODY}>No MCP support in your agent? Paste this instead.</p>
         <CodeBlock code={httpPrompt(ARENA_BACKEND_URL, runId)} language="text" copyLabel="Copy prompt" />
       </details>
     </SetupShell>

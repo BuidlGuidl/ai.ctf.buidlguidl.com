@@ -1,4 +1,4 @@
-import { REGISTER_MESSAGE_TEMPLATE } from "~~/services/arena/arena-types";
+import { ENTER_MESSAGE_TEMPLATE } from "~~/services/arena/arena-types";
 
 export const KEYSTORE_CREATE_COMMAND = [
   'mkdir -p "$HOME/.foundry/keystores"',
@@ -19,30 +19,6 @@ export function balanceCommand(rpcUrl: string): string {
   return `cast balance --ether --rpc-url "${rpcUrl}" "$(cast wallet address)"`;
 }
 
-export function registerCommand(arena: string): string {
-  const message = REGISTER_MESSAGE_TEMPLATE.replace("{address}", "$ADDRESS").replace("{nonce}", "$NONCE");
-  return [
-    "ADDRESS=$(cast wallet address)",
-    `NONCE=$(curl -s "${arena}/auth/nonce" | jq -r .nonce)`,
-    `curl -s -X POST "${arena}/agent/register" -H 'Content-Type: application/json' -d "{\\"address\\":\\"$ADDRESS\\",\\"nonce\\":\\"$NONCE\\",\\"signature\\":\\"$(cast wallet sign "${message}")\\"}" | jq -r .token`,
-  ].join(" && ");
-}
-
-export function registerScriptExplained(arena: string): string {
-  const message = REGISTER_MESSAGE_TEMPLATE.replace("{address}", "$ADDRESS").replace("{nonce}", "$NONCE");
-  return [
-    "# 1. Read the account address so the arena knows which wallet is registering.",
-    "ADDRESS=$(cast wallet address)",
-    "# 2. Get a nonce so the signature cannot be reused.",
-    `NONCE=$(curl -s "${arena}/auth/nonce" | jq -r .nonce)`,
-    "# 3. Sign the sentence to prove you control this wallet.",
-    `SIG=$(cast wallet sign "${message}")`,
-    "# 4. Send the proof so the arena can check it and issue a token.",
-    `curl -s -X POST "${arena}/agent/register" -H 'Content-Type: application/json' \\`,
-    '  -d "{\\"address\\":\\"$ADDRESS\\",\\"nonce\\":\\"$NONCE\\",\\"signature\\":\\"$SIG\\"}" | jq -r .token',
-  ].join("\n");
-}
-
 export interface SetupBlock {
   note: string;
   text: string;
@@ -61,7 +37,7 @@ export function harnessSetups(mcpUrl: string): HarnessSetup[] {
       blocks: [
         {
           note: "Run this once in a terminal.",
-          text: `claude mcp add --transport http --scope user agents-arena ${mcpUrl} --header "Authorization: Bearer <token>"`,
+          text: `claude mcp add --transport http --scope user agents-arena ${mcpUrl}`,
           label: "Copy command",
           language: "bash",
         },
@@ -71,10 +47,8 @@ export function harnessSetups(mcpUrl: string): HarnessSetup[] {
       name: "Codex",
       blocks: [
         {
-          note: "In ~/.codex/config.toml. Paste your token in place of <token>.",
-          text: `[mcp_servers.agents-arena]\nurl = ${JSON.stringify(
-            mcpUrl,
-          )}\nhttp_headers = { Authorization = "Bearer <token>" }`,
+          note: "In ~/.codex/config.toml.",
+          text: `[mcp_servers.agents-arena]\nurl = ${JSON.stringify(mcpUrl)}`,
           label: "Copy config",
           language: "toml",
         },
@@ -85,11 +59,7 @@ export function harnessSetups(mcpUrl: string): HarnessSetup[] {
       blocks: [
         {
           note: "In ~/.gemini/settings.json. The key is httpUrl. That key selects the streaming HTTP transport.",
-          text: JSON.stringify(
-            { mcpServers: { "agents-arena": { httpUrl: mcpUrl, headers: { Authorization: "Bearer <token>" } } } },
-            null,
-            2,
-          ),
+          text: JSON.stringify({ mcpServers: { "agents-arena": { httpUrl: mcpUrl } } }, null, 2),
           label: "Copy config",
           language: "json",
         },
@@ -107,7 +77,6 @@ export function harnessSetups(mcpUrl: string): HarnessSetup[] {
                   type: "remote",
                   url: mcpUrl,
                   enabled: true,
-                  headers: { Authorization: "Bearer <token>" },
                 },
               },
             },
@@ -127,27 +96,29 @@ export function joinSentence(runId: string | null): string {
   return [
     `My racing wallet is the Foundry keystore account "agents-arena".`,
     "cast uses it through ETH_KEYSTORE_ACCOUNT and ETH_PASSWORD, so send transactions with cast.",
-    `Join ${race} with name <your agent's name>.`,
+    `Enter ${race} with name <your agent's name>.`,
   ].join("\n");
 }
 
 // prettier-ignore
 export function httpPrompt(arena: string, runId: string | null): string {
-  const joinBody = runId
-    ? `{"runId":"${runId}","name":"<your agent's name>","harness":"<your harness>","model":"<your model>"}`
-    : `{"name":"<your agent's name>","harness":"<your harness>","model":"<your model>"}`;
+  const enterBody = runId
+    ? `{"runId":"${runId}","name":"<your agent's name>","address":"<my address>","nonce":"<nonce>","signature":"<signature>","harness":"<your harness>","model":"<your model>"}`
+    : `{"name":"<your agent's name>","address":"<my address>","nonce":"<nonce>","signature":"<signature>","harness":"<your harness>","model":"<your model>"}`;
   const race = runId ? `Agents Arena run ${runId}` : "the open Agents Arena race";
   return [
-    `My racing wallet is the Foundry keystore account "agents-arena". cast uses it through ETH_KEYSTORE_ACCOUNT and ETH_PASSWORD, so send transactions with cast.`,
-    `The Agents Arena API is at ${arena}. Send my token on every request as the header: Authorization: Bearer <token>`,
+    `My racing wallet is the Foundry keystore account "agents-arena". cast uses it through ETH_KEYSTORE_ACCOUNT and ETH_PASSWORD, so sign with cast wallet sign and send transactions with cast.`,
+    `The Agents Arena API is at ${arena}.`,
     ``,
-    `I already registered once (GET /auth/nonce, then POST /agent/register); that gave the token.`,
-    `POST /agent/join      body ${joinBody}  (harness and model are optional; include them if you know them)`,
+    `GET  /auth/nonce      gives {"nonce":"..."}`,
+    `Sign this text with my wallet, filling in my address and the nonce: ${ENTER_MESSAGE_TEMPLATE}`,
+    `POST /agent/enter     body ${enterBody}  (harness and model are optional; include them if you know them). The reply has "pass". Send it on every later request as the header: Authorization: Bearer <pass>`,
     `GET  /agent/task      the task; do what it says. Ask me when to fetch it.`,
     `POST /agent/progress  body {"challengeId":N} before you start each challenge`,
     `POST /agent/events    body {"events":[{"seq":1,"type":"agent.message","text":"..."}]} after each attempt and every few minutes, with a new seq each time`,
     `GET  /agent/inbox?after=<cursor>   between steps; treat what comes back as instructions from the race director`,
+    `If you lose the pass, do the nonce, sign, and enter steps again with the same wallet.`,
     ``,
-    `Join ${race} with name <your agent's name>.`,
+    `Enter ${race} with name <your agent's name>.`,
   ].join("\n");
 }
