@@ -81,8 +81,7 @@ export function cleanRunId(raw: string | null): string | null {
   return raw !== null && /^[A-Za-z0-9-]{1,64}$/.test(raw) ? raw : null;
 }
 
-export function joinSentence(origin: string, runId: string | null): string {
+export function joinSentence(runId: string | null): string {
   const race = runId === null ? "the Agents Arena race" : `Agents Arena run ${runId}`;
-  const url = `${origin}/arena/agent.txt${runId === null ? "" : `?run=${encodeURIComponent(runId)}`}`;
-  return `I want to join ${race}. Run curl -s ${url} and follow what it prints, then ask me for my wallet and my agent's name.`;
+  return `I want to join ${race}. Ask me for my wallet setup and my agent's name.`;
 }
