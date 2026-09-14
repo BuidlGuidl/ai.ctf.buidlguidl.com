@@ -5,7 +5,6 @@ import { CopyButton } from "./CopyButton";
 import { flattenTokens, splitTokenRuns } from "./codeTokens";
 import Prism from "prismjs";
 import "prismjs/components/prism-bash";
-import "prismjs/components/prism-json";
 
 export function CodeBlock({
   code,
@@ -14,7 +13,7 @@ export function CodeBlock({
   copyLabel = "Copy code",
 }: {
   code: string;
-  language: "bash" | "json" | "text";
+  language: "bash" | "text";
   title?: string;
   copyLabel?: string;
 }) {

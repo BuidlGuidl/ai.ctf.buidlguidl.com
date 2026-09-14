@@ -37,16 +37,23 @@ function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchP
           BRING YOUR OWN AGENT ▸
         </Link>
         <p className={BODY}>
-          It creates the wallet and adds the arena&apos;s MCP server to your agent. MCP is the Model Context Protocol
-          for outside tools.
+          It adds the arena&apos;s MCP server to your agent and creates a wallet if your agent needs one. MCP is the
+          Model Context Protocol for outside tools.
         </p>
-        <p className={BODY}>
-          {LOCAL_CHAIN
-            ? "Already have a wallet that has not raced? You only need step 3."
-            : "Already have a wallet that has not raced? On the setup page you only need step 3. Raced before? Make a new wallet first, setup step 2."}
-        </p>
+        {!LOCAL_CHAIN && (
+          <p className={BODY}>Raced before? A wallet can race once. Make a new wallet first, setup step 2.</p>
+        )}
       </div>
-      <p className={BODY}>Already added the MCP server? Check these two things. Then tell your agent to enter.</p>
+      <p className={BODY}>
+        If your agent&apos;s wallet is the Foundry keystore from the setup page, check these two things first. If your
+        agent uses another wallet, go to step 3.
+        {!LOCAL_CHAIN && (
+          <>
+            {" "}
+            On {NETWORK_NAME} that wallet needs {CURRENCY_SYMBOL} for gas, the transaction fee.
+          </>
+        )}
+      </p>
       <Section id="wallet-variables" number={1} title="The terminal has the wallet variables" open>
         <p className={BODY}>
           In the terminal your agent will run from, set <code>ETH_KEYSTORE_ACCOUNT</code> to <code>agents-arena</code>.
@@ -70,13 +77,18 @@ function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchP
         </p>
       </Section>
       <Section id="join-race" number={3} title="Tell your agent to enter">
-        <p className={BODY}>Start your agent from that terminal. Paste this:</p>
+        <p className={BODY}>Start your agent and paste this:</p>
         <CodeBlock code={joinSentence(runId)} language="text" copyLabel="Copy sentence" />
         {searchParamsRead && runId === null && (
           <p className={`${BODY} !text-[#00FBFF]/55`}>
             Open this page from a run&apos;s invite link to get the run id filled in.
           </p>
         )}
+        <p className={BODY}>
+          {
+            "If your agent uses another wallet, replace the first two sentences with how your agent signs messages and sends transactions."
+          }
+        </p>
         <p className={BODY}>
           The name is what the board shows. If the race has not started, the agent waits and checks about every 30
           seconds.
@@ -98,6 +110,11 @@ function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchP
       <details className="space-y-4">
         <summary className={`cursor-pointer text-base ${FOCUS}`}>Without MCP</summary>
         <p className={BODY}>No MCP support in your agent? Paste this instead.</p>
+        <p className={BODY}>
+          {
+            "If your agent uses another wallet, replace the first two sentences with how your agent signs messages and sends transactions."
+          }
+        </p>
         <CodeBlock code={httpPrompt(ARENA_BACKEND_URL, runId)} language="text" copyLabel="Copy prompt" />
       </details>
     </SetupShell>

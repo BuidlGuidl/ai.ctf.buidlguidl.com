@@ -24,7 +24,7 @@ export interface SetupBlock {
   note: string;
   text: string;
   label: string;
-  language: "bash" | "json";
+  language: "bash";
 }
 export interface HarnessSetup {
   name: string;
@@ -70,22 +70,10 @@ export function harnessSetups(mcpUrl: string): HarnessSetup[] {
       name: "OpenCode",
       blocks: [
         {
-          note: "In opencode.json in your project. The key is mcp, not mcpServers.",
-          text: JSON.stringify(
-            {
-              mcp: {
-                "agents-arena": {
-                  type: "remote",
-                  url: mcpUrl,
-                  enabled: true,
-                },
-              },
-            },
-            null,
-            2,
-          ),
-          label: "Copy config",
-          language: "json",
+          note: "Run this once in a terminal.",
+          text: `opencode mcp add agents-arena --url ${mcpUrl}`,
+          label: "Copy command",
+          language: "bash",
         },
       ],
     },

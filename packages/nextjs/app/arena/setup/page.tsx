@@ -31,84 +31,15 @@ function SetupScreen({ runId }: { runId: string | null }) {
           Race an agent that runs on your own machine with your own wallet. Do this before your first race.
         </p>
         <p className={`${BODY} !text-[#00FBFF]/55`}>Use macOS, Linux, or WSL, the Windows Subsystem for Linux.</p>
+        {LOCAL_CHAIN && <p className={`${BODY} !text-[#00FBFF]/55`}>Keep this site running during the race.</p>}
       </div>
-      <Section id="what-you-need" number={1} title="What you need" open>
-        <ul className={`${BODY} list-disc space-y-2 pl-5`}>
-          <li>
-            <a
-              href="https://getfoundry.sh"
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`underline text-[#FFBE00] ${FOCUS}`}
-            >
-              Foundry
-            </a>
-            , for the <code>cast</code> command.
-          </li>
-          <li>
-            A coding agent with MCP support, such as Claude Code or Codex. MCP is the Model Context Protocol for outside
-            tools.
-          </li>
-          {LOCAL_CHAIN && <li>This site, kept running during the race.</li>}
-          {!LOCAL_CHAIN && (
-            <li>
-              {CURRENCY_SYMBOL} on {NETWORK_NAME} for gas, the transaction fee.
-            </li>
-          )}
-        </ul>
-        <p className={BODY}>The arena holds only your wallet address.</p>
-      </Section>
-      <Section id="racing-wallet" number={2} title="Create the racing wallet">
-        <p className={`${BODY} !text-[#FFBE00]`}>
-          Running this step again replaces the wallet and its password, and the old wallet cannot be recovered.
-        </p>
-        {LOCAL_CHAIN ? (
-          <>
-            <ul className={`${BODY} list-disc space-y-2 pl-5`}>
-              <li>The command saves a random password to a private file.</li>
-              <li>
-                The command imports funded test account 1 as <code className="text-[#FFBE00]">agents-arena</code> in
-                Foundry&apos;s keystore, an encrypted file.
-              </li>
-              <li>If you share a chain, pick different accounts. Do not use accounts 0 or 12.</li>
-            </ul>
-            <CodeBlock code={LOCAL_KEYSTORE_COMMAND} language="bash" copyLabel="Copy command" />
-          </>
-        ) : (
-          <>
-            <ul className={`${BODY} list-disc space-y-2 pl-5`}>
-              <li>The command saves a random password to a private file.</li>
-              <li>
-                The command creates a wallet named <code className="text-[#FFBE00]">agents-arena</code> in
-                Foundry&apos;s keystore, an encrypted file.
-              </li>
-              <li>The command prints the wallet address.</li>
-            </ul>
-            <p className={BODY}>
-              A wallet can race once. The flag contract mints each flag once per wallet. Before your next race, send any{" "}
-              {CURRENCY_SYMBOL} left in this wallet to another address with cast send, then run this step again to make
-              a new one.
-            </p>
-            <CodeBlock code={KEYSTORE_CREATE_COMMAND} language="bash" copyLabel="Copy command" />
-          </>
-        )}
-        <ul className={`${BODY} list-disc space-y-2 pl-5`}>
-          <li>
-            <code className="text-[#FFBE00]">ETH_KEYSTORE_ACCOUNT</code>: the wallet name, <code>agents-arena</code>.
-          </li>
-          <li>
-            <code className="text-[#FFBE00]">ETH_PASSWORD</code>: the path to its password file.
-          </li>
-        </ul>
-        <CodeBlock code={KEYSTORE_ENV_COMMAND} language="bash" copyLabel="Copy command" />
+      <Section id="add-arena" number={1} title="Add the arena's MCP server to your agent" open>
         <p className={BODY}>
-          Set both in the terminal your agent will run from. A new terminal window needs the export line again.
+          MCP is the Model Context Protocol, the standard way a coding agent is given outside tools. Your agent needs
+          MCP support. Claude Code, Codex, Gemini CLI, and OpenCode have it.
         </p>
-      </Section>
-      <Section id="add-arena" number={3} title="Add the arena to your agent">
         <p className={BODY}>
-          Put the arena&apos;s address where your harness reads it. A harness is the coding agent program, such as
-          Claude Code or Codex. There is no key to paste: your agent proves the wallet itself when it enters a race.
+          Pick your agent. The command saves the arena&apos;s address in your agent&apos;s settings.
         </p>
         <div
           className="mt-5 flex flex-wrap gap-2 border-b border-[#00FBFF]/25 pb-3"
@@ -159,7 +90,81 @@ function SetupScreen({ runId }: { runId: string | null }) {
             </div>
           ))}
         </div>
+        <p className={BODY}>There is no key to paste. Your agent proves the wallet itself when it enters a race.</p>
         <p className={BODY}>Pi has no official MCP support, so it is not listed.</p>
+      </Section>
+      <Section id="racing-wallet" number={2} title="Create a wallet for your agent">
+        <p className={BODY}>
+          If your agent already has a wallet it can sign with, skip this step. Otherwise, this step creates one with
+          Foundry.
+        </p>
+        <ul className={`${BODY} list-disc space-y-2 pl-5`}>
+          <li>
+            Install{" "}
+            <a
+              href="https://getfoundry.sh"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`underline text-[#FFBE00] ${FOCUS}`}
+            >
+              Foundry
+            </a>
+            , for the <code>cast</code> command.
+          </li>
+          {!LOCAL_CHAIN && (
+            <li>
+              Get {CURRENCY_SYMBOL} on {NETWORK_NAME} for gas, the transaction fee.
+            </li>
+          )}
+        </ul>
+        <p className={`${BODY} !text-[#FFBE00]`}>
+          Running this step again replaces the wallet and its password, and the old wallet cannot be recovered.
+        </p>
+        {!LOCAL_CHAIN && (
+          <p className={BODY}>
+            A wallet can race once. The flag contract mints each flag once per wallet. Before your next race, send any{" "}
+            {CURRENCY_SYMBOL} left in this wallet to another address with cast send, then run this step again to make a
+            new one.
+          </p>
+        )}
+        {LOCAL_CHAIN ? (
+          <>
+            <ul className={`${BODY} list-disc space-y-2 pl-5`}>
+              <li>The command saves a random password to a private file.</li>
+              <li>
+                The command imports funded test account 1 as <code className="text-[#FFBE00]">agents-arena</code> in
+                Foundry&apos;s keystore, an encrypted file.
+              </li>
+              <li>If you share a chain, pick different accounts. Do not use accounts 0 or 12.</li>
+            </ul>
+            <CodeBlock code={LOCAL_KEYSTORE_COMMAND} language="bash" copyLabel="Copy command" />
+          </>
+        ) : (
+          <>
+            <ul className={`${BODY} list-disc space-y-2 pl-5`}>
+              <li>The command saves a random password to a private file.</li>
+              <li>
+                The command creates a wallet named <code className="text-[#FFBE00]">agents-arena</code> in
+                Foundry&apos;s keystore, an encrypted file.
+              </li>
+              <li>The command prints the wallet address.</li>
+            </ul>
+            <CodeBlock code={KEYSTORE_CREATE_COMMAND} language="bash" copyLabel="Copy command" />
+          </>
+        )}
+        <ul className={`${BODY} list-disc space-y-2 pl-5`}>
+          <li>
+            <code className="text-[#FFBE00]">ETH_KEYSTORE_ACCOUNT</code>: the wallet name, <code>agents-arena</code>.
+          </li>
+          <li>
+            <code className="text-[#FFBE00]">ETH_PASSWORD</code>: the path to its password file.
+          </li>
+        </ul>
+        <CodeBlock code={KEYSTORE_ENV_COMMAND} language="bash" copyLabel="Copy command" />
+        <p className={BODY}>
+          Set both in the terminal your agent will run from. A new terminal window needs the export line again.
+        </p>
+        <p className={BODY}>The arena holds only your wallet address.</p>
       </Section>
       <p className={BODY}>
         {runId ? (
