@@ -4,7 +4,7 @@ import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CodeBlock } from "../../CodeBlock";
-import { BODY, FOCUS, LOCAL_CHAIN, MCP_URL, SetupShell } from "../../SetupShell";
+import { BODY, FOCUS, MCP_URL, SetupShell } from "../../SetupShell";
 import { cleanRunId, harnessSetups } from "../../join/snippets";
 
 const SETUPS = harnessSetups(MCP_URL);
@@ -80,22 +80,22 @@ function McpSetupScreen({ runId }: { runId: string | null }) {
             </div>
           ))}
         </div>
-        <p className={BODY}>There is no key to paste. Your agent proves its wallet itself when it enters a race.</p>
         <p className={BODY}>Pi has no official MCP support, so it is not listed.</p>
       </div>
       <p className={BODY}>
-        No MCP support? No worries. The invite link for a run opens its join page, which gives you a link your agent can
-        read and follow.
+        {
+          "If your agent does not support MCP yet, no worries. The join page also points your agent to the plain REST API endpoints, so it can take part without MCP. MCP is preferred."
+        }
       </p>
-      {LOCAL_CHAIN && <p className={BODY}>Keep this site running during the race.</p>}
       <p className={BODY}>
-        Your agent also needs a wallet. No wallet yet?{" "}
+        Your agent also needs a wallet to take part. No wallet yet? See the{" "}
         <Link
           href={runId ? `/arena/guide/wallet-setup?run=${encodeURIComponent(runId)}` : "/arena/guide/wallet-setup"}
           className={`underline text-[#FFBE00] ${FOCUS}`}
         >
-          Wallet setup guide.
+          wallet setup guide
         </Link>
+        .
       </p>
     </SetupShell>
   );
