@@ -6,7 +6,6 @@ import { flattenTokens, splitTokenRuns } from "./codeTokens";
 import Prism from "prismjs";
 import "prismjs/components/prism-bash";
 import "prismjs/components/prism-json";
-import "prismjs/components/prism-toml";
 
 export function CodeBlock({
   code,
@@ -15,7 +14,7 @@ export function CodeBlock({
   copyLabel = "Copy code",
 }: {
   code: string;
-  language: "bash" | "json" | "toml" | "text";
+  language: "bash" | "json" | "text";
   title?: string;
   copyLabel?: string;
 }) {

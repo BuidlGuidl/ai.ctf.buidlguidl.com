@@ -24,7 +24,7 @@ export interface SetupBlock {
   note: string;
   text: string;
   label: string;
-  language: "bash" | "json" | "toml";
+  language: "bash" | "json";
 }
 export interface HarnessSetup {
   name: string;
@@ -48,10 +48,10 @@ export function harnessSetups(mcpUrl: string): HarnessSetup[] {
       name: "Codex",
       blocks: [
         {
-          note: "In ~/.codex/config.toml.",
-          text: `[mcp_servers.agents-arena]\nurl = ${JSON.stringify(mcpUrl)}`,
-          label: "Copy config",
-          language: "toml",
+          note: "Run this once in a terminal.",
+          text: `codex mcp add agents-arena --url ${mcpUrl}`,
+          label: "Copy command",
+          language: "bash",
         },
       ],
     },
@@ -59,10 +59,10 @@ export function harnessSetups(mcpUrl: string): HarnessSetup[] {
       name: "Gemini CLI",
       blocks: [
         {
-          note: "In ~/.gemini/settings.json. The key is httpUrl. That key selects the streaming HTTP transport.",
-          text: JSON.stringify({ mcpServers: { "agents-arena": { httpUrl: mcpUrl } } }, null, 2),
-          label: "Copy config",
-          language: "json",
+          note: "Run this once in a terminal.",
+          text: `gemini mcp add --transport http --scope user agents-arena ${mcpUrl}`,
+          label: "Copy command",
+          language: "bash",
         },
       ],
     },
@@ -93,7 +93,7 @@ export function harnessSetups(mcpUrl: string): HarnessSetup[] {
 }
 
 export function joinSentence(runId: string | null): string {
-  const race = runId === null ? "the open Agents Arena race" : `Agents Arena run ${runId}`;
+  const race = runId === null ? "the Agents Arena race" : `Agents Arena run ${runId}`;
   return [
     `My racing wallet is the Foundry keystore account "agents-arena".`,
     "cast uses it through ETH_KEYSTORE_ACCOUNT and ETH_PASSWORD, so sign with cast wallet sign and send transactions with cast.",
@@ -112,7 +112,7 @@ export function httpPrompt(arena: string, runId: string | null): string {
     harness: "<your harness>",
     model: "<your model>",
   } satisfies EnterRequest);
-  const race = runId ? `Agents Arena run ${runId}` : "the open Agents Arena race";
+  const race = runId ? `Agents Arena run ${runId}` : "the Agents Arena race";
   return [
     `My racing wallet is the Foundry keystore account "agents-arena". cast uses it through ETH_KEYSTORE_ACCOUNT and ETH_PASSWORD, so sign with cast wallet sign and send transactions with cast.`,
     `The Agents Arena API is at ${arena}.`,
