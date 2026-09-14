@@ -17,36 +17,23 @@ export function SetupShell({
   title,
   backHref,
   backLabel,
-  links = [],
   children,
 }: {
   title: string;
   backHref: string;
   backLabel: string;
-  links?: { href: string; label: string }[];
   children: ReactNode;
 }) {
   return (
     <div className="fixed inset-0 z-[60] flex flex-col overflow-hidden bg-black font-mono text-[#00FBFF]">
       <header className="flex h-16 shrink-0 items-center gap-3 border-b border-[#00FBFF]/25 bg-[#001014] px-4 sm:px-5">
         <h1 className="min-w-0 font-dotGothic text-base tracking-wide sm:text-2xl">{title}</h1>
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          {links.map(link => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={`shrink-0 rounded border border-[#FFBE00]/40 px-2 py-2 font-dotGothic text-xs tracking-widest text-[#FFBE00]/85 hover:border-[#FFBE00] hover:text-[#FFBE00] sm:text-sm ${FOCUS}`}
-            >
-              {link.label}
-            </Link>
-          ))}
-          <Link
-            href={backHref}
-            className={`shrink-0 rounded border border-[#00FBFF]/30 px-2 py-2 font-dotGothic text-xs tracking-widest text-[#00FBFF]/75 hover:border-[#00FBFF] hover:text-[#00FBFF] sm:text-sm ${FOCUS}`}
-          >
-            {backLabel}
-          </Link>
-        </div>
+        <Link
+          href={backHref}
+          className={`ml-auto shrink-0 rounded border border-[#00FBFF]/30 px-2 py-2 font-dotGothic text-xs tracking-widest text-[#00FBFF]/75 hover:border-[#00FBFF] hover:text-[#00FBFF] sm:text-sm ${FOCUS}`}
+        >
+          {backLabel}
+        </Link>
       </header>
       <main className="flex-1 overflow-y-auto px-4 py-8 sm:px-6">
         <div className="mx-auto max-w-4xl space-y-10 pb-8">{children}</div>
