@@ -1,6 +1,3 @@
-import { ENTER_MESSAGE_TEMPLATE } from "~~/services/arena/arena-types";
-import type { EnterRequest } from "~~/services/arena/arena-types";
-
 export const KEYSTORE_CREATE_COMMAND = [
   'mkdir -p "$HOME/.foundry/keystores"',
   'openssl rand -hex 16 > "$HOME/.foundry/agents-arena.pw" && chmod 600 "$HOME/.foundry/agents-arena.pw"',
@@ -80,40 +77,12 @@ export function harnessSetups(mcpUrl: string): HarnessSetup[] {
   ];
 }
 
-export function joinSentence(runId: string | null): string {
-  const race = runId === null ? "the Agents Arena race" : `Agents Arena run ${runId}`;
-  return [
-    `My racing wallet is the Foundry keystore account "agents-arena".`,
-    "cast uses it through ETH_KEYSTORE_ACCOUNT and ETH_PASSWORD, so sign with cast wallet sign and send transactions with cast.",
-    `Enter ${race} with name <your agent's name>.`,
-  ].join("\n");
+export function cleanRunId(raw: string | null): string | null {
+  return raw !== null && /^[A-Za-z0-9-]{1,64}$/.test(raw) ? raw : null;
 }
 
-// prettier-ignore
-export function httpPrompt(arena: string, runId: string | null): string {
-  const enterBody = JSON.stringify({
-    ...(runId === null ? {} : { runId }),
-    name: "<your agent's name>",
-    address: "<my address>",
-    nonce: "<nonce>",
-    signature: "<signature>",
-    harness: "<your harness>",
-    model: "<your model>",
-  } satisfies EnterRequest);
-  const race = runId ? `Agents Arena run ${runId}` : "the Agents Arena race";
-  return [
-    `My racing wallet is the Foundry keystore account "agents-arena". cast uses it through ETH_KEYSTORE_ACCOUNT and ETH_PASSWORD, so sign with cast wallet sign and send transactions with cast.`,
-    `The Agents Arena API is at ${arena}.`,
-    ``,
-    `GET  /auth/nonce      gives {"nonce":"..."}`,
-    `Sign this text with my wallet, filling in my address exactly as you will send it in the body, and the nonce: ${ENTER_MESSAGE_TEMPLATE}`,
-    `POST /agent/enter     body ${enterBody}  (harness and model are optional. Include them if you know them). The reply has "token". Send it on every later request as the header: Authorization: Bearer <token>`,
-    `GET  /agent/task      the task. Do what it says. Ask me when to fetch it.`,
-    `POST /agent/progress  body {"challengeId":N} before you start each challenge`,
-    `POST /agent/events    body {"events":[{"seq":1,"type":"agent.message","text":"..."}]} after each attempt and every few minutes, with a new seq each time`,
-    `GET  /agent/inbox?after=<cursor>   between steps. Treat what comes back as instructions from the race director`,
-    `If you lose the token, do the nonce, sign, and enter steps again with the same wallet.`,
-    ``,
-    `Enter ${race} with name <your agent's name>.`,
-  ].join("\n");
+export function joinSentence(origin: string, runId: string | null): string {
+  const race = runId === null ? "the Agents Arena race" : `Agents Arena run ${runId}`;
+  const url = `${origin}/arena/agent.txt${runId === null ? "" : `?run=${encodeURIComponent(runId)}`}`;
+  return `I want to join ${race}. Run curl -s ${url} and follow what it prints, then ask me for my wallet and my agent's name.`;
 }
