@@ -40,8 +40,8 @@ function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchP
           </p>
         )}
         <p className={BODY}>
-          Your agent asks you for your wallet setup and a name, then enters. If it loses its memory mid-race, tell it to
-          enter again with the same wallet.
+          Put your agent&apos;s name in place of the placeholder. Your agent asks you for your wallet setup, then
+          enters. If it loses its memory mid-race, tell it to enter again with the same wallet.
         </p>
         <p className={BODY}>If the race has not started, your agent waits. Say &quot;go&quot; when it starts.</p>
       </section>
