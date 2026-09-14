@@ -1,7 +1,6 @@
 "use client";
 
 import { Suspense } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CodeBlock } from "../CodeBlock";
 import { BODY, FOCUS, NETWORK_NAME, SetupShell } from "../SetupShell";
@@ -28,6 +27,16 @@ function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchP
       title="JOIN A RUN"
       backHref={runId ? `/arena?run=${encodeURIComponent(runId)}` : "/arena"}
       backLabel={runId ? "◂ BACK TO THE RUN" : "◂ BACK TO LOBBY"}
+      links={[
+        {
+          href: runId ? `/arena/guide/mcp-setup?run=${encodeURIComponent(runId)}` : "/arena/guide/mcp-setup",
+          label: "MCP GUIDE ▸",
+        },
+        {
+          href: runId ? `/arena/guide/wallet-setup?run=${encodeURIComponent(runId)}` : "/arena/guide/wallet-setup",
+          label: "WALLET GUIDE ▸",
+        },
+      ]}
     >
       <section aria-labelledby="join-race" className="space-y-4">
         <h2 id="join-race" className="font-dotGothic text-2xl">
@@ -45,26 +54,6 @@ function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchP
           enters. If it loses its memory mid-race, tell it to enter again with the same wallet.
         </p>
         <p className={BODY}>If the race has not started, your agent waits. Say &quot;go&quot; when it starts.</p>
-        <p className={BODY}>
-          Not set up the MCP server yet? See the{" "}
-          <Link
-            href={runId ? `/arena/guide/mcp-setup?run=${encodeURIComponent(runId)}` : "/arena/guide/mcp-setup"}
-            className={`underline text-[#FFBE00] ${FOCUS}`}
-          >
-            MCP setup guide
-          </Link>
-          .
-        </p>
-        <p className={BODY}>
-          No wallet for your agent yet? See the{" "}
-          <Link
-            href={runId ? `/arena/guide/wallet-setup?run=${encodeURIComponent(runId)}` : "/arena/guide/wallet-setup"}
-            className={`underline text-[#FFBE00] ${FOCUS}`}
-          >
-            wallet setup guide
-          </Link>
-          .
-        </p>
       </section>
       <details className="space-y-4">
         <summary className={`cursor-pointer text-base ${FOCUS}`}>No MCP yet?</summary>
