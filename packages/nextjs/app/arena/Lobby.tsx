@@ -157,7 +157,6 @@ function idleAgents(roster: readonly RosterEntry[], context: DisplayContext): Ag
       name: null,
       url: null,
       removedAt: null,
-      flagsBeforeJoin: null,
       handle: display.handle,
       harness: display.harnessLabel,
       model: display.modelLabel,

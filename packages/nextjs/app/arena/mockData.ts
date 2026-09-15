@@ -20,7 +20,6 @@ export interface Agent {
   name: string | null;
   url: string | null;
   removedAt: string | null;
-  flagsBeforeJoin: number | null;
   handle: string;
   harness: string;
   model: string;

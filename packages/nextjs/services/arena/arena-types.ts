@@ -112,13 +112,6 @@ export interface ExternalEntrantSummary extends EntrantSummaryBase {
   // Set when the operator closes the lane. Its address stops polling for solves.
   // The lane stays on the board, greyed out. Its arena token is dead after removal.
   removedAt?: string;
-  // Task-specific facts about this entrant. Today the only task is the CTF.
-  task?: {
-    // Flags the wallet already held when it joined. Every address can mint each
-    // flag once forever, so a wallet that raced before cannot re-earn those.
-    // The operator sees this and decides whether to remove the entrant.
-    ctfFlagsBeforeJoin: number;
-  };
 }
 
 export type EntrantSummary = HostedEntrantSummary | ExternalEntrantSummary;

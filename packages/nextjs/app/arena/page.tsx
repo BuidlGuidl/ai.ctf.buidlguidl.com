@@ -292,7 +292,6 @@ function agentsFromRun(
       name: entrant.kind === "external" ? entrant.name : null,
       url: entrant.kind === "external" ? entrant.url ?? null : null,
       removedAt: entrant.kind === "external" ? entrant.removedAt ?? null : null,
-      flagsBeforeJoin: entrant.kind === "external" ? entrant.task?.ctfFlagsBeforeJoin ?? null : null,
       handle: display.handle,
       harness: display.harnessLabel,
       model: display.modelLabel,
@@ -2795,13 +2794,6 @@ function OperatorStrip({
         <>
           {focused?.kind === "external" && (
             <div className="mb-1 flex flex-wrap items-center gap-x-2 text-xs text-[#FFBE00]/80">
-              {focused.flagsBeforeJoin !== null && (
-                <span>
-                  {focused.flagsBeforeJoin === 0
-                    ? "held no flags before joining"
-                    : `held ${focused.flagsBeforeJoin} flags before joining`}
-                </span>
-              )}
               <DeclaredRuntime agent={focused} />
             </div>
           )}
