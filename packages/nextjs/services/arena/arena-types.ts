@@ -1,4 +1,4 @@
-// Copied from agents-arena-backend contract/arena-types.ts at e2abad7 (branch
+// Copied from agents-arena-backend contract/arena-types.ts at 97fe150 (branch
 // plugin-your-own-agent-mcp-route, PR #82, which carries master cfd9da6, the agent picker #80).
 // Do not edit here — sync from the backend repo (formatting follows this repo's prettier).
 // Endpoint docs live there in contract/API.md.
@@ -109,11 +109,10 @@ export interface ExternalEntrantSummary extends EntrantSummaryBase {
   effort?: string;
   url?: string;
   joinedAt: string;
-  // Set when the operator closes the lane. Its address stops polling for solves.
+  // Set when the operator or arena closes the lane. Its address stops polling for solves.
   // The lane stays on the board, greyed out. Its arena token is dead after removal.
   removedAt?: string;
-  // Present when the arena removed the lane itself, for example at the start for a
-  // wallet that gained flags in the lobby. Absent on operator removals.
+  // Present when the arena removed the lane itself, for example at the start for a wallet that gained flags in the lobby. Absent on operator removals and on live lanes.
   removedReason?: string;
 }
 
@@ -217,6 +216,7 @@ export type ArenaEvent =
     })
   // The operator closed an external lane. Its address stops polling for solves.
   // The lane stays visible, greyed out. Its arena token is dead after removal.
+  // The reason explains automatic removal at the start. Manual removal omits it.
   | (ArenaEventBase & { type: "entrant.removed"; payload: { entrantId: string; reason?: string } })
   | (ArenaEventBase & { type: "entrant.error"; payload: { entrantId: string; message: string } })
   | (ArenaEventBase & { type: "run.error"; payload: { message: string } })
