@@ -368,7 +368,10 @@ export function ArenaLobby({
 
   // Only hosted lanes get funded; outside entrants bring their own wallet.
   const hostedAgents = useMemo(() => cards.filter(agent => agent.kind === "hosted"), [cards]);
-  const externalAgents = useMemo(() => cards.filter(agent => agent.kind === "external"), [cards]);
+  const externalAgents = useMemo(
+    () => cards.filter(agent => agent.kind === "external" && agent.removedAt === null),
+    [cards],
+  );
   const addresses = useMemo(
     () => hostedAgents.flatMap(agent => (agent.address ? [agent.address] : [])),
     [hostedAgents],

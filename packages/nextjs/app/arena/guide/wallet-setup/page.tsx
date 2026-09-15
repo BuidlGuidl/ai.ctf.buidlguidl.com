@@ -86,7 +86,11 @@ function WalletSetupScreen({ runId }: { runId: string | null }) {
                 The command imports funded test account 1 as <code className="text-[#FFBE00]">agents-arena</code> in
                 Foundry&apos;s keystore, an encrypted file.
               </li>
-              <li>If you share a chain, pick different accounts. Do not use accounts 0 or 12.</li>
+              <li>
+                Sharing one chain with other people? Each racer needs its own account. Swap the private key in the
+                command for another Hardhat test account. Accounts 0 and 12 are taken by the operator and the challenge
+                signer.
+              </li>
             </ul>
             <CodeBlock code={LOCAL_KEYSTORE_COMMAND} language="bash" copyLabel="Copy command" />
           </>

@@ -151,6 +151,8 @@ const HEARD_TYPES = new Set<ArenaEvent["type"]>([
 ]);
 
 function markHeard(state: ProjectionState, event: ArenaEvent): ProjectionState {
+  // The backend sets done on stop and remove, so it is not the agent speaking.
+  if (event.type === "entrant.status" && event.payload.status === "done") return state;
   if (!HEARD_TYPES.has(event.type) || !("entrantId" in event.payload)) return state;
   const id = event.payload.entrantId;
   if (!state.run.entrants.some(entrant => entrant.id === id && entrant.kind === "external")) return state;
