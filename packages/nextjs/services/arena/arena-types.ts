@@ -1,4 +1,4 @@
-// Copied from agents-arena-backend contract/arena-types.ts at 0bba7fe (branch
+// Copied from agents-arena-backend contract/arena-types.ts at e2abad7 (branch
 // plugin-your-own-agent-mcp-route, PR #82, which carries master cfd9da6, the agent picker #80).
 // Do not edit here — sync from the backend repo (formatting follows this repo's prettier).
 // Endpoint docs live there in contract/API.md.
