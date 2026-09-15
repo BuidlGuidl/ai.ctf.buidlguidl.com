@@ -112,6 +112,9 @@ export interface ExternalEntrantSummary extends EntrantSummaryBase {
   // Set when the operator closes the lane. Its address stops polling for solves.
   // The lane stays on the board, greyed out. Its arena token is dead after removal.
   removedAt?: string;
+  // Present when the arena removed the lane itself, for example at the start for a
+  // wallet that gained flags in the lobby. Absent on operator removals.
+  removedReason?: string;
 }
 
 export type EntrantSummary = HostedEntrantSummary | ExternalEntrantSummary;

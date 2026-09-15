@@ -157,6 +157,7 @@ function idleAgents(roster: readonly RosterEntry[], context: DisplayContext): Ag
       name: null,
       url: null,
       removedAt: null,
+      removedReason: null,
       handle: display.handle,
       harness: display.harnessLabel,
       model: display.modelLabel,
@@ -328,7 +329,12 @@ export function ArenaLobby({
       if (!previous) {
         pushLog(`${entrant.name} joined with its own agent`, GREEN);
       } else if (!previous.removed && entrant.removedAt) {
-        pushLog(`${entrant.name} was removed by the operator`, YELLOW);
+        pushLog(
+          entrant.removedReason
+            ? `${entrant.name} was removed by the arena. ${entrant.removedReason}`
+            : `${entrant.name} was removed by the operator`,
+          YELLOW,
+        );
       }
       externalEntrants.current.set(entrant.id, { removed: !!entrant.removedAt });
     }

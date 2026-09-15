@@ -16,7 +16,7 @@ export interface FeedItem {
   type: "flag" | "blocked" | "resumed" | "done" | "restarted" | "joined" | "removed";
   agentId: string;
   challengeId?: number;
-  // Why the operator removed an external lane, when they gave a reason.
+  // Why the arena removed an external lane. Operator removals carry no reason.
   reason?: string;
 }
 
@@ -207,7 +207,9 @@ function reduceEvent(next: ProjectionState, event: ArenaEvent): ProjectionState 
     case "entrant.removed": {
       const id = event.payload.entrantId;
       next = updateEntrant(next, id, entrant =>
-        entrant.kind === "external" ? { ...entrant, removedAt: event.ts, status: "done" } : entrant,
+        entrant.kind === "external"
+          ? { ...entrant, removedAt: event.ts, removedReason: event.payload.reason, status: "done" }
+          : entrant,
       );
       next = { ...next, statusChangedAt: { ...next.statusChangedAt, [id]: event.ts } };
       return appendFeed(next, { id: event.id, type: "removed", agentId: id, reason: event.payload.reason });

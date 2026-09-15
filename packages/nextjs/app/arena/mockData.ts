@@ -20,6 +20,7 @@ export interface Agent {
   name: string | null;
   url: string | null;
   removedAt: string | null;
+  removedReason: string | null;
   handle: string;
   harness: string;
   model: string;

@@ -112,6 +112,11 @@ function DeclaredRuntime({ agent }: { agent: Agent }) {
   return <span className="text-xs text-[#00FBFF]/60 break-words">{parts ?? "harness and model not given"}</span>;
 }
 
+function RemovedNote({ agent }: { agent: Agent }) {
+  if (agent.removedReason === null) return null;
+  return <span className="text-xs text-[#00FBFF]/60 break-words">{agent.removedReason}</span>;
+}
+
 function PendingUsage() {
   return (
     <span
@@ -292,6 +297,7 @@ function agentsFromRun(
       name: entrant.kind === "external" ? entrant.name : null,
       url: entrant.kind === "external" ? entrant.url ?? null : null,
       removedAt: entrant.kind === "external" ? entrant.removedAt ?? null : null,
+      removedReason: entrant.kind === "external" ? entrant.removedReason ?? null : null,
       handle: display.handle,
       harness: display.harnessLabel,
       model: display.modelLabel,
@@ -948,7 +954,12 @@ function FinalCeremony({
                             <span className="truncate">{agent.handle}</span>
                             <ExternalTag agent={agent} />
                           </div>
-                          {agent.removedAt && <StatusChip status={agent.status} removedAt={agent.removedAt} />}
+                          {agent.removedAt && (
+                            <>
+                              <StatusChip status={agent.status} removedAt={agent.removedAt} />
+                              <RemovedNote agent={agent} />
+                            </>
+                          )}
                           <div className="mt-0.5 truncate text-sm text-[#00FBFF]/70">
                             {agent.kind === "external" ? (
                               declaredRuntimeParts(agent) ?? "harness and model not given"
@@ -1068,7 +1079,12 @@ function FinalistCard({ agent, place }: { agent: Agent; place: PodiumPlace }) {
           <span className="truncate">{agent.handle}</span>
           <ExternalTag agent={agent} />
         </div>
-        {agent.removedAt && <StatusChip status={agent.status} removedAt={agent.removedAt} />}
+        {agent.removedAt && (
+          <>
+            <StatusChip status={agent.status} removedAt={agent.removedAt} />
+            <RemovedNote agent={agent} />
+          </>
+        )}
         <div className="mt-0.5 truncate text-sm text-[#00FBFF]/70">
           {agent.kind === "external" ? (
             declaredRuntimeParts(agent) ?? "harness and model not given"
@@ -1454,7 +1470,10 @@ function AgentLog({
           </div>
         )}
         <div className="flex items-center gap-2">
-          <StatusChip status={focused.status} removedAt={focused.removedAt} />
+          <div className="flex min-w-0 flex-col items-start">
+            <StatusChip status={focused.status} removedAt={focused.removedAt} />
+            {focused.removedAt && <RemovedNote agent={focused} />}
+          </div>
           {focused.finishedAt !== null ? (
             <span className="px-1.5 py-0.5 rounded font-bold shrink-0 text-sm text-[#00ff9c] border border-[#00ff9c]/40">
               CLEARED · {fmtClock(focused.finishedAt)}
@@ -1923,7 +1942,12 @@ function RaceView({
                 )}
                 <ExternalTag agent={a} />
               </span>
-              {a.removedAt && <StatusChip status={a.status} removedAt={a.removedAt} />}
+              {a.removedAt && (
+                <>
+                  <StatusChip status={a.status} removedAt={a.removedAt} />
+                  <RemovedNote agent={a} />
+                </>
+              )}
               {latestNarration && (
                 <NarrationPopover
                   agent={a}
@@ -2904,7 +2928,9 @@ function feedText(item: FeedItem, handle: string): string {
     case "joined":
       return `${handle} joined the race`;
     case "removed":
-      return `${handle} was removed by the operator${item.reason ? `: ${item.reason}` : ""}`;
+      return item.reason
+        ? `${handle} was removed by the arena. ${item.reason}`
+        : `${handle} was removed by the operator`;
   }
 }
 
