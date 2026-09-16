@@ -36,6 +36,22 @@ export function slug(text: string): string {
 export function picksFromRoster(entries: readonly RosterEntry[]): RosterPick[] {
   return entries.map(entry => ({ ...entry }));
 }
+export function randomPicks(
+  agents: readonly AgentOption[],
+  count: number,
+  random: () => number = Math.random,
+): RosterPick[] {
+  const unique = Object.values(agentsByKey(agents)).filter(agent => agent.efforts.length > 0);
+  for (let i = unique.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [unique[i], unique[j]] = [unique[j], unique[i]];
+  }
+  return unique.slice(0, Math.min(count, MAX_ROSTER)).map(agent => ({
+    harness: agent.harness,
+    model: agent.model,
+    effort: agent.efforts[Math.floor(random() * agent.efforts.length)],
+  }));
+}
 export function buildRoster(picks: readonly RosterPick[]): RosterEntry[] {
   // Reserve saved ids before generating others so an edit cannot rename an untouched slot.
   const used = new Set(picks.flatMap(pick => (pick.id === undefined ? [] : [pick.id])));

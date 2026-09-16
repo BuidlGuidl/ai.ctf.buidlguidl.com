@@ -50,6 +50,7 @@ import {
   buildRoster,
   describeModelId,
   issuesToProblems,
+  randomPicks,
   validateRoster,
 } from "~~/services/arena/rosterBuilder";
 import { playSfx, unlockSfx } from "~~/services/arena/sfx";
@@ -951,7 +952,19 @@ export function ArenaLobby({
             </div>
           )}
           {phase === "idle" && (
-            <div className="mb-3 w-full max-w-4xl flex justify-end">
+            <div className="mb-3 w-full max-w-4xl flex justify-end gap-2">
+              <button
+                className={PICKER_BUTTON}
+                disabled={!agentsQuery.data?.agents.length}
+                onClick={() => {
+                  const next = agentsQuery.data ? randomPicks(agentsQuery.data.agents, picks.length || MAX_ROSTER) : [];
+                  if (!next.length) return;
+                  setEditing(null);
+                  setPicks(next);
+                }}
+              >
+                RANDOM
+              </button>
               <button
                 className={PICKER_BUTTON}
                 onClick={() => {
