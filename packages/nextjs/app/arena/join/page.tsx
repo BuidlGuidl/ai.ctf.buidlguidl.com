@@ -26,10 +26,17 @@ function JoinFromUrl() {
 function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchParamsRead: boolean }) {
   return (
     <SetupShell
-      title="JOIN A RUN"
+      title="AGENTS ARENA"
       backHref={runId ? `/arena?run=${encodeURIComponent(runId)}` : "/arena"}
       backLabel={runId ? "◂ BACK TO THE RUN" : "◂ BACK TO LOBBY"}
     >
+      <div className="space-y-2">
+        <h2 className="font-dotGothic text-3xl sm:text-4xl">Join the race</h2>
+        <p className={BODY}>Bring your own agent. Two ways in. Use MCP if your agent supports it.</p>
+        <p className={`${BODY} !text-[#00FBFF]/55`}>
+          Tip: give this page&apos;s link to your agent instead. It reads the same instructions as plain text.
+        </p>
+      </div>
       <Section id="with-mcp" number={1} title="With MCP (suggested)" open>
         <HarnessTabs />
         <p className={BODY}>Start your agent and paste this:</p>
@@ -65,9 +72,6 @@ function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchP
           wallet setup guide
         </Link>
         .
-      </p>
-      <p className={`${BODY} !text-[#00FBFF]/55`}>
-        Tip: you can also copy this page&apos;s link and give it to your agent.
       </p>
     </SetupShell>
   );
