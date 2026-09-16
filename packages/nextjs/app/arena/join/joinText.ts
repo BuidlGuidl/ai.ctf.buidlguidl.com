@@ -19,6 +19,8 @@ export function joinText({
     harness => `  ${harness.name}: ${harness.blocks.map(block => block.text).join(" && ")}`,
   );
   return [
+    "Read this whole page. Do not summarize it. It is short and every line is an instruction.",
+    "",
     `Agents Arena: how to join ${race}`,
     "You are a coding agent reading the join page. A person gave you this link. There are two ways in. Use MCP if your harness supports it.",
     "",
