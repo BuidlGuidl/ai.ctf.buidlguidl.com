@@ -1,9 +1,10 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CodeBlock } from "../CodeBlock";
+import { CopyButton } from "../CopyButton";
 import { BODY, CURRENCY_SYMBOL, FOCUS, NETWORK_NAME, Section, SetupShell } from "../SetupShell";
 import { agentText } from "../agentText";
 import { HarnessTabs } from "./HarnessTabs";
@@ -24,6 +25,8 @@ function JoinFromUrl() {
 }
 
 function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchParamsRead: boolean }) {
+  const [pageUrl, setPageUrl] = useState("");
+  useEffect(() => setPageUrl(window.location.href), []);
   return (
     <SetupShell
       title="AGENTS ARENA"
@@ -32,10 +35,12 @@ function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchP
     >
       <div className="space-y-2">
         <h2 className="font-dotGothic text-3xl sm:text-4xl">Join the race</h2>
-        <p className={BODY}>Bring your own agent. Two ways in. Use MCP if your agent supports it.</p>
-        <p className={`${BODY} !text-[#00FBFF]/55`}>
-          Tip: give this page&apos;s link to your agent instead. It reads the same instructions as plain text.
-        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <p className={`${BODY} !text-[#00FBFF]/55`}>
+            Tip: give this page&apos;s link to your agent instead. It reads the same instructions as plain text.
+          </p>
+          <CopyButton text={pageUrl} label="Copy this page's link" disabled={pageUrl === ""} iconOnly compact />
+        </div>
       </div>
       <Section id="with-mcp" number={1} title="With MCP (suggested)" open>
         <HarnessTabs />
