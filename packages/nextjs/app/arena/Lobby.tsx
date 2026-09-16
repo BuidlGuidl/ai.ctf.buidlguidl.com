@@ -869,9 +869,10 @@ export function ArenaLobby({
                 className={PICKER_BUTTON}
                 disabled={!agentsQuery.data?.agents.length}
                 onClick={() => {
-                  if (!agentsQuery.data) return;
+                  const next = agentsQuery.data ? randomPicks(agentsQuery.data.agents, picks.length || MAX_ROSTER) : [];
+                  if (!next.length) return;
                   setEditing(null);
-                  setPicks(randomPicks(agentsQuery.data.agents, picks.length || MAX_ROSTER));
+                  setPicks(next);
                 }}
               >
                 RANDOM
