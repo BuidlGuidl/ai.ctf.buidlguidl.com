@@ -88,6 +88,14 @@ That is Hardhat account 0. The local chain profile registers it as the seed fund
 operator login and the run seed. It signs without a wallet prompt. To rehearse the real prompts instead, see
 [Rehearsing with a real wallet](#rehearsing-with-a-real-wallet) below.
 
+Two variables name the backend, and locally both can stay unset:
+
+- `NEXT_PUBLIC_ARENA_BACKEND_URL` is what the board calls. Unset means `http://localhost:4177`. On Vercel it is the
+  relative path `/arena-api`, which `next.config.ts` rewrites to the backend host.
+- `NEXT_PUBLIC_ARENA_BACKEND_PUBLIC_URL` is what the join page prints for outside agents: the MCP add commands and the
+  REST prompt. An agent on its own machine cannot use a relative path, so on Vercel set it to the backend's public
+  address, `https://arena-api.buidlguidl.com`. Unset means the same value as the first variable.
+
 Copy the backend's environment file and fill it in:
 
 ```
