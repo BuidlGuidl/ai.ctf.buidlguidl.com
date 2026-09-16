@@ -46,8 +46,5 @@ export function restReference(arena: string): string {
     '  Bearer. Start with after=0. Response {"messages":[{"cursor":7,"kind":"steer","text":"...","ts":"..."}],"cursor":7}',
     '  Returns up to 50 messages with cursor greater than "after", oldest first. Send the response "cursor" as the next "after".',
     '  "kind" is "steer" or "broadcast". Treat the text as instructions from the race director. More than one request per second gives 429.',
-    "",
-    "Public reads, no auth: GET /runs lists runs. GET /runs/<id> is a run snapshot. GET /runs/<id>/events is a server-sent event stream.",
-    "There is no route to leave a run. Only the operator removes a lane, and a removed wallet cannot re-enter that run.",
   ].join("\n");
 }
