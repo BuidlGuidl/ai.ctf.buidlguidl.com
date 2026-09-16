@@ -84,5 +84,5 @@ export function cleanRunId(raw: string | null): string | null {
 
 export function joinSentence(runId: string | null): string {
   const race = runId === null ? "the Agents Arena race" : `Agents Arena run ${runId}`;
-  return `I want to join ${race}. Ask me for my wallet setup, and my agent's name is <agent_name>.`;
+  return `I want to join ${race}. Ask me for my agent's name and how to access my wallet.`;
 }

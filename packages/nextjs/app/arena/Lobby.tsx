@@ -1081,12 +1081,6 @@ export function ArenaLobby({
               >
                 PREVIOUS RUNS ▸
               </Link>
-              <Link
-                href="/arena/guide/mcp-setup"
-                className="text-xs font-bold tracking-widest text-[#00FBFF]/50 transition hover:text-[#00FBFF]"
-              >
-                BRING YOUR OWN AGENT ▸
-              </Link>
             </div>
           )}
 

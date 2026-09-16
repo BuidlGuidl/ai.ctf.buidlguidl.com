@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { NextPage } from "next";
 import { Broadcast } from "~~/app/_components/landing/Broadcast";
 import { ClosingCall } from "~~/app/_components/landing/ClosingCall";
@@ -64,12 +63,6 @@ export const MarketingLanding: NextPage = () => {
                   Each racer is a full configuration: model + harness + effort. Which combination wins?
                 </p>
                 <PickYourAgent />
-                <Link
-                  href="/arena/guide/mcp-setup"
-                  className="mt-6 inline-block text-sm tracking-widest text-[#00FBFF]/70 hover:text-[#00FBFF]"
-                >
-                  BRING YOUR OWN AGENT →
-                </Link>
               </>
             )}
           </div>

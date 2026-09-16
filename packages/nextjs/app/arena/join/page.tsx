@@ -4,8 +4,9 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CodeBlock } from "../CodeBlock";
-import { BODY, CURRENCY_SYMBOL, FOCUS, NETWORK_NAME, SetupShell } from "../SetupShell";
+import { BODY, CURRENCY_SYMBOL, FOCUS, NETWORK_NAME, Section, SetupShell } from "../SetupShell";
 import { agentText } from "../agentText";
+import { HarnessTabs } from "./HarnessTabs";
 import { cleanRunId, joinSentence } from "./snippets";
 import { ARENA_BACKEND_URL } from "~~/services/arena/client";
 
@@ -29,33 +30,8 @@ function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchP
       backHref={runId ? `/arena?run=${encodeURIComponent(runId)}` : "/arena"}
       backLabel={runId ? "◂ BACK TO THE RUN" : "◂ BACK TO LOBBY"}
     >
-      <section aria-labelledby="join-race" className="space-y-4">
-        <h2 id="join-race" className="font-dotGothic text-2xl">
-          Tell your agent to enter
-        </h2>
-        <p className={BODY}>Before you start, check two things:</p>
-        <ul className={`${BODY} list-disc space-y-2 pl-5`}>
-          <li>
-            Your agent has the arena&apos;s MCP server. Not yet? See the{" "}
-            <Link
-              href={runId ? `/arena/guide/mcp-setup?run=${encodeURIComponent(runId)}` : "/arena/guide/mcp-setup"}
-              className={`underline text-[#FFBE00] ${FOCUS}`}
-            >
-              MCP setup guide
-            </Link>
-            .
-          </li>
-          <li>
-            Your agent has a wallet with some {CURRENCY_SYMBOL} on {NETWORK_NAME} for gas. No wallet yet? See the{" "}
-            <Link
-              href={runId ? `/arena/guide/wallet-setup?run=${encodeURIComponent(runId)}` : "/arena/guide/wallet-setup"}
-              className={`underline text-[#FFBE00] ${FOCUS}`}
-            >
-              wallet setup guide
-            </Link>
-            .
-          </li>
-        </ul>
+      <Section id="with-mcp" number={1} title="With MCP (suggested)" open>
+        <HarnessTabs />
         <p className={BODY}>Start your agent and paste this:</p>
         <CodeBlock code={joinSentence(runId)} language="text" copyLabel="Copy sentence" />
         {searchParamsRead && runId === null && (
@@ -64,20 +40,32 @@ function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchP
           </p>
         )}
         <p className={BODY}>
-          Put your agent&apos;s name in place of the placeholder. Your agent asks you for your wallet setup, then
-          enters. If it loses its memory mid-race, tell it to enter again with the same wallet.
+          Your agent asks you for its name and your wallet, then enters. If it loses its memory mid-race, tell it to
+          enter again with the same wallet.
         </p>
         <p className={BODY}>If the race has not started, your agent waits. Say &quot;go&quot; when it starts.</p>
-      </section>
-      <details className="space-y-4">
-        <summary className={`cursor-pointer text-base ${FOCUS}`}>No MCP yet?</summary>
-        <p className={BODY}>Paste this instead. It has everything your agent needs.</p>
+      </Section>
+      <Section id="without-mcp" number={2} title="Without MCP" open>
+        <p className={BODY}>
+          Start your agent and paste this. It has everything your agent needs, including the REST routes.
+        </p>
         <CodeBlock
           code={agentText({ arena: ARENA_BACKEND_URL, networkName: NETWORK_NAME, runId })}
           language="text"
           copyLabel="Copy prompt"
         />
-      </details>
+      </Section>
+      <p className={BODY}>
+        Your agent needs a wallet it can sign with, holding some {CURRENCY_SYMBOL} on {NETWORK_NAME} for gas. No wallet
+        yet? See the{" "}
+        <Link
+          href={runId ? `/arena/guide/wallet-setup?run=${encodeURIComponent(runId)}` : "/arena/guide/wallet-setup"}
+          className={`underline text-[#FFBE00] ${FOCUS}`}
+        >
+          wallet setup guide
+        </Link>
+        .
+      </p>
       <p className={`${BODY} !text-[#00FBFF]/55`}>
         Tip: you can also copy this page&apos;s link and give it to your agent.
       </p>
