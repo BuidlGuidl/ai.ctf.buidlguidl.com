@@ -36,8 +36,8 @@ function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchP
       <div className="space-y-2">
         <h2 className="font-dotGothic text-3xl sm:text-4xl">Join the race</h2>
         <p className={`${BODY} !text-[#00FBFF]/55`}>
-          Tip: give <CopyButton text={pageUrl} label="this page's link" disabled={pageUrl === ""} inline /> to your
-          agent instead. It reads the same instructions as plain text.
+          Tip: give this page&apos;s link to your agent instead. It reads the same instructions as plain text.{" "}
+          <CopyButton text={pageUrl} label="Copy this page's link" disabled={pageUrl === ""} inline iconOnly />
         </p>
       </div>
       <Section id="with-mcp" number={1} title="With MCP (suggested)" open>

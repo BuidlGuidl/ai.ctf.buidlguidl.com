@@ -20,7 +20,8 @@ export function CopyButton({
   disabled?: boolean;
   compact?: boolean;
   iconOnly?: boolean;
-  // Renders as words inside a sentence: underlined label, small icon, no box.
+  // Renders inside a sentence, no box: underlined label plus a small icon, or with
+  // iconOnly just the icon.
   inline?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
@@ -48,7 +49,9 @@ export function CopyButton({
         title={iconOnly || inline ? (copied ? "Copied" : label) : undefined}
         className={
           inline
-            ? `inline-flex items-baseline gap-1 underline text-[#FFBE00] hover:text-[#00FBFF] disabled:cursor-not-allowed disabled:opacity-40 ${FOCUS}`
+            ? `inline-flex items-baseline gap-1 ${
+                iconOnly ? "align-middle" : "underline text-[#FFBE00]"
+              } hover:text-[#00FBFF] disabled:cursor-not-allowed disabled:opacity-40 ${FOCUS}`
             : `inline-flex shrink-0 items-center gap-2 rounded border border-[#00FBFF]/40 px-3 ${
                 compact ? "py-1.5 tracking-widest" : "py-2 tracking-wider"
               } text-xs hover:border-[#00FBFF] hover:bg-[#00FBFF]/10 disabled:cursor-not-allowed disabled:opacity-40 ${FOCUS}`
@@ -56,7 +59,7 @@ export function CopyButton({
       >
         {inline ? (
           <>
-            {label}
+            {!iconOnly && label}
             {copied ? (
               <CheckIcon className="h-3.5 w-3.5 self-center" />
             ) : (
