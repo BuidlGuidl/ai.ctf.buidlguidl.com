@@ -27,11 +27,10 @@ function McpSetupScreen({ runId }: { runId: string | null }) {
   const [tab, setTab] = useState(0);
   return (
     <SetupShell
-      title="ADD THE ARENA TO YOUR AGENT"
+      title="MCP GUIDE"
       backHref={runId ? `/arena/join?run=${encodeURIComponent(runId)}` : "/arena"}
       backLabel={runId ? "◂ BACK TO THE RUN" : "◂ BACK TO LOBBY"}
     >
-      <p className={BODY}>Your agent needs MCP (Model Context Protocol) support.</p>
       <div className="space-y-4">
         <div
           className="mt-5 flex flex-wrap gap-2 border-b border-[#00FBFF]/25 pb-3"
