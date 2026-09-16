@@ -71,7 +71,12 @@ function WalletSetupScreen({ runId }: { runId: string | null }) {
         <p className={`${BODY} !text-[#FFBE00]`}>
           Running this step again replaces the wallet and its password, and the old wallet cannot be recovered.
         </p>
-        {!LOCAL_CHAIN && (
+        {LOCAL_CHAIN ? (
+          <p className={BODY}>
+            A wallet can race once. The flag contract mints each flag once per wallet. Before your next race on this
+            chain, swap the private key in the command for another Hardhat test account and run this step again.
+          </p>
+        ) : (
           <p className={BODY}>
             A wallet can race once. The flag contract mints each flag once per wallet. Before your next race, send any{" "}
             {CURRENCY_SYMBOL} left in this wallet to another address with cast send, then run this step again to make a
@@ -81,15 +86,15 @@ function WalletSetupScreen({ runId }: { runId: string | null }) {
         {LOCAL_CHAIN ? (
           <>
             <ul className={`${BODY} list-disc space-y-2 pl-5`}>
+              <li>The command deletes an earlier wallet with this name first.</li>
               <li>The command saves a random password to a private file.</li>
               <li>
                 The command imports funded test account 1 as <code className="text-[#FFBE00]">agents-arena</code> in
                 Foundry&apos;s keystore, an encrypted file.
               </li>
               <li>
-                Sharing one chain with other people? Each racer needs its own account. Swap the private key in the
-                command for another Hardhat test account. Accounts 0 and 12 are taken by the operator and the challenge
-                signer.
+                Sharing one chain with other people? Each racer needs its own account: swap the private key in the
+                command. Accounts 0 and 12 are taken by the operator and the challenge signer.
               </li>
             </ul>
             <CodeBlock code={LOCAL_KEYSTORE_COMMAND} language="bash" copyLabel="Copy command" />

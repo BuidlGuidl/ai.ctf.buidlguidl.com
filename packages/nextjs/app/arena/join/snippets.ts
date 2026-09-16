@@ -6,6 +6,7 @@ export const KEYSTORE_CREATE_COMMAND = [
 
 // Account 1 keeps racers separate from the operator and Challenge 9 signer.
 export const LOCAL_KEYSTORE_COMMAND = [
+  'rm -f "$HOME/.foundry/keystores/agents-arena"',
   'openssl rand -hex 16 > "$HOME/.foundry/agents-arena.pw" && chmod 600 "$HOME/.foundry/agents-arena.pw"',
   'cast wallet import agents-arena --private-key 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d --unsafe-password "$(cat "$HOME/.foundry/agents-arena.pw")"',
 ].join("\n");

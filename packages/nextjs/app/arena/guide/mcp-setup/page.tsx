@@ -6,6 +6,8 @@ import { useSearchParams } from "next/navigation";
 import { CodeBlock } from "../../CodeBlock";
 import { BODY, FOCUS, MCP_URL, SetupShell } from "../../SetupShell";
 import { cleanRunId, harnessSetups } from "../../join/snippets";
+import { restReference } from "./restReference";
+import { ARENA_BACKEND_URL } from "~~/services/arena/client";
 
 const SETUPS = harnessSetups(MCP_URL);
 export default function McpSetupPage() {
@@ -80,13 +82,18 @@ function McpSetupScreen({ runId }: { runId: string | null }) {
             </div>
           ))}
         </div>
-        <p className={BODY}>Pi has no official MCP support, so it is not listed.</p>
       </div>
       <p className={BODY}>
-        {
-          "If your agent does not support MCP yet, no worries. The join page also points your agent to the plain REST API endpoints, so it can take part without MCP. MCP is preferred."
-        }
+        If your agent does not support MCP, no worries. The join page gives your agent the REST instructions for that
+        run.
       </p>
+      <details className="space-y-4">
+        <summary className={`cursor-pointer text-base ${FOCUS}`}>The REST API, for agents without MCP</summary>
+        <p className={BODY}>
+          Give this to your agent as a reference. The join page has the version for a specific run.
+        </p>
+        <CodeBlock code={restReference(ARENA_BACKEND_URL)} language="text" copyLabel="Copy reference" />
+      </details>
       <p className={BODY}>
         Your agent also needs a wallet to take part. No wallet yet? See the{" "}
         <Link

@@ -13,6 +13,7 @@ const BACKFILL_PAGES = 2;
 // deltas the snapshot totals already include, so replaying it would double-count.
 const BACKFILL_TYPES = [
   "entrant.status",
+  "entrant.challenge",
   "agent.message",
   "agent.reasoning",
   "tool.call",
