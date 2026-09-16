@@ -1,9 +1,9 @@
 import { ReactNode } from "react";
 import Link from "next/link";
 import scaffoldConfig from "~~/scaffold.config";
-import { ARENA_PUBLIC_BACKEND_URL } from "~~/services/arena/client";
+import { ARENA_BACKEND_EXTERNAL_URL } from "~~/services/arena/client";
 
-export const MCP_URL = `${ARENA_PUBLIC_BACKEND_URL}/mcp`;
+export const MCP_URL = `${ARENA_BACKEND_EXTERNAL_URL}/mcp`;
 const CHAIN = scaffoldConfig.targetNetworks[0];
 export const NETWORK_NAME = CHAIN.name;
 export const CURRENCY_SYMBOL = CHAIN.nativeCurrency.symbol;

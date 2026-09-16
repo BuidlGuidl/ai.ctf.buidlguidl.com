@@ -33,10 +33,9 @@ export const ARENA_BACKEND_URL = (process.env.NEXT_PUBLIC_ARENA_BACKEND_URL || "
 // reaches the backend through the /arena-api rewrite, which is relative and
 // useless off the site, so the join page hands agents this one instead. Unset
 // means the two are the same, which is the local case.
-export const ARENA_PUBLIC_BACKEND_URL = (process.env.NEXT_PUBLIC_ARENA_BACKEND_PUBLIC_URL || ARENA_BACKEND_URL).replace(
-  /\/+$/,
-  "",
-);
+export const ARENA_BACKEND_EXTERNAL_URL = (
+  process.env.NEXT_PUBLIC_ARENA_BACKEND_EXTERNAL_URL || ARENA_BACKEND_URL
+).replace(/\/+$/, "");
 
 export class ArenaApiError extends Error {
   constructor(public readonly status: number, message: string, public readonly body: unknown = null) {
