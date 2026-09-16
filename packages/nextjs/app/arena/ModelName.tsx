@@ -1,5 +1,3 @@
-import type { RosterEffort } from "~~/services/arena/arena-types";
-
 // Effort annotates an identity — a model name in the lobby, a handle on the race
 // board — so the two ship as one component and no surface can park the effort
 // somewhere else. The tail borrows currentColor from the name it
@@ -7,15 +5,7 @@ import type { RosterEffort } from "~~/services/arena/arena-types";
 // down in size and weight instead of carrying a separator, which the 142px lobby slot
 // has no room for. No whitespace between the name and the tail: without a break
 // opportunity the tail can never wrap away from the name it belongs to.
-export function ModelName({
-  name,
-  effort,
-  className = "",
-}: {
-  name: string;
-  effort?: RosterEffort;
-  className?: string;
-}) {
+export function ModelName({ name, effort, className = "" }: { name: string; effort?: string; className?: string }) {
   return (
     <span className={className}>
       {/* The gap is set in em on the name so it tracks the host line's size — the

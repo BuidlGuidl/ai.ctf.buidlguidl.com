@@ -2,6 +2,7 @@
 
 import { type ReactNode, type SelectHTMLAttributes, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { CopyButton } from "./CopyButton";
 import { ModelName } from "./ModelName";
 import { SfxToggle } from "./SfxToggle";
 import {
@@ -33,7 +34,12 @@ import type {
 } from "~~/services/arena/arena-types";
 import { ArenaApiError, arenaClient } from "~~/services/arena/client";
 import type { FundingProjection } from "~~/services/arena/projection";
-import { type DisplayContext, displayContextFrom, displayForEntrant } from "~~/services/arena/roster";
+import {
+  type DisplayContext,
+  declaredRuntimeParts,
+  displayContextFrom,
+  displayForEntrant,
+} from "~~/services/arena/roster";
 import {
   type AgentKey,
   MAX_ROSTER,
@@ -110,11 +116,48 @@ function activeRunConflict(cause: unknown): ActiveRunConflict | null {
     : null;
 }
 
+const JOINABLE_STATES = new Set<RunState>([
+  "created",
+  "awaiting_signature",
+  "preparing",
+  "awaiting_funding",
+  "ready",
+  "running",
+]);
+
+function InviteBlock({ runId }: { runId: string }) {
+  const [origin, setOrigin] = useState("");
+  useEffect(() => setOrigin(window.location.origin), []);
+  const path = `/arena/join?run=${encodeURIComponent(runId)}`;
+  const url = `${origin}${path}`;
+  return (
+    <div className="mt-4 flex w-full max-w-4xl flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-[#00FBFF]/15 px-3 py-2 font-dotGothic text-xs tracking-widest text-[#00FBFF]/60">
+      <span className="mr-auto">Outside agents can join this run</span>
+      <div className="flex items-center gap-3">
+        <CopyButton text={url} label="COPY LINK" compact />
+        <Link
+          href={path}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 rounded py-1.5 hover:text-[#00FBFF] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00FBFF]"
+        >
+          JOIN PAGE ▸
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 function idleAgents(roster: readonly RosterEntry[], context: DisplayContext): Agent[] {
   return roster.map((entrant, index) => {
     const display = displayForEntrant(entrant, { ...context, laneIndex: index });
     return {
       id: entrant.id,
+      kind: "hosted",
+      name: null,
+      url: null,
+      removedAt: null,
+      removedReason: null,
       handle: display.handle,
       harness: display.harnessLabel,
       model: display.modelLabel,
@@ -126,6 +169,7 @@ function idleAgents(roster: readonly RosterEntry[], context: DisplayContext): Ag
       solved: [],
       status: "idle",
       statusChangedAt: null,
+      lastHeardAt: null,
       tokens: 0,
       cost: null,
       usagePending: true,
@@ -184,6 +228,8 @@ export function ArenaLobby({
   const runError = useArenaStore(selectRunError);
 
   const logId = useRef(0);
+  const externalEntrants = useRef<Map<string, { removed: boolean }>>(new Map());
+  const externalRunId = useRef<string | null>(null);
   // The run this lobby started, if any — the only one the 3-2-1 belongs to.
   const launchedHere = useRef<string | null>(null);
   const lastRunState = useRef<string | null>(null);
@@ -243,7 +289,10 @@ export function ArenaLobby({
     : "failed";
 
   // Keep the roster visible while run creation has not yet returned any agents.
-  const cards = phase === "idle" || phase === "connecting" ? idleAgents(roster, displayContext) : agents;
+  const cards = useMemo(
+    () => (phase === "idle" || phase === "connecting" ? idleAgents(roster, displayContext) : agents),
+    [phase, roster, displayContext, agents],
+  );
 
   const pushLog = useCallback((text: string, color: string) => {
     setLog(prev => [{ id: ++logId.current, text, color }, ...prev].slice(0, 60));
@@ -261,6 +310,35 @@ export function ArenaLobby({
       run.state === "failed" ? RED : run.state === "running" ? GREEN : CY,
     );
   }, [pushLog, run]);
+
+  useEffect(() => {
+    const runId = run?.id ?? null;
+    const entrants = run?.entrants ?? [];
+    if (externalRunId.current !== runId) {
+      externalRunId.current = runId;
+      externalEntrants.current = new Map(
+        entrants
+          .filter(entrant => entrant.kind === "external")
+          .map(entrant => [entrant.id, { removed: !!entrant.removedAt }]),
+      );
+      return;
+    }
+    for (const entrant of entrants) {
+      if (entrant.kind !== "external") continue;
+      const previous = externalEntrants.current.get(entrant.id);
+      if (!previous) {
+        pushLog(`${entrant.name} joined with its own agent`, GREEN);
+      } else if (!previous.removed && entrant.removedAt) {
+        pushLog(
+          entrant.removedReason
+            ? `${entrant.name} was removed by the arena. ${entrant.removedReason}`
+            : `${entrant.name} was removed by the operator`,
+          YELLOW,
+        );
+      }
+      externalEntrants.current.set(entrant.id, { removed: !!entrant.removedAt });
+    }
+  }, [run?.id, run?.entrants, pushLog]);
 
   const readyCount = run?.entrants.length ?? 0;
 
@@ -294,7 +372,16 @@ export function ArenaLobby({
     setAmount(value);
   }, []);
 
-  const addresses = useMemo(() => agents.flatMap(agent => (agent.address ? [agent.address] : [])), [agents]);
+  // Only hosted lanes get funded; outside entrants bring their own wallet.
+  const hostedAgents = useMemo(() => cards.filter(agent => agent.kind === "hosted"), [cards]);
+  const externalAgents = useMemo(
+    () => cards.filter(agent => agent.kind === "external" && agent.removedAt === null),
+    [cards],
+  );
+  const addresses = useMemo(
+    () => hostedAgents.flatMap(agent => (agent.address ? [agent.address] : [])),
+    [hostedAgents],
+  );
   const fundingActive = phase === "preparing" || phase === "funding" || phase === "ready" || phase === "launching";
   const {
     balances,
@@ -316,7 +403,7 @@ export function ArenaLobby({
   // Counted off the chain as well as the backend: the operator sends one
   // transaction and then watches this number, so it has to move when the money
   // lands, not when the backend gets around to saying so.
-  const fundedCount = cards.filter(
+  const fundedCount = hostedAgents.filter(
     agent =>
       rowStatus(
         agent.address ? balances[agent.address] : undefined,
@@ -325,7 +412,8 @@ export function ArenaLobby({
       ) === "ready",
   ).length;
   const progressCount = fundingActive ? fundedCount : readyCount;
-  const progressDone = cards.length > 0 && progressCount === cards.length;
+  const progressTotal = fundingActive ? hostedAgents.length : cards.length;
+  const progressDone = progressTotal > 0 && progressCount === progressTotal;
 
   const fundAll = useCallback(async () => {
     const target = requiredRef.current;
@@ -352,7 +440,7 @@ export function ArenaLobby({
       const current = fresh.data;
       // Top up the shortfall rather than the full amount, so resuming after a
       // failure — or raising the target mid-run — never overshoots.
-      const pending = agents
+      const pending = hostedAgents
         .flatMap(agent =>
           agent.address ? [{ agent, address: agent.address, shortfall: target - (current[agent.address] ?? 0n) }] : [],
         )
@@ -420,7 +508,7 @@ export function ArenaLobby({
     } finally {
       setFunding(false);
     }
-  }, [agents, amount, ensureChain, fundingChainId, mode, targetNetwork, transactor, pushLog, refetchBalances]);
+  }, [hostedAgents, amount, ensureChain, fundingChainId, mode, targetNetwork, transactor, pushLog, refetchBalances]);
 
   const openLobby = useCallback(async () => {
     setServerProblems([]);
@@ -745,7 +833,7 @@ export function ArenaLobby({
               ) : fundingActive ? (
                 <span>
                   <span className="text-[#00FBFF] font-bold tabular-nums">{fundedCount}</span>
-                  <span className="text-[#00FBFF]/40"> / {cards.length}</span> agents funded
+                  <span className="text-[#00FBFF]/40"> / {hostedAgents.length}</span> agents funded
                   {phase === "funding" && <span className="lobby-blink"> · waiting…</span>}
                 </span>
               ) : (
@@ -881,7 +969,7 @@ export function ArenaLobby({
             <div
               className="h-full rounded-full transition-all duration-500"
               style={{
-                width: `${cards.length ? (progressCount / cards.length) * 100 : 0}%`,
+                width: `${progressTotal ? (progressCount / progressTotal) * 100 : 0}%`,
                 background: progressDone ? GREEN : CY,
                 boxShadow: `0 0 12px ${progressDone ? GREEN : CY}`,
               }}
@@ -890,7 +978,8 @@ export function ArenaLobby({
 
           {phase === "preparing" || phase === "funding" || phase === "ready" ? (
             <FundingBoard
-              agents={cards}
+              agents={hostedAgents}
+              externalAgents={externalAgents}
               balances={balances}
               fundingProjection={fundingProjection}
               required={required}
@@ -985,13 +1074,17 @@ export function ArenaLobby({
               arena is only ever a new race: a finished run walks out of reach the
               moment its URL goes. */}
           {phase === "idle" && (
-            <Link
-              href="/arena/runs"
-              className="mt-6 text-xs font-bold tracking-widest text-[#00FBFF]/50 transition hover:text-[#00FBFF]"
-            >
-              PREVIOUS RUNS ▸
-            </Link>
+            <div className="mt-6 flex gap-6">
+              <Link
+                href="/arena/runs"
+                className="text-xs font-bold tracking-widest text-[#00FBFF]/50 transition hover:text-[#00FBFF]"
+              >
+                PREVIOUS RUNS ▸
+              </Link>
+            </div>
           )}
+
+          {run && JOINABLE_STATES.has(run.state) && <InviteBlock runId={run.id} />}
 
           {/* primary action */}
           <div className="lobby-primary-action mt-10 h-16 flex items-center justify-center gap-3">
@@ -1148,6 +1241,7 @@ export function ArenaLobby({
 
 function FundingBoard({
   agents,
+  externalAgents,
   balances,
   fundingProjection,
   required,
@@ -1165,6 +1259,7 @@ function FundingBoard({
   locked,
 }: {
   agents: Agent[];
+  externalAgents: Agent[];
   balances: Record<string, bigint>;
   fundingProjection: Record<string, FundingProjection>;
   required: bigint;
@@ -1266,6 +1361,18 @@ function FundingBoard({
           />
         ))}
       </div>
+      {externalAgents.length > 0 && (
+        <section className="mt-6" aria-labelledby="joined-external-agents">
+          <h3 id="joined-external-agents" className="mb-3 font-dotGothic text-xs tracking-widest text-[#00FBFF]/60">
+            Joined with their own agent
+          </h3>
+          <div className="lobby-slot-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 w-full max-w-4xl">
+            {externalAgents.map((agent, i) => (
+              <Slot key={agent.id} agent={agent} state="ready" idle={false} index={agents.length + i} />
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
@@ -1340,6 +1447,7 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
   const ready = state === "ready";
   const joining = state === "joining";
   const active = idle || ready || joining;
+  const parts = agent.kind === "external" ? declaredRuntimeParts(agent) : null;
 
   return (
     <div
@@ -1353,6 +1461,11 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
         opacity: idle ? 0.82 : active ? 1 : 0.84,
       }}
     >
+      {agent.kind === "external" && (
+        <span className="absolute top-1.5 right-2 text-[9px] tracking-wider" style={{ color: agent.color }}>
+          EXTERNAL
+        </span>
+      )}
       {/* slot number */}
       <span className="absolute top-1.5 left-2 text-sm text-[#00FBFF]/55 tabular-nums">P{index + 1}</span>
 
@@ -1383,9 +1496,14 @@ function Slot({ agent, state, idle, index }: { agent: Agent; state: SlotState; i
         {active ? (
           <>
             <div className="lobby-slot-name text-base font-bold leading-tight" style={{ color: agent.color }}>
-              <ModelName name={agent.model} effort={agent.effort} />
+              <ModelName name={agent.kind === "external" ? agent.handle : agent.model} effort={agent.effort} />
             </div>
-            <div className="lobby-slot-harness text-base text-[#00FBFF]/75 leading-tight">{agent.harness}</div>
+            <div
+              className="lobby-slot-harness text-base text-[#00FBFF]/75 leading-tight"
+              title={agent.kind === "external" ? parts ?? "harness and model not given" : undefined}
+            >
+              {agent.kind === "external" ? agent.harness || "no harness given" : agent.harness}
+            </div>
           </>
         ) : (
           <div className="text-base text-[#00FBFF]/55 tracking-widest">{idle ? "NOT ASSIGNED" : "———"}</div>

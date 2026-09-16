@@ -8,6 +8,7 @@ import type {
   HarnessId,
   HistoryPage,
   NonceResponse,
+  RemoveEntrantResponse,
   RestartResponse,
   RunListItem,
   RunListResponse,
@@ -27,6 +28,14 @@ export const ARENA_BACKEND_URL = (process.env.NEXT_PUBLIC_ARENA_BACKEND_URL || "
   /\/$/,
   "",
 );
+
+// The address an outside agent uses from its own machine. On Vercel the board
+// reaches the backend through the /arena-api rewrite, which is relative and
+// useless off the site, so the join page hands agents this one instead. Unset
+// means the two are the same, which is the local case.
+export const ARENA_BACKEND_EXTERNAL_URL = (
+  process.env.NEXT_PUBLIC_ARENA_BACKEND_EXTERNAL_URL || ARENA_BACKEND_URL
+).replace(/\/+$/, "");
 
 export class ArenaApiError extends Error {
   constructor(public readonly status: number, message: string, public readonly body: unknown = null) {
@@ -117,6 +126,11 @@ export const arenaClient = {
       {
         method: "POST",
       },
+    ),
+  removeEntrant: (runId: string, entrantId: string) =>
+    arenaFetch<RemoveEntrantResponse>(
+      `/runs/${encodeURIComponent(runId)}/entrants/${encodeURIComponent(entrantId)}/remove`,
+      { method: "POST" },
     ),
   broadcast: (runId: string, body: BroadcastRequest) =>
     arenaFetch<BroadcastResponse>(`/runs/${encodeURIComponent(runId)}/broadcast`, { method: "POST", body }),

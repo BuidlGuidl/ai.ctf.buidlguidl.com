@@ -55,6 +55,7 @@ export const useArenaStore = create<ArenaStore>(set => ({
                   current.projection.statusSeededAt,
                   seededAt,
                 ),
+                lastHeardAt: mergeLastHeardAt(projection.lastHeardAt, current.projection.lastHeardAt),
                 statusSeededAt: current.projection.statusSeededAt,
               }
             : projection,
@@ -119,6 +120,8 @@ export const useArenaStore = create<ArenaStore>(set => ({
       // The queued response can lose the race against the steer's own injection
       // event. A hint for a steer the console already shows would never resolve.
       if (current.projection === null || current.projection.runFinishedAt !== null) return current;
+      const entrant = current.projection.run.entrants.find(candidate => candidate.id === entrantId);
+      if (entrant?.kind === "external" && entrant.removedAt) return current;
       const injected = (current.projection.consoleByEntrant[entrantId] ?? []).some(
         entry => entry.kind === "steer" && entry.text === text && entry.id > sinceEventId,
       );
@@ -144,7 +147,7 @@ function resolvePendingSteers(pending: Record<string, string[]>, event: ArenaEve
   }
   // A restart throws the queue away with the session, so those hints resolve to
   // nothing and would otherwise hang over the lane for the rest of the race.
-  if (event.type === "entrant.restarted" && pending[event.payload.entrantId]) {
+  if ((event.type === "entrant.restarted" || event.type === "entrant.removed") && pending[event.payload.entrantId]) {
     return { ...pending, [event.payload.entrantId]: [] };
   }
   if (event.type !== "entrant.steered") return pending;
@@ -154,6 +157,14 @@ function resolvePendingSteers(pending: Record<string, string[]>, event: ArenaEve
   if (index === -1) return pending;
 
   return { ...pending, [event.payload.entrantId]: [...queue.slice(0, index), ...queue.slice(index + 1)] };
+}
+
+function mergeLastHeardAt(fresh: Record<string, string>, held: Record<string, string>): Record<string, string> {
+  const merged = { ...fresh };
+  for (const [id, ts] of Object.entries(held)) {
+    if (!merged[id] || Date.parse(ts) > Date.parse(merged[id])) merged[id] = ts;
+  }
+  return merged;
 }
 
 // An entrant history did not touch keeps what the previous seed held: the earlier
@@ -208,6 +219,7 @@ export const selectRunId = (state: ArenaStore) => state.projection?.run.id ?? nu
 export const selectRunState = (state: ArenaStore) => state.projection?.run.state ?? null;
 export const selectRunChainId = (state: ArenaStore) => state.projection?.run.chainId ?? null;
 export const selectRunEntrants = (state: ArenaStore) => state.projection?.run.entrants ?? null;
+export const selectLastHeardAt = (state: ArenaStore) => state.projection?.lastHeardAt ?? null;
 export const selectStatusChangedAt = (state: ArenaStore) => state.projection?.statusChangedAt ?? null;
 export const selectStatusSeededAt = (state: ArenaStore) => state.projection?.statusSeededAt ?? null;
 export const selectServerOffsetMs = (state: ArenaStore) => state.serverOffsetMs ?? 0;

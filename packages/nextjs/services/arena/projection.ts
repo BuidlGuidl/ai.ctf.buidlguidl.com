@@ -1,4 +1,4 @@
-import type { ArenaEvent, EntrantStatus, RunSnapshot } from "./arena-types";
+import type { ArenaEvent, EntrantStatus, ExternalEntrantSummary, RunSnapshot } from "./arena-types";
 
 export interface ConsoleEntry {
   id: number;
@@ -13,9 +13,11 @@ export interface ConsoleEntry {
 
 export interface FeedItem {
   id: number;
-  type: "flag" | "blocked" | "resumed" | "done" | "restarted";
+  type: "flag" | "blocked" | "resumed" | "done" | "restarted" | "joined" | "removed";
   agentId: string;
   challengeId?: number;
+  // Why the arena removed an external lane. Operator removals carry no reason.
+  reason?: string;
 }
 
 export interface ChatItem {
@@ -51,6 +53,7 @@ export interface ProjectionState {
   // tightened by replayed status events. `statusSeededAt` lets the UI tell a
   // seed stamp from an observed transition.
   statusChangedAt: Record<string, string>;
+  lastHeardAt: Record<string, string>;
   statusSeededAt: string;
   consoleByEntrant: Record<string, ConsoleEntry[]>;
   previewsByEntrant: Record<string, string[]>;
@@ -75,6 +78,7 @@ const CHAT_LIMIT = 60;
 
 export function initialProjection(run: RunSnapshot, seededAt: string): ProjectionState {
   const statusChangedAt: Record<string, string> = {};
+  const lastHeardAt: Record<string, string> = {};
   const consoleByEntrant: Record<string, ConsoleEntry[]> = {};
   const previewsByEntrant: Record<string, string[]> = {};
   const narrationByEntrant: Record<string, NarrationEntry[]> = {};
@@ -82,6 +86,7 @@ export function initialProjection(run: RunSnapshot, seededAt: string): Projectio
 
   for (const entrant of run.entrants) {
     statusChangedAt[entrant.id] = seededAt;
+    if (entrant.kind === "external") lastHeardAt[entrant.id] = entrant.joinedAt;
     consoleByEntrant[entrant.id] = [];
     previewsByEntrant[entrant.id] = [];
     narrationByEntrant[entrant.id] = entrant.narration
@@ -105,6 +110,7 @@ export function initialProjection(run: RunSnapshot, seededAt: string): Projectio
     run,
     lastEventId: run.lastEventId,
     statusChangedAt,
+    lastHeardAt,
     statusSeededAt: seededAt,
     consoleByEntrant,
     previewsByEntrant,
@@ -127,12 +133,36 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
   // alone dedupes reconnect overlap.
   if (event.runId !== state.run.id || event.id <= state.lastEventId) return state;
 
-  let next: ProjectionState = {
+  const next: ProjectionState = {
     ...state,
     lastEventId: event.id,
     run: { ...state.run, lastEventId: event.id },
   };
 
+  return markHeard(reduceEvent(next, event), event);
+}
+
+const HEARD_TYPES = new Set<ArenaEvent["type"]>([
+  "entrant.joined",
+  "entrant.status",
+  "agent.message",
+  "entrant.challenge",
+  "entrant.steered",
+]);
+
+function markHeard(state: ProjectionState, event: ArenaEvent): ProjectionState {
+  // The backend sets done on stop and remove, so it is not the agent speaking.
+  if (event.type === "entrant.status" && event.payload.status === "done") return state;
+  if (!HEARD_TYPES.has(event.type) || !("entrantId" in event.payload)) return state;
+  const id = event.payload.entrantId;
+  if (!state.run.entrants.some(entrant => entrant.id === id && entrant.kind === "external")) return state;
+  const previous = state.lastHeardAt[id];
+  const timestamp = Date.parse(event.ts);
+  if (!Number.isFinite(timestamp) || (previous !== undefined && timestamp <= Date.parse(previous))) return state;
+  return { ...state, lastHeardAt: { ...state.lastHeardAt, [id]: event.ts } };
+}
+
+function reduceEvent(next: ProjectionState, event: ArenaEvent): ProjectionState {
   switch (event.type) {
     case "run.state":
       return {
@@ -141,10 +171,53 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
         runFinishedAt: event.payload.state === "finished" ? event.ts : next.runFinishedAt,
         runError: event.payload.reason ?? next.runError,
       };
+    case "entrant.joined": {
+      const { entrantId: id, name, address, harness, model, effort, url } = event.payload;
+      const declared = { name, address, harness, model, effort, url };
+      if (next.run.entrants.some(entrant => entrant.id === id)) {
+        next = updateEntrant(next, id, entrant =>
+          entrant.kind === "external" ? { ...entrant, ...declared } : entrant,
+        );
+      } else {
+        const entrant: ExternalEntrantSummary = {
+          id,
+          kind: "external",
+          ...declared,
+          status: "idle",
+          flags: 0,
+          solves: [],
+          inputTokens: 0,
+          outputTokens: 0,
+          costUsd: null,
+          currentChallengeId: null,
+          joinedAt: event.ts,
+        };
+        next = {
+          ...next,
+          run: { ...next.run, entrants: [...next.run.entrants, entrant] },
+          statusChangedAt: { ...next.statusChangedAt, [id]: event.ts },
+          consoleByEntrant: { ...next.consoleByEntrant, [id]: [] },
+          previewsByEntrant: { ...next.previewsByEntrant, [id]: [] },
+          narrationByEntrant: { ...next.narrationByEntrant, [id]: [] },
+          fundingByEntrant: { ...next.fundingByEntrant, [id]: { address, wei: null, funded: false } },
+        };
+      }
+      return appendFeed(next, { id: event.id, type: "joined", agentId: id });
+    }
+    case "entrant.removed": {
+      const id = event.payload.entrantId;
+      next = updateEntrant(next, id, entrant =>
+        entrant.kind === "external"
+          ? { ...entrant, removedAt: event.ts, removedReason: event.payload.reason, status: "done" }
+          : entrant,
+      );
+      next = { ...next, statusChangedAt: { ...next.statusChangedAt, [id]: event.ts } };
+      return appendFeed(next, { id: event.id, type: "removed", agentId: id, reason: event.payload.reason });
+    }
     case "entrant.status": {
       const id = event.payload.entrantId;
-      const previous = state.run.entrants.find(entrant => entrant.id === id)?.status;
-      const previousChangedAt = state.statusChangedAt[id];
+      const previous = next.run.entrants.find(entrant => entrant.id === id)?.status;
+      const previousChangedAt = next.statusChangedAt[id];
       const changedAt =
         previous !== event.payload.status ||
         previousChangedAt === undefined ||
@@ -153,7 +226,7 @@ export function applyEvent(state: ProjectionState, event: ArenaEvent): Projectio
           : previousChangedAt;
       next = {
         ...updateEntrant(next, id, entrant => ({ ...entrant, status: event.payload.status })),
-        statusChangedAt: { ...state.statusChangedAt, [id]: changedAt },
+        statusChangedAt: { ...next.statusChangedAt, [id]: changedAt },
       };
       const item = statusFeedItem(event, previous);
       return item ? appendFeed(next, item) : next;

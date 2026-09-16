@@ -9,9 +9,15 @@ import { ModelName } from "~~/app/arena/ModelName";
 import { CHALLENGES } from "~~/app/arena/mockData";
 import { BlockieAvatar } from "~~/components/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
-import type { RosterEffort, RunSnapshot } from "~~/services/arena/arena-types";
+import type { RunSnapshot } from "~~/services/arena/arena-types";
 import { arenaClient } from "~~/services/arena/client";
-import { type DisplayContext, displayContextFrom, displayMapForEntrants } from "~~/services/arena/roster";
+import {
+  type DisplayContext,
+  type RosterDisplay,
+  declaredRuntimeParts,
+  displayContextFrom,
+  displayMapForEntrants,
+} from "~~/services/arena/roster";
 import { useAgents } from "~~/services/arena/useAgents";
 import { getBlockExplorerAddressLink } from "~~/utils/scaffold-eth";
 
@@ -29,7 +35,7 @@ const CELL =
 interface Row {
   id: string;
   handle: string;
-  effort?: RosterEffort;
+  effort?: string;
   runtime: string;
   color: string;
   short: string;
@@ -52,6 +58,10 @@ const fmtFinish = (seconds: number) => {
   return h > 0 ? `${String(h).padStart(2, "0")}:${ms}` : ms;
 };
 
+function hostedRuntime(display: RosterDisplay): string {
+  return `${display.harnessLabel} + ${display.modelLabel}${display.effort ? ` · ${display.effort}` : ""}`;
+}
+
 // Same order as the board: flags first, then the clock for anyone who cleared
 // the course, then whoever reached that flag count first.
 function rowsFromRun(run: RunSnapshot, context: DisplayContext): Row[] {
@@ -66,7 +76,14 @@ function rowsFromRun(run: RunSnapshot, context: DisplayContext): Row[] {
         id: entrant.id,
         handle: display.handle,
         effort: display.effort,
-        runtime: `${display.harnessLabel} + ${display.modelLabel}${display.effort ? ` · ${display.effort}` : ""}`,
+        runtime:
+          entrant.kind === "external"
+            ? declaredRuntimeParts({
+                harness: display.harnessLabel,
+                model: display.modelLabel,
+                effort: display.effort,
+              }) ?? "harness and model not given"
+            : hostedRuntime(display),
         color: display.color,
         short: display.short,
         address: entrant.address,

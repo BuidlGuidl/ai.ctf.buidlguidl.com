@@ -13,6 +13,7 @@ const BACKFILL_PAGES = 2;
 // deltas the snapshot totals already include, so replaying it would double-count.
 const BACKFILL_TYPES = [
   "entrant.status",
+  "entrant.challenge",
   "agent.message",
   "agent.reasoning",
   "tool.call",
@@ -22,6 +23,8 @@ const BACKFILL_TYPES = [
   // Both prompts replay, so without the cut between them the abandoned session
   // and its replacement rebuild as one continuous console.
   "entrant.restarted",
+  "entrant.joined",
+  "entrant.removed",
   "entrant.nudged",
   "entrant.narration",
   "director.broadcast",

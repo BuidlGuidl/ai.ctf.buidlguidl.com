@@ -467,7 +467,10 @@ function SweepRunCard({
   });
 
   const addresses = useMemo(
-    () => run?.entrants.flatMap(entrant => (entrant.address ? [entrant.address as EvmAddress] : [])) ?? [],
+    () =>
+      run?.entrants
+        .filter(entrant => entrant.kind === "hosted")
+        .flatMap(entrant => (entrant.address ? [entrant.address as EvmAddress] : [])) ?? [],
     [run?.entrants],
   );
   const {
@@ -543,70 +546,72 @@ function SweepRunCard({
             </div>
           )}
           <div className="divide-y divide-[#00FBFF]/10">
-            {run.entrants.map(entrant => {
-              const balance = entrant.address ? balances[entrant.address] : 0n;
-              const result =
-                sweep?.phase === "done"
-                  ? sweep.response.results.find(candidate => candidate.entrantId === entrant.id) ??
-                    (entrant.address
-                      ? sweep.response.results.find(
-                          candidate => candidate.address.toLowerCase() === entrant.address?.toLowerCase(),
-                        )
-                      : undefined)
-                  : undefined;
-              const txHref =
-                result?.txHash && run.chainId === targetNetwork.id
-                  ? getBlockExplorerTxLink(targetNetwork.id, result.txHash)
-                  : "";
+            {run.entrants
+              .filter(entrant => entrant.kind === "hosted")
+              .map(entrant => {
+                const balance = entrant.address ? balances[entrant.address] : 0n;
+                const result =
+                  sweep?.phase === "done"
+                    ? sweep.response.results.find(candidate => candidate.entrantId === entrant.id) ??
+                      (entrant.address
+                        ? sweep.response.results.find(
+                            candidate => candidate.address.toLowerCase() === entrant.address?.toLowerCase(),
+                          )
+                        : undefined)
+                    : undefined;
+                const txHref =
+                  result?.txHash && run.chainId === targetNetwork.id
+                    ? getBlockExplorerTxLink(targetNetwork.id, result.txHash)
+                    : "";
 
-              return (
-                <div
-                  key={entrant.id}
-                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-3 py-2.5 text-xs sm:grid-cols-[7rem_minmax(0,1fr)_8.5rem_7rem_minmax(0,10rem)] sm:px-4"
-                >
-                  <span className="truncate font-bold tracking-wider text-[#00FBFF]/80">{entrant.id}</span>
-                  <span className="truncate text-[#00FBFF]/55" title={entrant.model}>
-                    {entrant.model}
-                  </span>
-                  <span className="text-right sm:text-left">
-                    {entrant.address ? (
-                      <Address address={entrant.address} hideBlockie openLinkInNewTab size="xs" />
-                    ) : (
-                      <span className="text-[#00FBFF]/40">no address</span>
+                return (
+                  <div
+                    key={entrant.id}
+                    className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-3 py-2.5 text-xs sm:grid-cols-[7rem_minmax(0,1fr)_8.5rem_7rem_minmax(0,10rem)] sm:px-4"
+                  >
+                    <span className="truncate font-bold tracking-wider text-[#00FBFF]/80">{entrant.id}</span>
+                    <span className="truncate text-[#00FBFF]/55" title={entrant.model}>
+                      {entrant.model}
+                    </span>
+                    <span className="text-right sm:text-left">
+                      {entrant.address ? (
+                        <Address address={entrant.address} hideBlockie openLinkInNewTab size="xs" />
+                      ) : (
+                        <span className="text-[#00FBFF]/40">no address</span>
+                      )}
+                    </span>
+                    <EthAmount wei={balance} className="justify-self-end text-right text-[#FFBE00]/85" />
+                    {result && (
+                      <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-2 pt-1 sm:col-span-1 sm:pt-0">
+                        <span
+                          className={`shrink-0 rounded border px-2 py-0.5 font-bold tracking-widest ${
+                            RESULT_TONE[result.status]
+                          }`}
+                        >
+                          {resultLabel(result.status)}
+                        </span>
+                        {result.txHash &&
+                          (txHref ? (
+                            <a
+                              href={txHref}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={result.txHash}
+                              className="text-[#00FBFF]/65 transition hover:text-[#00FBFF] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00FBFF]"
+                            >
+                              {shortValue(result.txHash)}
+                            </a>
+                          ) : (
+                            <span title={result.txHash} className="text-[#00FBFF]/65">
+                              {shortValue(result.txHash)}
+                            </span>
+                          ))}
+                        {result.error && <span className="min-w-0 break-words text-[#FF5861]">{result.error}</span>}
+                      </div>
                     )}
-                  </span>
-                  <EthAmount wei={balance} className="justify-self-end text-right text-[#FFBE00]/85" />
-                  {result && (
-                    <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-2 pt-1 sm:col-span-1 sm:pt-0">
-                      <span
-                        className={`shrink-0 rounded border px-2 py-0.5 font-bold tracking-widest ${
-                          RESULT_TONE[result.status]
-                        }`}
-                      >
-                        {resultLabel(result.status)}
-                      </span>
-                      {result.txHash &&
-                        (txHref ? (
-                          <a
-                            href={txHref}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title={result.txHash}
-                            className="text-[#00FBFF]/65 transition hover:text-[#00FBFF] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00FBFF]"
-                          >
-                            {shortValue(result.txHash)}
-                          </a>
-                        ) : (
-                          <span title={result.txHash} className="text-[#00FBFF]/65">
-                            {shortValue(result.txHash)}
-                          </span>
-                        ))}
-                      {result.error && <span className="min-w-0 break-words text-[#FF5861]">{result.error}</span>}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                  </div>
+                );
+              })}
           </div>
 
           {sweep?.phase === "error" && (

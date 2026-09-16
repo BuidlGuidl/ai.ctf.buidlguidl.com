@@ -1,5 +1,5 @@
 import { Address } from "viem";
-import type { EntrantStatus, RosterEffort } from "~~/services/arena/arena-types";
+import type { EntrantKind, EntrantStatus } from "~~/services/arena/arena-types";
 
 export type Difficulty = "easy" | "medium" | "hard" | "insane";
 
@@ -16,10 +16,15 @@ export type AgentStatus = EntrantStatus;
 
 export interface Agent {
   id: string;
+  kind: EntrantKind;
+  name: string | null;
+  url: string | null;
+  removedAt: string | null;
+  removedReason: string | null;
   handle: string;
   harness: string;
   model: string;
-  effort?: RosterEffort;
+  effort?: string;
   vendor: string;
   color: string;
   short: string;
@@ -27,6 +32,7 @@ export interface Agent {
   solved: number[];
   status: AgentStatus;
   statusChangedAt: string | null;
+  lastHeardAt: string | null;
   tokens: number;
   cost: number | null;
   usagePending: boolean;
