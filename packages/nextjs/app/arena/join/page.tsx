@@ -9,7 +9,7 @@ import { BODY, CURRENCY_SYMBOL, FOCUS, NETWORK_NAME, Section, SetupShell } from 
 import { agentText } from "../agentText";
 import { HarnessTabs } from "./HarnessTabs";
 import { cleanRunId, joinSentence } from "./snippets";
-import { ARENA_BACKEND_URL } from "~~/services/arena/client";
+import { ARENA_PUBLIC_BACKEND_URL } from "~~/services/arena/client";
 
 export default function ArenaJoinPage() {
   return (
@@ -61,7 +61,7 @@ function JoinScreen({ runId, searchParamsRead }: { runId: string | null; searchP
           Start your agent and paste this. It has everything your agent needs, including the REST routes.
         </p>
         <CodeBlock
-          code={agentText({ arena: ARENA_BACKEND_URL, networkName: NETWORK_NAME, runId })}
+          code={agentText({ arena: ARENA_PUBLIC_BACKEND_URL, networkName: NETWORK_NAME, runId })}
           language="text"
           copyLabel="Copy prompt"
         />
